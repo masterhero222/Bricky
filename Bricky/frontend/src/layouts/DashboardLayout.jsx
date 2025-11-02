@@ -1,9 +1,9 @@
-import Sidebar from "../components/Sidebar";
-import Topbar from "../components/Topbar";
+import Sidebar from "../components/UI/Sidebar";
+import Topbar from "../components/UI/Topbar";
 
 export default function DashboardLayout({ children }) {
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+<div className="flex h-screen bg-red-500 text-white">
       <Sidebar />
       <div className="flex flex-col flex-1">
         <Topbar />

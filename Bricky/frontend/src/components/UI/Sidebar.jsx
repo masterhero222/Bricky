@@ -15,7 +15,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* 🧭 Бутон за мобилна навигация */}
+      {/* Mobile toggle */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="md:hidden fixed top-4 left-4 z-50 bg-gray-800 text-white p-2 rounded-lg"
@@ -23,12 +23,11 @@ export default function Sidebar() {
         {isOpen ? <X size={22} /> : <Menu size={22} />}
       </button>
 
-      {/* 📱 Мобилно меню */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-gray-900 text-gray-300 p-4 w-64 transform transition-transform duration-300 z-40
-        ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static md:w-64`}
+        className={`fixed top-0 left-0 h-full bg-gray-900/95 border-r border-gray-700 backdrop-blur-sm text-gray-200 p-4 w-64 transform transition-transform duration-300 z-40
+        ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static`}
       >
-        <div className="text-lg font-semibold flex items-center gap-2 mb-6">
+        <div className="text-xl font-bold flex items-center gap-2 mb-8">
           🧱 Bricky
         </div>
 
@@ -37,12 +36,12 @@ export default function Sidebar() {
             <li key={item.path}>
               <NavLink
                 to={item.path}
-                onClick={() => setIsOpen(false)} // затваря менюто при избор
+                onClick={() => setIsOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-2 transition-colors ${
+                  `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                     isActive
-                      ? "text-blue-500 font-semibold"
-                      : "text-gray-300 hover:text-white"
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-400 hover:text-white hover:bg-gray-800"
                   }`
                 }
               >
