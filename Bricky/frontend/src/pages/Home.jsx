@@ -1,82 +1,99 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Wrench, ClipboardList, Users } from "lucide-react";
-const Button = ({ children, className, ...props }) => (
-  <button
-    className={`px-6 py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-xl transition ${className}`}
-    {...props}
-  >
-    {children}
-  </button>
-);
+import { Wrench, Users, CheckCircle, Mail } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Home() {
+  const navigate = useNavigate();
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-orange-400 via-red-500 to-red-600 text-white px-6">
-      {/* Header Section */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-        className="text-center mt-20"
-      >
-        <h1 className="text-5xl font-bold mb-4">Добре дошли в <span className="text-yellow-300">Bricky</span></h1>
-        <p className="text-lg text-white/90 max-w-2xl mx-auto">
-          Платформа, която свързва хора и майстори с доверие.  
-          Бързо, сигурно и без изненади.
-        </p>
-      </motion.div>
-
-      {/* Buttons Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.8 }}
-        className="flex flex-wrap justify-center gap-6 mt-10"
-      >
-        <Button
-          className="bg-yellow-300 text-black text-lg px-8 py-6 rounded-2xl shadow-lg hover:bg-yellow-400 transition"
-          onClick={() => (window.location.href = "/requests")}
+    <div className="bg-gray-950 text-white min-h-screen flex flex-col">
+      {/* 🧱 HERO SECTION */}
+      <section className="flex flex-col items-center justify-center flex-1 text-center px-6 py-16">
+        <motion.h1
+          className="text-4xl md:text-6xl font-bold mb-4"
+          initial={{ opacity: 0, y: -40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
         >
-          🧱 Търся майстор
-        </Button>
-        <Button
-          className="bg-white text-red-600 text-lg px-8 py-6 rounded-2xl shadow-lg hover:bg-gray-100 transition"
-          onClick={() => (window.location.href = "/workers")}
+          Добре дошъл в <span className="text-blue-500">Bricky</span>
+        </motion.h1>
+
+        <motion.p
+          className="text-lg md:text-xl text-gray-400 max-w-2xl mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
         >
-          🔧 Станете майстор
-        </Button>
-      </motion.div>
+          Свързваме клиенти и майстори — бързо, лесно и надеждно.  
+          Без излишни обаждания и хаос.
+        </motion.p>
 
-      {/* How It Works Section */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6, duration: 1 }}
-        className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-5xl"
-      >
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center shadow-lg">
-          <ClipboardList className="mx-auto mb-4 text-yellow-300" size={48} />
-          <h3 className="text-xl font-semibold mb-2">1. Създай заявка</h3>
-          <p className="text-white/80">Опиши какво трябва да се направи – от ВиК до боядисване.</p>
+        <motion.div
+          className="flex flex-col md:flex-row gap-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+        >
+          <button
+            onClick={() => navigate("/requests")}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold transition"
+          >
+            Създай заявка 🧱
+          </button>
+          <button
+            onClick={() => navigate("/workers")}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-8 py-3 rounded-xl text-lg font-semibold transition"
+          >
+            Стани майстор 🔧
+          </button>
+        </motion.div>
+      </section>
+
+      {/* ⚙️ HOW IT WORKS */}
+      <section className="bg-gray-900 py-16">
+        <div className="max-w-5xl mx-auto text-center px-6">
+          <h2 className="text-3xl font-bold mb-10">Как работи?</h2>
+
+          <div className="grid md:grid-cols-3 gap-10">
+            {[
+              {
+                icon: <Mail size={40} className="text-blue-400 mb-4" />,
+                title: "Изпращаш заявка",
+                desc: "Клиентът описва ремонта и оставя контакт.",
+              },
+              {
+                icon: <Wrench size={40} className="text-green-400 mb-4" />,
+                title: "Намираме майстор",
+                desc: "Bricky избира подходящия специалист за задачата.",
+              },
+              {
+                icon: <CheckCircle size={40} className="text-yellow-400 mb-4" />,
+                title: "Проследяваш процеса",
+                desc: "Получаваш обратна връзка и сигурност до завършването.",
+              },
+            ].map((step, i) => (
+              <motion.div
+                key={i}
+                className="bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-blue-500/20 transition"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.2 }}
+              >
+                <div className="flex flex-col items-center">
+                  {step.icon}
+                  <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
+                  <p className="text-gray-400">{step.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
+      </section>
 
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center shadow-lg">
-          <Users className="mx-auto mb-4 text-yellow-300" size={48} />
-          <h3 className="text-xl font-semibold mb-2">2. Bricky намира подходящ майстор</h3>
-          <p className="text-white/80">Подбираме проверени специалисти според твоя ремонт.</p>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center shadow-lg">
-          <Wrench className="mx-auto mb-4 text-yellow-300" size={48} />
-          <h3 className="text-xl font-semibold mb-2">3. Ремонтът започва</h3>
-          <p className="text-white/80">Свързваме те с майстора и следим процеса до завършване.</p>
-        </div>
-      </motion.div>
-
-      {/* Footer */}
-      <footer className="mt-20 mb-10 text-center text-white/70 text-sm">
-        © {new Date().getFullYear()} <span className="text-yellow-300 font-semibold">Bricky</span> | Свързвай хора и майстори с доверие.
+      {/* ⚒️ FOOTER */}
+      <footer className="bg-gray-950 border-t border-gray-800 py-6 text-center text-gray-500 text-sm">
+        © {new Date().getFullYear()} Bricky — Свързваме клиенти и майстори с доверие.
       </footer>
     </div>
   );
