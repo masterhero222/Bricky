@@ -1,79 +1,89 @@
 <!DOCTYPE html>
 <html lang="bg">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Нова заявка в Bricky</title>
-  <style>
-    body {
-      background-color: #f6f6f6;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    .container {
-      max-width: 600px;
-      background: #ffffff;
-      margin: 30px auto;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    }
-    .header {
-      background-color: #b7410e;
-      color: white;
-      padding: 20px;
-      text-align: center;
-      font-size: 20px;
-      letter-spacing: 1px;
-    }
-    .content {
-      padding: 25px 30px;
-      color: #333;
-      line-height: 1.6;
-    }
-    .content h2 {
-      margin-top: 0;
-      color: #b7410e;
-    }
-    .footer {
-      background: #f1f1f1;
-      text-align: center;
-      padding: 15px;
-      font-size: 13px;
-      color: #666;
-    }
-    .brick {
-      color: #b7410e;
-      font-weight: 600;
-    }
-    .button {
-      display: inline-block;
-      margin-top: 15px;
-      padding: 10px 20px;
-      background: #b7410e;
-      color: white !important;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">🔔 Нова заявка в Bricky</div>
-    <div class="content">
-      <h2>Имате нова заявка от клиент</h2>
-      <p><strong>Име:</strong> {{name}}</p>
-      <p><strong>Имейл:</strong> {{email}}</p>
-      <p><strong>Телефон:</strong> {{phone}}</p>
-      <p><strong>Описание на ремонта:</strong></p>
-      <p style="background:#f6f6f6; padding:10px; border-radius:8px;">{{description}}</p>
-      <a href="https://bricky.bg" class="button">Отвори в Bricky</a>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Нова заявка в Bricky</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f5f5f5;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background-color: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        background-color: #b23a0f;
+        color: white;
+        text-align: center;
+        padding: 16px;
+        font-size: 20px;
+      }
+      .content {
+        padding: 24px;
+        color: #333;
+      }
+      .label {
+        font-weight: bold;
+        color: #222;
+      }
+      .value {
+        margin-bottom: 16px;
+      }
+      .button {
+        display: inline-block;
+        background-color: #b23a0f;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        margin-top: 24px;
+      }
+      .footer {
+        background-color: #f2f2f2;
+        color: #666;
+        text-align: center;
+        padding: 12px;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">🔔 Нова заявка в Bricky</div>
+      <div class="content">
+        <h3>Имате нова заявка от клиент:</h3>
+
+        <div class="value">
+          <span class="label">Име:</span> {{clientName}}
+        </div>
+        <div class="value">
+          <span class="label">Имейл:</span> {{email}}
+        </div>
+        <div class="value">
+          <span class="label">Телефон:</span> {{phone}}
+        </div>
+        <div class="value">
+          <span class="label">Адрес:</span> {{address}}
+        </div>
+        <div class="value">
+          <span class="label">Категория:</span> {{category}}
+        </div>
+        <div class="value">
+          <span class="label">Описание:</span> {{description}}
+        </div>
+
+        <a href="http://localhost:5173/requests" class="button">Отвори в Bricky</a>
+      </div>
+      <div class="footer">
+        © 2025 <b>Bricky</b> | Свързвай хора и майстори с доверие.
+      </div>
     </div>
-    <div class="footer">
-      © 2025 <span class="brick">Bricky</span> | Свързвай хора и майстори с доверие.
-    </div>
-  </div>
-</body>
+  </body>
 </html>

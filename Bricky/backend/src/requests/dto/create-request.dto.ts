@@ -1,6 +1,8 @@
 export class CreateRequestDto {
-  name: string;
+  clientName: string;
   email: string;
   phone: string;
-  description: string;
+  address?: string;
+  category?: string;
+  description?: string;
 }

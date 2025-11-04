@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Users, Wrench, ClipboardList, Settings, Menu, X } from "lucide-react";
+import { Home, ClipboardList, Users, Settings, Wrench, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const navItems = [
   { name: "Начало", icon: <Home size={18} />, path: "/" },
@@ -10,48 +10,84 @@ const navItems = [
   { name: "Настройки", icon: <Settings size={18} />, path: "/settings" },
 ];
 
-export default function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false);
-
+export default function Sidebar({ open, setOpen }) {
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 bg-gray-800 text-white p-2 rounded-lg"
-      >
-        {isOpen ? <X size={22} /> : <Menu size={22} />}
-      </button>
-
-      <aside
-        className={`fixed top-0 left-0 h-full bg-gray-900/95 border-r border-gray-700 backdrop-blur-sm text-gray-200 p-4 w-64 transform transition-transform duration-300 z-40
-        ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static`}
-      >
-        <div className="text-xl font-bold flex items-center gap-2 mb-8">
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex flex-col w-64 bg-gray-800 border-r border-gray-700">
+        <div className="flex items-center gap-2 px-6 py-5 font-bold text-xl">
           🧱 Bricky
         </div>
-
-        <ul className="space-y-3">
+        <nav className="flex-1 px-4 space-y-1">
           {navItems.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                onClick={() => setIsOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                    isActive
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:text-white hover:bg-gray-800"
-                  }`
-                }
-              >
-                {item.icon}
-                {item.name}
-              </NavLink>
-            </li>
+            <NavLink
+              key={item.name}
+              to={item.path}
+              className={({ isActive }) =>
+                `flex items-center gap-3 p-3 rounded-lg transition ${
+                  isActive
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                }`
+              }
+            >
+              {item.icon}
+              {item.name}
+            </NavLink>
           ))}
-        </ul>
-      </aside>
+        </nav>
+      </div>
+
+      {/* Mobile sidebar */}
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div
+              initial={{ x: -300 }}
+              animate={{ x: 0 }}
+              exit={{ x: -300 }}
+              transition={{ duration: 0.3 }}
+              className="fixed inset-y-0 left-0 w-64 bg-gray-800 border-r border-gray-700 z-50 flex flex-col"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-gray-700">
+                <span className="font-bold text-xl">🧱 Bricky</span>
+                <button onClick={() => setOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <nav className="flex-1 px-4 py-3 space-y-2">
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.name}
+                    to={item.path}
+                    onClick={() => setOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 p-3 rounded-lg transition ${
+                        isActive
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                      }`
+                    }
+                  >
+                    {item.icon}
+                    {item.name}
+                  </NavLink>
+                ))}
+              </nav>
+            </motion.div>
+
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black z-40"
+              onClick={() => setOpen(false)}
+            />
+          </>
+        )}
+      </AnimatePresence>
     </>
   );
 }

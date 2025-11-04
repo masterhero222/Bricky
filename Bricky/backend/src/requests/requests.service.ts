@@ -20,22 +20,25 @@ export class RequestsService {
     const newRequest = this.requestRepository.create(createRequestDto);
     await this.requestRepository.save(newRequest);
 
-    // Изпращане на имейл с HTML шаблон
+    // 🧱 Рендерираме HTML шаблон с реалните стойности
     const html = await this.renderTemplate('email-template.html', {
-      name: createRequestDto.name,
+      clientName: createRequestDto.clientName,
       email: createRequestDto.email,
       phone: createRequestDto.phone,
+      address: createRequestDto.address,
+      category: createRequestDto.category,
       description: createRequestDto.description,
     });
 
+    // 🧱 Изпращаме имейл
     await this.mailerService.sendMail({
-      to: 'tsvetoslavpaskalev@gmail.com', // твоят имейл
+      to: 'tsvetoslavpaskalev@gmail.com', // 📬 Твоят основен имейл за известия
       subject: '🧱 Нова заявка в Bricky',
       html,
     });
 
     return {
-      message: 'Заявката е създадена успешно и имейлът е изпратен!',
+      message: '✅ Заявката е записана и имейлът е изпратен успешно!',
       data: newRequest,
     };
   }
@@ -53,20 +56,27 @@ export class RequestsService {
   // 🧱 Изтриване на заявка
   async remove(id: number) {
     await this.requestRepository.delete(id);
-    return { message: `Заявка с ID ${id} беше изтрита.` };
+    return { message: `🗑️ Заявка с ID ${id} беше изтрита.` };
   }
 
-  // 🧱 Рендерира HTML шаблон и замества {{placeholders}}
-  private async renderTemplate(templateName: string, data: Record<string, any>): Promise<string> {
-  // Вземи директно от src/, не от dist/
-  const filePath = path.join(process.cwd(), 'src', 'mail', 'templates', templateName);
+  // 🧱 Зареждане и рендиране на HTML шаблон
+  private async renderTemplate(
+    templateName: string,
+    data: Record<string, any>,
+  ): Promise<string> {
+    const filePath = path.join(process.cwd(), 'src', 'mail', 'templates', templateName);
 
-  let html = fs.readFileSync(filePath, 'utf8');
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`❌ Шаблонът ${templateName} не е намерен в mail/templates`);
+    }
 
-  for (const key in data) {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    html = html.replace(regex, data[key] ?? '');
-  }
+    let html = fs.readFileSync(filePath, 'utf8');
+
+    // Заместваме {{placeholders}} с реалните стойности
+    for (const key in data) {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      html = html.replace(regex, data[key] ?? '');
+    }
 
     return html;
   }

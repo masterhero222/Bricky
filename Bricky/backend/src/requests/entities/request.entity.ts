@@ -1,28 +1,28 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
 
 @Entity()
 export class Request {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ length: 255 })
+  clientName: string;
 
-@Column()
-name: string;
+  @Column({ length: 255 })
+  email: string;
 
-@Column()
-phone: string;
+  @Column({ length: 20 })
+  phone: string;
 
-@Column()
-address: string;
+  @Column({ length: 255, nullable: true })
+  address: string;
 
-@Column()
-serviceType: string; // шпакловка, баня, покрив и т.н.
+  @Column({ length: 255, nullable: true })
+  category: string;
 
-@Column({ type: 'text', nullable: true })
-notes?: string;
+  @Column({ type: 'text', nullable: true })
+  description: string;
 
-
-@Column({ default: () => 'CURRENT_TIMESTAMP' })
-  createdAt: Date; // дата на заявката
-
+  @CreateDateColumn()
+  createdAt: Date;
 }
