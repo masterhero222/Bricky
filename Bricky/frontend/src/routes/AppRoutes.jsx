@@ -9,7 +9,6 @@ import Settings from "../pages/Settings";
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
       <Route path="/requests" element={<Requests />} />
       <Route path="/workers" element={<Workers />} />
       <Route path="/clients" element={<Clients />} />
