@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+// src/workers/worker.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, BeforeInsert, BeforeUpdate } from 'typeorm';
 
 @Entity()
 export class Worker {
@@ -11,6 +12,12 @@ export class Worker {
   @Column({ unique: true })
   email: string;
 
+  @BeforeInsert()
+  @BeforeUpdate()
+  normalizeEmail() {
+    if (this.email) this.email = this.email.trim().toLowerCase();
+  }
+
   @Column({ length: 255 })
   password: string;
 
@@ -21,7 +28,7 @@ export class Worker {
   city: string;
 
   @Column({ type: 'simple-array' })
-  skills: string[]; // ['ВиК', 'Електро', 'Зидар']
+  skills: string[];
 
   @Column({ default: false })
   isApproved: boolean;

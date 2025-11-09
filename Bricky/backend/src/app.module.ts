@@ -1,48 +1,44 @@
+// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { join } from 'path';
+
 import { RequestsModule } from './requests/requests.module';
-import { Request } from './requests/entities/request.entity';
 import { WorkersModule } from './workers/workers.module';
 
 @Module({
   imports: [
-    // 🧩 Зареждаме .env глобално
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
 
-    // 🧱 MySQL
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST || 'localhost',
-      port: +process.env.DB_PORT! || 3306,
+      port: +(process.env.DB_PORT || 3306),
       username: process.env.DB_USER || 'root',
-      password: process.env.DB_PASS || 'root',
-      database: process.env.DB_NAME || 'bricky_db',
+      password: process.env.DB_PASS || '',
+      database: process.env.DB_NAME || 'bricky',
       autoLoadEntities: true,
       synchronize: true,
     }),
 
-    // ✉️ Mailer (от .env)
     MailerModule.forRoot({
       transport: {
         host: process.env.MAIL_HOST,
-        port: +process.env.MAIL_PORT!,
+        port: +(process.env.MAIL_PORT || 587),
         secure: false,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
-        },
+        auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
       },
-      defaults: {
-        from: process.env.MAIL_FROM,
+      defaults: { from: process.env.MAIL_FROM },
+      template: {
+        dir: join(__dirname, 'mail', 'templates'),
+        adapter: new HandlebarsAdapter(),       // 👈 важната част
+        options: { strict: true },
       },
     }),
 
-    // 🧩 Модулите
     RequestsModule,
     WorkersModule,
   ],

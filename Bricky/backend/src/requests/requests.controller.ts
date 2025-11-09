@@ -1,36 +1,29 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+// src/requests/requests.controller.ts
+import { Controller, Get, Post, Body, Param, Delete } from '@nestjs/common';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
-import { UpdateRequestDto } from './dto/update-request.dto';
 
 @Controller('requests')
 export class RequestsController {
-  constructor(private readonly requestsService: RequestsService) {}
+  constructor(private readonly service: RequestsService) {}
 
-  // 🧱 Създава нова заявка
   @Post()
-  create(@Body() createRequestDto: CreateRequestDto) {
-    return this.requestsService.create(createRequestDto);
+  create(@Body() dto: CreateRequestDto) {
+    return this.service.create(dto);
   }
 
-  // 📋 Връща всички заявки
   @Get()
   findAll() {
-    return this.requestsService.findAll();
+    return this.service.findAll();
   }
 
-  // 🔍 Връща заявка по ID
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.requestsService.findOne(+id);
+    return this.service.findOne(+id);
   }
 
-  // ✏️ Обновява съществуваща заявка
-
-
-  // ❌ Изтрива заявка по ID
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.requestsService.remove(+id);
+    return this.service.remove(+id);
   }
 }

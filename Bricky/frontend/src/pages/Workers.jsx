@@ -146,6 +146,7 @@ export default function WorkerRegister() {
         <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold mt-4">
           Регистрация
         </button>
+        
       </form>
     </div>
   );

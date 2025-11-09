@@ -7,9 +7,24 @@ export default function Home() {
   const navigate = useNavigate();
 
   return (
-    <div className="bg-gray-950 text-white min-h-screen flex flex-col">
+    <div className="relative bg-gray-950 text-white min-h-screen flex flex-col overflow-hidden">
+
+      {/* 🎥 VIDEO BACKGROUND */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute w-full h-full object-cover"
+      >
+        <source src="/src/media_files/loop.mp4" type="video/mp4" />
+      </video>
+
+      {/* 🔳 DARK OVERLAY */}
+      <div className="absolute inset-0 bg-black/60 z-0"></div>
+
       {/* 🧱 HERO SECTION */}
-      <section className="flex flex-col items-center justify-center flex-1 text-center px-6 py-16">
+      <section className="relative z-10 flex flex-col items-center justify-center flex-1 text-center px-6 py-16">
         <motion.h1
           className="text-4xl md:text-6xl font-bold mb-4"
           initial={{ opacity: 0, y: -40 }}
@@ -20,12 +35,12 @@ export default function Home() {
         </motion.h1>
 
         <motion.p
-          className="text-lg md:text-xl text-gray-400 max-w-2xl mb-8"
+          className="text-lg md:text-xl text-gray-300 max-w-2xl mb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
-          Свързваме клиенти и майстори — бързо, лесно и надеждно.  
+          Свързваме клиенти и майстори — бързо, лесно и надеждно.
           Без излишни обаждания и хаос.
         </motion.p>
 
@@ -51,7 +66,7 @@ export default function Home() {
       </section>
 
       {/* ⚙️ HOW IT WORKS */}
-      <section className="bg-gray-900 py-16">
+      <section className="relative z-10 bg-gray-900/80 py-16">
         <div className="max-w-5xl mx-auto text-center px-6">
           <h2 className="text-3xl font-bold mb-10">Как работи?</h2>
 
@@ -75,7 +90,7 @@ export default function Home() {
             ].map((step, i) => (
               <motion.div
                 key={i}
-                className="bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-blue-500/20 transition"
+                className="bg-gray-800/80 p-8 rounded-2xl shadow-lg hover:shadow-blue-500/20 transition"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.2 }}
@@ -92,7 +107,7 @@ export default function Home() {
       </section>
 
       {/* ⚒️ FOOTER */}
-      <footer className="bg-gray-950 border-t border-gray-800 py-6 text-center text-gray-500 text-sm">
+      <footer className="relative z-10 bg-gray-950/90 border-t border-gray-800 py-6 text-center text-gray-400 text-sm">
         © {new Date().getFullYear()} Bricky — Свързваме клиенти и майстори с доверие.
       </footer>
     </div>
