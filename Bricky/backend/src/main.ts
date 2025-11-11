@@ -5,9 +5,12 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // CORS към фронтенда
+  // ✅ Разрешаваме CORS за реалния сайт и за локален тест
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: [
+      'http://94.72.143.22', // фронтендът на сървъра
+      'http://localhost:5173', // локален дев
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
 
@@ -15,8 +18,9 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
-  await app.listen(PORT);
-  console.log(`🚀 Backend is running on http://localhost:${PORT}`);
+  await app.listen(PORT, '0.0.0.0'); // ✅ Слуша на всички IP адреси, не само localhost
+
+  console.log(`🚀 Backend is running on http://94.72.143.22:${PORT}`);
 }
 
 bootstrap();

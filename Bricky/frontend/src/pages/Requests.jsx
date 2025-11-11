@@ -21,7 +21,8 @@ export default function Requests() {
     e.preventDefault();
 
     try {
-      const res = await axios.post("http://localhost:3000/requests", form);
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/requests`, form);
+;
       console.log("✅ Response:", res.data);
       setStatus("Заявката е записана успешно ✅");
       setForm({

@@ -46,7 +46,8 @@ export default function WorkerRegister() {
     }
 
     try {
-      await axios.post("http://localhost:3000/workers", form);
+      await axios.post(`${import.meta.env.VITE_API_URL}/workers`, form);
+
       setSuccess("✅ Успешна регистрация! Ще се свържем с теб след преглед.");
       setForm({
         fullName: "",
