@@ -1,0 +1,22 @@
+# Node dependencies
+node_modules
+dist
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE configs
+.vscode
+.idea
+
+# Builds
+build
+coverage
+
+# XAMPP / MySQL local data
+mysql
