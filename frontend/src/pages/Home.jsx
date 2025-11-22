@@ -1,7 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Wrench, Users, CheckCircle, Mail } from "lucide-react";
+import { Wrench, CheckCircle, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
 
 export default function Home() {
   const navigate = useNavigate();
@@ -105,6 +106,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      
 
       {/* ⚒️ FOOTER */}
       <footer className="relative z-10 bg-gray-950/90 border-t border-gray-800 py-6 text-center text-gray-400 text-sm">
