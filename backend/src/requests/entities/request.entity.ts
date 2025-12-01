@@ -1,9 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { UserEntity } from '../../users/user.entity';
 
 @Entity('requests')
 export class RequestEntity {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @ManyToOne(() => UserEntity, (client) => client.requests, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'clientId' })
+  client: UserEntity | null;
 
   @Column({ length: 100 })
   clientName: string;

@@ -1,23 +1,26 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, IsArray } from 'class-validator';
 
 export class CreateWorkerDto {
   @IsString()
   @IsNotEmpty()
-  fullName: string; // 👈 същото име като в entity-то
+  fullName: string;
 
   @IsEmail()
   email: string;
 
   @IsString()
-  @MinLength(6)
+  @IsNotEmpty()
   password: string;
 
   @IsString()
+  @IsNotEmpty()
   phone: string;
 
   @IsString()
+  @IsNotEmpty()
   city: string;
 
   @IsArray()
+  @IsNotEmpty()
   skills: string[];
 }

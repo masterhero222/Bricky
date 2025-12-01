@@ -23,19 +23,20 @@ export default function Navbar() {
           <Link to="/">Начало</Link>
           <Link to="/worker-preview">Майсторите</Link>
           <Link to="/about">За нас</Link>
-          <Link to="/worker/profile">Моят профил</Link>
+          
         </nav>
 
         {/* Right Buttons */}
         <div className="hidden md:flex gap-4">
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/auth")}
             className="px-4 py-2 bg-gray-800 rounded-lg text-white"
           >
             Вход
           </button>
+
           <button
-            onClick={() => navigate("/register")}
+            onClick={() => navigate("/auth")}
             className="px-4 py-2 bg-blue-600 rounded-lg text-white"
           >
             Регистрация
@@ -52,13 +53,20 @@ export default function Navbar() {
           <Link to="/worker/profile" onClick={() => setOpen(false)}>Моят профил</Link>
 
           <button
-            onClick={() => { setOpen(false); navigate("/login"); }}
+            onClick={() => {
+              setOpen(false);
+              navigate("/auth");
+            }}
             className="px-4 py-2 bg-gray-800 rounded-lg mt-2"
           >
             Вход
           </button>
+
           <button
-            onClick={() => { setOpen(false); navigate("/register"); }}
+            onClick={() => {
+              setOpen(false);
+              navigate("/auth");
+            }}
             className="px-4 py-2 bg-blue-600 rounded-lg"
           >
             Регистрация

@@ -1,4 +1,5 @@
 import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { CategoryEnum } from './category.enum';
 
 export class CreateRequestDto {
   @IsString()
@@ -16,13 +17,9 @@ export class CreateRequestDto {
   @IsOptional()
   address?: string;
 
- @IsEnum(['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки'], {
-  each: false, // важно: само една стойност, не масив
-  message: 'Невалидна категория',
-})
-
+  @IsEnum(CategoryEnum, { message: 'Невалидна категория' })
   @IsOptional()
-  category?: 'ВиК' | 'Електро' | 'Шпакловка и боя' | 'Плочки';
+  category?: CategoryEnum;
 
   @IsString()
   @IsOptional()

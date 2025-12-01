@@ -3,6 +3,14 @@
 import React, { useState } from "react";
 import axios from "axios";
 
+// Същата базова таблица за материали – тук трудът идва от майстора
+const PRICE_TABLE = {
+  "Баня": { material: 140 },
+  "Шпакловка и боя": { material: 18 },
+  "Плочки": { material: 40 },
+  "ВиК": { material: 55 },
+};
+
 export default function WorkerProfile() {
   const [profile, setProfile] = useState({
     fullName: "",
@@ -17,6 +25,16 @@ export default function WorkerProfile() {
   const [previewImages, setPreviewImages] = useState([]);
   const [previewAvatar, setPreviewAvatar] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Калкулатор за оферта
+  const [calc, setCalc] = useState({
+    type: "",
+    area: "",
+    laborPerM2: "",
+    materials: 0,
+    labor: 0,
+    total: 0,
+  });
 
   const handleAvatarUpload = (e) => {
     const file = e.target.files[0];
@@ -55,7 +73,7 @@ export default function WorkerProfile() {
 
       profile.images.forEach((img) => formData.append("images", img));
 
-      // TODO: сложи реалния workerId, когато имаш auth
+      // TODO: реален workerId, когато имаш auth
       await axios.put(
         `${import.meta.env.VITE_API_URL}/workers/profile/1`,
         formData,
@@ -69,6 +87,25 @@ export default function WorkerProfile() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateCalc = (field, value) => {
+    const next = { ...calc, [field]: value };
+    const areaNum = parseFloat(next.area) || 0;
+    const laborNum = parseFloat(next.laborPerM2) || 0;
+    const conf = PRICE_TABLE[next.type] || null;
+
+    if (!conf || !areaNum) {
+      next.materials = 0;
+      next.labor = 0;
+      next.total = 0;
+    } else {
+      next.materials = Math.round(areaNum * conf.material);
+      next.labor = Math.round(areaNum * laborNum);
+      next.total = next.materials + next.labor;
+    }
+
+    setCalc(next);
   };
 
   return (
@@ -151,6 +188,74 @@ export default function WorkerProfile() {
             className="mt-4"
             onChange={handleImageUpload}
           />
+        </div>
+
+        {/* Bricky Калкулатор за оферта */}
+        <div className="mt-10 bg-gray-800 p-6 rounded-2xl shadow-lg space-y-4">
+          <h2 className="text-2xl font-bold mb-2">Bricky Калкулатор за оферта</h2>
+          <p className="text-sm text-gray-300">
+            Това е ориентировъчен калкулатор за първоначална оферта към клиента.
+            Не се записва в базата засега, служи ти за бърза сметка пред клиента.
+          </p>
+
+          <select
+            value={calc.type}
+            onChange={(e) => updateCalc("type", e.target.value)}
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none mb-3"
+          >
+            <option value="">Тип ремонт</option>
+            <option value="Баня">Баня</option>
+            <option value="Шпакловка и боя">Шпакловка и боя</option>
+            <option value="Плочки">Плочки</option>
+            <option value="ВиК">ВиК</option>
+          </select>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={calc.area}
+              onChange={(e) => updateCalc("area", e.target.value)}
+              placeholder="Площ (кв.м)"
+              className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none"
+            />
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={calc.laborPerM2}
+              onChange={(e) => updateCalc("laborPerM2", e.target.value)}
+              placeholder="Цена за труд на кв.м (лв)"
+              className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none"
+            />
+          </div>
+
+          <div className="bg-gray-900 p-4 rounded-xl space-y-2 text-sm mt-4">
+            <div className="flex justify-between">
+              <span className="text-gray-300">Материали (приблизително):</span>
+              <span className="font-semibold text-blue-300">
+                {calc.materials.toLocaleString("bg-BG")} лв
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-300">Труд (по твоя ставка):</span>
+              <span className="font-semibold text-blue-300">
+                {calc.labor.toLocaleString("bg-BG")} лв
+              </span>
+            </div>
+            <div className="border-t border-gray-700 pt-2 mt-2 flex justify-between">
+              <span className="text-gray-200 font-semibold">Общо оферта:</span>
+              <span className="font-bold text-green-400 text-lg">
+                {calc.total.toLocaleString("bg-BG")} лв
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-400 mt-3">
+            На следващ етап ще вържем тези стойности с реални данни от заявки и
+            ще се калибрират автоматично.
+          </p>
         </div>
 
         <button

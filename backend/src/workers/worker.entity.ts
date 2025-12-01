@@ -1,38 +1,35 @@
 // src/workers/worker.entity.ts
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, BeforeInsert, BeforeUpdate } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity()
+@Entity('worker')
 export class Worker {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 255 })
+  @Column()
   fullName: string;
 
   @Column({ unique: true })
   email: string;
 
-  @BeforeInsert()
-  @BeforeUpdate()
-  normalizeEmail() {
-    if (this.email) this.email = this.email.trim().toLowerCase();
-  }
-
-  @Column({ length: 255 })
+  @Column()
   password: string;
 
-  @Column({ length: 20 })
+  @Column()
   phone: string;
 
-  @Column({ length: 255 })
+  @Column()
   city: string;
 
-  @Column({ type: 'simple-array' })
-  skills: string[];
+  @Column()
+  skills: string;
 
   @Column({ default: false })
   isApproved: boolean;
 
-  @CreateDateColumn()
+  @Column({ nullable: true })
+  userId: number;
+
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 }

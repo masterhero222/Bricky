@@ -5,6 +5,7 @@ import WorkerPreviewPage from "../pages/WorkerPreviewPage";
 import Clients from "../pages/Clients";
 import Settings from "../pages/Settings";
 import AboutUs from "../pages/AboutUs";
+import WorkerLogin from "../pages/WorkerLogin";
 
 export default function AppRoutes() {
   return (
@@ -16,6 +17,9 @@ export default function AppRoutes() {
       <Route path="/clients" element={<Clients />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/about" element={<AboutUs />} />
+      <Route path="/client/register" element={<ClientRegister />} />
+      <Route path="/client/login" element={<ClientLogin />} />
+      
     </Routes>
   );
 }

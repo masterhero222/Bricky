@@ -1,55 +1,71 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
 import { RequestEntity } from './entities/request.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class RequestsService {
   constructor(
     @InjectRepository(RequestEntity)
     private readonly requestsRepository: Repository<RequestEntity>,
+    private readonly mailService: MailService,
   ) {}
 
-  // CREATE (MVP)
-  async createRequest(data: CreateRequestDto) {
+  // CREATE – само за логнати
+  async create(dto: CreateRequestDto, clientId?: number) {
+    if (!clientId) {
+      throw new UnauthorizedException(
+        'Трябва да си логнат, за да създадеш заявка'
+      );
+    }
+
     const request = this.requestsRepository.create({
-      clientName: data.clientName,
-      email: data.email,
-      phone: data.phone,
-      address: data.address,
-      category: data.category,
-      description: data.description,
+      client: { id: clientId } as any,  // FIXED
+      clientName: dto.clientName,
+      email: dto.email,
+      phone: dto.phone,
+      address: dto.address,
+      category: dto.category,
+      description: dto.description,
       status: 'нова',
     });
 
-    return await this.requestsRepository.save(request);
+    const saved = await this.requestsRepository.save(request);
+
+    // Fire-and-forget
+    this.mailService
+      .sendRequestConfirmation({
+        email: saved.email,
+        clientName: saved.clientName,
+      })
+      .catch((err) =>
+        console.error('Mail error (non-fatal):', err?.message ?? err),
+      );
+
+    return saved;
   }
 
-  // GET ALL
   async findAll() {
-    return await this.requestsRepository.find({
+    return this.requestsRepository.find({
       order: { id: 'DESC' },
     });
   }
 
-  // GET ONE (MVP placeholder)
   async findOne(id: number) {
-    return await this.requestsRepository.findOne({ where: { id } });
+    return this.requestsRepository.findOne({ where: { id } });
   }
 
-  // DELETE
   async deleteRequest(id: number) {
-    return await this.requestsRepository.delete(id);
+    return this.requestsRepository.delete(id);
   }
 
-  // REMOVE (Nest placeholder)
   remove(id: number) {
     return this.deleteRequest(id);
-  }
-
-  // CREATE (Nest placeholder)
-  create(dto: CreateRequestDto) {
-    return this.createRequest(dto);
   }
 }

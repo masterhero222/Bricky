@@ -5,11 +5,14 @@ import { ConfigModule } from '@nestjs/config';
 import { RequestsModule } from './requests/requests.module';
 import { WorkersModule } from './workers/workers.module';
 import { MailModule } from './mail/mail.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
 
     TypeOrmModule.forRoot({
@@ -23,13 +26,11 @@ import { MailModule } from './mail/mail.module';
       synchronize: true,
     }),
 
+    UsersModule,
+    AuthModule,
+    MailModule,
     RequestsModule,
     WorkersModule,
-
-    // Safe mail module (no templates, no adapters)
-    MailModule,
   ],
 })
 export class AppModule {}
-
-
