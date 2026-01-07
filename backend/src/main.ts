@@ -4,9 +4,19 @@ dotenv.config({ path: '/var/www/Bricky/backend/.env' });
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // ensure uploads folder exists
+  const uploadsDir = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+
+  // serve /uploads/*
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   // CORS за фронтенда
   app.enableCors({
@@ -14,7 +24,9 @@ async function bootstrap() {
       'http://bricky.bg',
       'https://bricky.bg',
       'http://94.72.143.22',
-      'https://94.72.143.22'
+      'https://94.72.143.22',
+      'http://localhost:5173',
+      'http://localhost:3000',
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,

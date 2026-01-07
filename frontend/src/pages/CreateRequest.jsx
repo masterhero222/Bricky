@@ -1,125 +1,118 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import requestService from "../services/requestService";
+// @ts-nocheck
+import React, { useState } from "react";
+import { apiPost } from "../services/api";
 
-export default function CreateRequest() {
-  const navigate = useNavigate();
+const CATEGORIES = ["ВиК", "Електро", "Шпакловка и боя", "Плочки"];
 
-  // Проверка за токен
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      navigate("/login");   // ако е гост, OUT.
-    }
-  }, []);
-
+export default function CreateRequest({ initialClient, onCreated }) {
   const [form, setForm] = useState({
-    clientName: "",
-    email: "",
-    phone: "",
-    address: "",
+    clientName: initialClient?.name || "",
+    email: initialClient?.email || "",
+    phone: initialClient?.phone || "",
+    address: initialClient?.address || "",
     category: "",
     description: "",
   });
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [err, setErr] = useState("");
 
-  function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  }
+  const handleChange = (e) => {
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+  };
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
+  const submit = async () => {
     try {
-      await requestService.createRequest(form); // изпраща с токена вътре
-      navigate("/requests");
-    } catch (err) {
-      setError(err?.response?.data?.message || "Грешка при изпращане");
-    }
+      setErr("");
+      setLoading(true);
 
-    setLoading(false);
-  }
+      if (!form.clientName || !form.email || !form.phone || !form.category) {
+        setErr("Попълни име, имейл, телефон и категория.");
+        return;
+      }
+
+      await apiPost("/requests", form);
+
+      alert("Заявката е създадена!");
+      onCreated?.();
+    } catch (e) {
+      console.error(e);
+      setErr(
+        "Не успях да създам заявка. Провери дали токенът се праща (Authorization: Bearer ...)."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
+    <div className="max-w-3xl mx-auto bg-gray-800 border border-gray-700 rounded-xl p-6">
+      <h1 className="text-2xl font-bold mb-4">Направи заявка</h1>
 
-      <h1 className="text-2xl font-bold mb-4">Нова заявка</h1>
+      {err && <p className="text-red-400 mb-3">{err}</p>}
 
-      {error && (
-        <p className="bg-red-100 text-red-600 p-2 mb-3 rounded">{error}</p>
-      )}
-
-      <form onSubmit={handleSubmit} className="grid gap-3">
-
+      <div className="grid md:grid-cols-2 gap-4">
         <input
-          type="text"
           name="clientName"
-          placeholder="Име"
           value={form.clientName}
           onChange={handleChange}
-          className="border p-2 rounded"
+          placeholder="Име"
+          className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
         />
-
         <input
-          type="email"
-          name="email"
-          placeholder="Имейл"
-          value={form.email}
-          onChange={handleChange}
-          className="border p-2 rounded"
-        />
-
-        <input
-          type="text"
           name="phone"
-          placeholder="Телефон"
           value={form.phone}
           onChange={handleChange}
-          className="border p-2 rounded"
+          placeholder="Телефон"
+          className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
         />
+      </div>
 
-        <input
-          type="text"
-          name="address"
-          placeholder="Адрес"
-          value={form.address}
-          onChange={handleChange}
-          className="border p-2 rounded"
-        />
+      <input
+        name="email"
+        value={form.email}
+        onChange={handleChange}
+        placeholder="Имейл"
+        className="mt-4 p-3 rounded bg-gray-900 border border-gray-700 w-full"
+      />
 
-        <select
-          name="category"
-          value={form.category}
-          onChange={handleChange}
-          className="border p-2 rounded"
-        >
-          <option value="">Избери категория</option>
-          <option value="ВиК">ВиК</option>
-          <option value="Електро">Електро</option>
-          <option value="Шпакловка и боя">Шпакловка и боя</option>
-          <option value="Плочки">Плочки</option>
-        </select>
+      <input
+        name="address"
+        value={form.address}
+        onChange={handleChange}
+        placeholder="Адрес (по желание)"
+        className="mt-4 p-3 rounded bg-gray-900 border border-gray-700 w-full"
+      />
 
-        <textarea
-          name="description"
-          placeholder="Описание"
-          value={form.description}
-          onChange={handleChange}
-          className="border p-2 rounded h-32"
-        />
+      <select
+        name="category"
+        value={form.category}
+        onChange={handleChange}
+        className="mt-4 p-3 rounded bg-gray-900 border border-gray-700 w-full"
+      >
+        <option value="">Категория</option>
+        {CATEGORIES.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
 
-        <button
-          disabled={loading}
-          className="bg-blue-600 text-white py-2 rounded"
-        >
-          {loading ? "Изпращане..." : "Създай заявка"}
-        </button>
+      <textarea
+        name="description"
+        value={form.description}
+        onChange={handleChange}
+        placeholder="Описание"
+        className="mt-4 p-3 rounded bg-gray-900 border border-gray-700 w-full h-32"
+      />
 
-      </form>
+      <button
+        onClick={submit}
+        disabled={loading}
+        className="mt-6 bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold"
+      >
+        {loading ? "Пращам..." : "Създай заявка"}
+      </button>
     </div>
   );
 }

@@ -1,27 +1,27 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { CategoryEnum } from './category.enum';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateRequestDto {
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   clientName: string;
 
+  @IsNotEmpty()
   @IsEmail()
   email: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   phone: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   address?: string;
 
-  @IsEnum(CategoryEnum, { message: 'Невалидна категория' })
   @IsOptional()
-  category?: CategoryEnum;
+  @IsIn(['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки'])
+  category?: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   description?: string;
 }

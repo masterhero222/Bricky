@@ -1,54 +1,91 @@
+// src/App.jsx
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Layout from "./layouts/Layout";
 
+// BASIC PAGES
 import Home from "./pages/Home";
 import AboutUs from "./pages/AboutUs";
 
-// Клиенти
-import ClientLogin from "./pages/ClientLogin";
-import ClientRegister from "./pages/ClientRegister";
-
-// Майстори
-import WorkerLogin from "./pages/WorkerLogin";
-import WorkersRegister from "./pages/WorkersRegister";
-
-// Други
-import Requests from "./pages/Requests";
-import WorkerPreviewPage from "./pages/WorkerPreviewPage";
-import WorkerProfile from "./pages/WorkerProfile";
+// AUTH pages
 import AuthGate from "./pages/AuthGate";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+
+// CLIENT
+import ClientProfile from "./pages/ClientProfile";
+
+// WORKER (REAL PAGES THAT EXIST)
+import WorkerLogin from "./pages/workers/WorkerLogin";
+import WorkersRegister from "./pages/workers/WorkersRegister";
+import WorkerProfile from "./pages/workers/WorkerProfile"; 
+import WorkerPreview from "./pages/workers/WorkerPreview";
+
+// REQUESTS
+import Requests from "./pages/Requests";
+
+import WorkerPage from "./pages/WorkerPage";
 
 export default function App() {
   return (
     <Router>
       <Routes>
 
-        {/* Лейаут – всички страници вътре имат Navbar */}
+        {/* AUTH OUTSIDE LAYOUT */}
+        <Route path="/auth" element={<AuthGate />} />
+        <Route path="/auth/login" element={<Login />} />
+        <Route path="/auth/register" element={<Register />} />
+
+        {/* LAYOUT PAGES */}
         <Route element={<Layout />}>
 
-          {/* Основни */}
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
 
-          {/* Клиенти */}
-          <Route path="/client/login" element={<ClientLogin />} />
-          <Route path="/client/register" element={<ClientRegister />} />
+          {/* CLIENT PROFILE */}
+          <Route
+            path="/client/profile"
+            element={
+              <RequireClient>
+                <ClientProfile />
+              </RequireClient>
+            }
+          />
 
-          {/* Майстори */}
+          {/* WORKER AUTH */}
           <Route path="/worker/login" element={<WorkerLogin />} />
           <Route path="/worker/register" element={<WorkersRegister />} />
-          <Route path="/worker/profile" element={<WorkerProfile />} />
 
-          {/* Преглед и заявки */}
-          <Route path="/worker-preview" element={<WorkerPreviewPage />} />
+          {/* WORKER PROFILE */}
+          <Route
+            path="/worker/profile"
+            element={
+              <RequireWorker>
+                <WorkerProfile />
+              </RequireWorker>
+            }
+          />
+
+          {/* WORKER PREVIEW (customer sees worker) */}
+          <Route path="/worker-preview" element={<WorkerPreview />} />
+
+          {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
 
-          {/* Хъб, ако решим да го ползваме */}
-          <Route path="/auth" element={<AuthGate />} />
-
+            <Route path="/worker/:userId" element={<WorkerPage />} />
         </Route>
-
       </Routes>
     </Router>
   );
+}
+
+function RequireClient({ children }) {
+  return localStorage.getItem("role") === "client"
+    ? children
+    : (window.location.href = "/auth");
+}
+
+function RequireWorker({ children }) {
+  return localStorage.getItem("role") === "worker"
+    ? children
+    : (window.location.href = "/auth");
 }

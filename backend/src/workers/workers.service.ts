@@ -1,11 +1,15 @@
-// src/workers/workers.service.ts
-import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
-import * as bcrypt from 'bcryptjs';
-import { UsersService } from '../users/users.service';
-import { CreateWorkerDto } from './dto/create-worker.dto';
+import * as bcrypt from 'bcrypt';
+
+type CreateWorkerProfileInput = {
+  userId: number;
+  phone?: string;
+  city?: string;
+  skills?: string[];
+};
 
 @Injectable()
 export class WorkersService {
@@ -14,57 +18,149 @@ export class WorkersService {
   constructor(
     @InjectRepository(Worker)
     private readonly workerRepository: Repository<Worker>,
-    private readonly users: UsersService,
   ) {}
 
-  async findByEmail(email: string) {
-  return this.workerRepository.findOne({ where: { email } });
-}
-
-
-  async create(dto: CreateWorkerDto) {
-    const email = dto.email.toLowerCase();
-
-    // Проверка дали вече има такъв майстор
-    const exists = await this.workerRepository.findOne({ where: { email } });
-    if (exists) {
-      throw new ConflictException('Този имейл вече е регистриран като майстор.');
-    }
-
-    // Хеш на паролата
-    const hashed = await bcrypt.hash(dto.password, 10);
-
-    // 1) Създаваме запис в users (за login системата)
-    const user = await this.users.create({
-      name: dto.fullName,
-      email: email,
-      password: hashed,
-      role: 'worker',
+  /**
+   * LEGACY: Register worker as standalone account in workers table
+   */
+  async registerWorker(dto: {
+    fullName: string;
+    email: string;
+    password: string;
+    phone?: string;
+    city?: string;
+    skills?: string[];
+  }) {
+    const existing = await this.workerRepository.findOne({
+      where: { email: dto.email },
     });
+    if (existing) throw new BadRequestException('Имейлът вече съществува');
 
-    // 2) Създаваме worker профила
+    const hash = await bcrypt.hash(dto.password, 10);
+
     const worker = this.workerRepository.create({
+      userId: 0 as any, // legacy акаунт без users.id
       fullName: dto.fullName,
-      email,
-      password: hashed, // ВАЖНО: същия хеш, за да може да логва и от тук при нужда
-      phone: dto.phone,
-      city: dto.city,
-      skills: Array.isArray(dto.skills) ? dto.skills.join(', ') : dto.skills,
-      isApproved: false,
-      userId: user.id,
-    });
+      email: dto.email,
+      password: hash,
+      phone: dto.phone ?? null,
+      city: dto.city ?? null,
+      skills: dto.skills ?? [],
+    } as any);
 
-    const saved = await this.workerRepository.save(worker);
+    const saved = (await this.workerRepository.save(worker as any)) as Worker;
 
-    this.logger.log(`Нов майстор: ${saved.fullName} (${saved.email})`);
+    this.logger.log(
+      `Нов майстор (legacy): ${saved.fullName ?? '-'} (${saved.email ?? '-'})`,
+    );
 
-    return {
-      message: 'Worker registered successfully',
-      data: saved,
-    };
+    return saved;
   }
 
-  async findAll() {
+  async findByEmail(email: string) {
+    return this.workerRepository.findOne({ where: { email } });
+  }
+
+  async findById(id: number) {
+    return this.workerRepository.findOne({ where: { id } });
+  }
+
+  async findByUserId(userId: number) {
+    return this.workerRepository.findOne({ where: { userId } });
+  }
+
+  /**
+   * ✅ SMART LOOKUP:
+   * Clients might send worker.id (from appliedWorkers) OR userId (from JWT-based flows).
+   * This resolves both.
+   */
+  async findOneSmart(idOrUserId: number) {
+    const n = Number(idOrUserId);
+    if (!Number.isFinite(n) || n <= 0) throw new BadRequestException('Invalid worker identifier');
+
+    // 1) try as userId (users.id)
+    let worker = await this.workerRepository.findOne({ where: { userId: n } });
+
+    // 2) fallback: try as primary key id (worker.id)
+    if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
+
+    if (!worker) throw new NotFoundException('Worker not found');
+    return worker;
+  }
+
+  /**
+   * NEW: Create worker profile linked to users.id (userId)
+   */
+  async createWorkerProfile(data: CreateWorkerProfileInput) {
+    const uid = Number(data?.userId);
+    if (!uid) throw new BadRequestException('Missing userId');
+
+    const existing = await this.findByUserId(uid);
+    if (existing) return existing;
+
+    const worker = this.workerRepository.create({
+      userId: uid,
+      phone: data.phone ?? null,
+      city: data.city ?? null,
+      skills: data.skills ?? [],
+      isApproved: false,
+    } as any);
+
+    const saved = (await this.workerRepository.save(worker as any)) as Worker;
+
+    this.logger.log(`Worker profile created for userId=${saved.userId}`);
+    return saved;
+  }
+
+  /**
+   * Existing bulk by userIds (kept)
+   */
+  async findByUserIds(userIds: number[]) {
+    if (!Array.isArray(userIds) || userIds.length === 0) return [];
+
+    const clean = userIds
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    if (clean.length === 0) return [];
+
+    return this.workerRepository.find({
+      where: { userId: In(clean) },
+    });
+  }
+
+  /**
+   * ✅ Optional: bulk smart (matches both id and userId)
+   * Use if your appliedWorkers sometimes stores worker.id.
+   */
+  async findByIdsSmart(ids: number[]) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const clean = ids
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    if (clean.length === 0) return [];
+
+    return this.workerRepository.find({
+      where: [
+        { id: In(clean) },
+        { userId: In(clean) },
+      ],
+    });
+  }
+
+  async updateProfile(id: number, data: Partial<Worker>) {
+    await this.workerRepository.update({ id }, data as any);
+    return this.findById(id);
+  }
+
+  async updateProfileByUserId(userId: number, data: Partial<Worker>) {
+    await this.workerRepository.update({ userId }, data as any);
+    return this.findByUserId(userId);
+  }
+
+  async getAll() {
     return this.workerRepository.find();
   }
 }

@@ -1,166 +1,67 @@
-// @ts-nocheck
 import { useState } from "react";
 import axios from "axios";
 
-export default function WorkersRegister() {
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    phone: "",
-    city: "",
-    skills: [],
-  });
-
+export default function Login() {
+  const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  const skillsList = ["ВиК", "Електро", "Шпакловка и боя", "Зидария", "Плочки"];
+  const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError("");
-    setSuccess("");
-  };
-
-  const handleSkillToggle = (skill) => {
-    setForm((prev) => {
-      const skills = prev.skills.includes(skill)
-        ? prev.skills.filter((s) => s !== skill)
-        : [...prev.skills, skill];
-      return { ...prev, skills };
-    });
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-
-    if (form.password !== form.confirmPassword) {
-      setError("❌ Паролите не съвпадат!");
-      return;
-    }
-
-    if (!form.fullName || !form.email || !form.phone || !form.city || !form.skills.length) {
-      setError("❌ Всички полета са задължителни.");
-      return;
-    }
-
-    const payload = {
-      fullName: form.fullName,
-      email: form.email,
-      password: form.password,
-      phone: form.phone,
-      city: form.city,
-      skills: form.skills,
-    };
+    setError("");
 
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/workers/register`, payload);
-      setSuccess("Успешна регистрация!");
-      setError("");
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, form);
 
-      setForm({
-        fullName: "",
-        email: "",
-        password: "",
-        confirmPassword: "",
-        phone: "",
-        city: "",
-        skills: [],
-      });
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("role", res.data.user.role);
+
+      if (res.data.user.role === "client") window.location.href = "/client/profile";
+      else window.location.href = "/worker/profile";
     } catch (err) {
-      setError(err.response?.data?.message || "Грешка при регистрацията.");
-      setSuccess("");
+      // Network errors (connection refused, CORS, DNS, etc.)
+      if (!err.response) {
+        console.error("NETWORK ERROR:", err);
+        setError("Няма връзка с бекенда (API). Провери VITE_API_URL и дали backend работи.");
+        return;
+      }
+
+      const msg = err.response?.data?.message;
+      console.error("LOGIN ERROR:", err.response?.data || err);
+
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Грешен имейл или парола.");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white pt-24 pb-24 px-6 flex flex-col items-center">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-gray-800 p-8 rounded-2xl w-full max-w-xl shadow-xl space-y-4"
-      >
-        <h2 className="text-2xl font-bold text-center">Регистрация на майстор</h2>
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-6">
+      <form className="bg-gray-800 p-8 rounded-xl w-full max-w-md space-y-4 shadow-lg" onSubmit={submit}>
+        <h1 className="text-2xl font-bold text-center">Вход</h1>
 
         <input
-          name="fullName"
-          value={form.fullName}
-          placeholder="Трите имена"
-          onChange={handleChange}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
-
-        <input
+          type="email"
           name="email"
-          value={form.email}
           placeholder="Имейл"
-          onChange={handleChange}
+          value={form.email}
+          onChange={change}
           className="w-full p-3 rounded bg-gray-700"
           required
         />
 
         <input
+          type="password"
           name="password"
-          type="password"
           placeholder="Парола"
-          onChange={handleChange}
+          value={form.password}
+          onChange={change}
           className="w-full p-3 rounded bg-gray-700"
           required
         />
 
-        <input
-          name="confirmPassword"
-          type="password"
-          placeholder="Потвърди паролата"
-          onChange={handleChange}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
+        {error && <p className="text-red-400 text-center">{error}</p>}
 
-        <input
-          name="phone"
-          value={form.phone}
-          placeholder="Телефон"
-          onChange={handleChange}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
-
-        <input
-          name="city"
-          value={form.city}
-          placeholder="Населено място"
-          onChange={handleChange}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
-
-        <div>
-          <p className="font-semibold mb-2">Специалности:</p>
-          <div className="flex flex-wrap gap-3">
-            {skillsList.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => handleSkillToggle(s)}
-                className={`px-4 py-2 rounded-full border ${
-                  form.skills.includes(s) ? "bg-blue-600 border-blue-600" : "border-gray-600"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {error && <p className="text-red-400">{error}</p>}
-        {success && <p className="text-green-400">{success}</p>}
-
-        <button type="submit" className="w-full bg-blue-600 py-3 rounded font-bold">
-          Регистрация
-        </button>
+        <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
       </form>
     </div>
   );

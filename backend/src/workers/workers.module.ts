@@ -1,4 +1,3 @@
-// src/workers/workers.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Worker } from './worker.entity';
@@ -15,6 +14,9 @@ import { UsersModule } from '../users/users.module';
   ],
   controllers: [WorkersController],
   providers: [WorkersService],
-  exports: [WorkersService],
+  exports: [
+    TypeOrmModule, // важно за RequestsModule ако import-ва WorkersModule
+    WorkersService,
+  ],
 })
 export class WorkersModule {}

@@ -1,16 +1,10 @@
-// src/auth/auth.service.ts
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
-import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
-import { Worker } from '../workers/worker.entity';
+import { LoginUserDto } from './dto/login-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -20,68 +14,72 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  // ------------------------------------------------------
-  //  REGISTER CLIENT
-  // ------------------------------------------------------
   async register(dto: RegisterUserDto) {
-    const email = dto.email.toLowerCase();
+    const exists = await this.users.findByEmail(dto.email);
+    if (exists) throw new BadRequestException('Имейлът вече съществува');
 
-    const exists = await this.users.findByEmail(email);
-    if (exists) {
-      throw new ConflictException('Email already exists');
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    // CLIENT
+    if (dto.role === 'client') {
+      if (!dto.name) throw new BadRequestException('Името е задължително');
+
+      const user = await this.users.create({
+        name: dto.name,
+        email: dto.email,
+        password: passwordHash,
+        role: 'client',
+      });
+
+      return { message: 'Клиентът е регистриран успешно', user };
     }
 
-    const hashed = await bcrypt.hash(dto.password, 10);
+    // WORKER
+    if (dto.role === 'worker') {
+      if (!dto.fullName) throw new BadRequestException('Трите имена са задължителни');
+      if (!dto.phone) throw new BadRequestException('Телефонът е задължителен');
+      if (!dto.city) throw new BadRequestException('Градът е задължителен');
 
-    const user = await this.users.create({
-      name: dto.name,
-      email,
-      password: hashed,
-      role: 'client',
-    });
+      const user = await this.users.create({
+        name: dto.fullName,
+        email: dto.email,
+        password: passwordHash,
+        role: 'worker',
+      });
 
-    const { password, ...rest } = user;
-    return rest;
+      await this.workers.createWorkerProfile({
+        userId: user.id,
+        phone: dto.phone,
+        city: dto.city,
+        skills: dto.skills ?? [],
+      });
+
+      return { message: 'Майсторът е регистриран успешно', user };
+    }
+
+    throw new BadRequestException('Невалидна роля');
   }
 
-  // ------------------------------------------------------
-  //  LOGIN (CLIENT OR WORKER)
-  // ------------------------------------------------------
   async login(dto: LoginUserDto) {
-    const email = dto.email.toLowerCase();
+    const user = await this.users.findByEmail(dto.email);
+    if (!user) throw new BadRequestException('Грешен имейл или парола');
 
-    // 1) check in users table
-    const user = await this.users.findByEmail(email);
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) throw new BadRequestException('Грешни данни');
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // 2) validate password
-    const isValid = await bcrypt.compare(dto.password, user.password);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // 3) worker profile (optional)
-    let workerProfile: Worker | null = null;
-    if (user.role === 'worker') {
-      workerProfile = await this.workers.findByEmail(email);
-    }
-
-    const payload = {
+    const token = await this.jwt.signAsync({
       id: user.id,
-      email: user.email,
       role: user.role,
-      workerId: workerProfile ? workerProfile.id : null,
-    };
-
-    const token = this.jwt.sign(payload);
+    });
 
     return {
-      message: 'Login successful',
       token,
-      user: payload,
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        email: user.email,
+      },
     };
   }
 }

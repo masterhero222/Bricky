@@ -1,33 +1,28 @@
 // src/services/api.js
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://94.72.143.22:3000";
+const API_URL = import.meta.env.VITE_API_URL;
 
-// Взимаме токена от localStorage
-function getToken() {
-  return localStorage.getItem("clientToken") || localStorage.getItem("token") || null;
+export function getToken() {
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    ""
+  );
 }
 
-export function apiGet(path) {
-  return axios.get(`${API_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${getToken()}`,
-    },
-  });
-}
+const api = axios.create({ baseURL: API_URL });
 
-export function apiPost(path, data = {}) {
-  return axios.post(`${API_URL}${path}`, data, {
-    headers: {
-      Authorization: `Bearer ${getToken()}`,
-    },
-  });
-}
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-export function apiDelete(path) {
-  return axios.delete(`${API_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${getToken()}`,
-    },
-  });
-}
+export const apiGet = (url, config) => api.get(url, config);
+export const apiPost = (url, data, config) => api.post(url, data, config);
+export const apiPut = (url, data, config) => api.put(url, data, config);
+export const apiDelete = (url, config) => api.delete(url, config);
+
+export default api;

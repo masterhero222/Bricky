@@ -37,17 +37,29 @@ export class RequestEntity {
     enum: ['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки'],
     nullable: true,
   })
-  category: 'ВиК' | 'Електро' | 'Шпакловка и боя' | 'Плочки';
+  category: string;
 
   @Column({ type: 'text', nullable: true })
   description: string;
 
   @Column({
     type: 'enum',
-    enum: ['нова', 'в процес', 'завършена', 'отказана'],
+    enum: ['нова', 'кандидатствана', 'назначена', 'в процес', 'завършена', 'отказана'],
     default: 'нова',
   })
-  status: 'нова' | 'в процес' | 'завършена' | 'отказана';
+  status: string;
+
+  /**
+   * Store applicants as WORKER USER IDs (users.id)
+   */
+  @Column('simple-array', { nullable: true })
+  appliedWorkers: number[];
+
+  /**
+   * assigned worker USER ID (users.id)
+   */
+  @Column({ type: 'int', nullable: true })
+  assignedWorkerId: number | null;
 
   @CreateDateColumn()
   created_at: Date;

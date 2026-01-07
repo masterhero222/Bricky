@@ -10,28 +10,17 @@ import * as jwt from 'jsonwebtoken';
 export class JwtAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest();
+    const auth = req.headers.authorization;
 
-    const header = req.headers.authorization || req.headers.Authorization;
+    if (!auth) throw new UnauthorizedException('Missing token');
 
-    if (!header || typeof header !== 'string') {
-      throw new UnauthorizedException('Missing Authorization header');
-    }
-
-    const parts = header.split(' ');
-
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      throw new UnauthorizedException('Invalid Authorization format');
-    }
-
-    const token = parts[1];
-    const secret = process.env.JWT_SECRET || 'supersecretkey';
+    const [type, token] = auth.split(' ');
+    if (type !== 'Bearer') throw new UnauthorizedException('Invalid token format');
 
     try {
-      const decoded = jwt.verify(token, secret);
-      req.user = decoded;
+      req.user = jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey');
       return true;
-    } catch (err) {
-      console.error('JWT verify error:', err);
+    } catch {
       throw new UnauthorizedException('Invalid token');
     }
   }

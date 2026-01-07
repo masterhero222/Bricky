@@ -1,63 +1,188 @@
 import { useState } from "react";
 import axios from "axios";
 
-export default function Requests() {
+export default function Register() {
+  const [role, setRole] = useState("client");
+
   const [form, setForm] = useState({
-    clientName: "",
+    name: "",
+    fullName: "",
     email: "",
+    password: "",
+    confirmPassword: "",
     phone: "",
-    address: "",
-    category: "",
-    description: "",
+    city: "",
+    skills: [],
   });
 
-  const token = localStorage.getItem("token");
+  const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const toggleSkill = (s) => {
+    const exists = form.skills.includes(s);
+    setForm({
+      ...form,
+      skills: exists ? form.skills.filter((x) => x !== s) : [...form.skills, s],
+    });
   };
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
 
-    try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/requests`,
-        form,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+    if (form.password !== form.confirmPassword) {
+      alert("Паролите не съвпадат");
+      return;
+    }
 
-      alert("Заявката е изпратена!");
+    // ✅ Единен endpoint
+    const endpoint = "/auth/register";
+
+    // ✅ Единен payload + role
+    const payload =
+      role === "client"
+        ? {
+            role: "client",
+            name: form.name,
+            email: form.email,
+            password: form.password,
+          }
+        : {
+            role: "worker",
+            fullName: form.fullName,
+            email: form.email,
+            password: form.password,
+            phone: form.phone,
+            city: form.city,
+            skills: form.skills,
+          };
+
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, payload);
+      alert("Успешна регистрация!");
+      window.location.href = "/auth/login";
     } catch (err) {
-      console.error(err);
-      alert("Грешка. Увери се, че си логнат.");
+      console.error(err.response?.data || err);
+      alert(err.response?.data?.message || "Грешка при регистрация");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white pt-24 pb-24 px-6">
-      <form onSubmit={handleSubmit} className="max-w-xl mx-auto bg-gray-800 p-8 rounded-xl space-y-4">
-        <h2 className="text-2xl font-bold text-center">Създай заявка</h2>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center pt-24 px-6">
+      <h1 className="text-3xl font-bold mb-8">Регистрация</h1>
 
-        <input name="clientName" onChange={handleChange} placeholder="Име" className="w-full p-3 bg-gray-700 rounded" />
-        <input name="email" onChange={handleChange} placeholder="Имейл" className="w-full p-3 bg-gray-700 rounded" />
-        <input name="phone" onChange={handleChange} placeholder="Телефон" className="w-full p-3 bg-gray-700 rounded" />
-        <input name="address" onChange={handleChange} placeholder="Адрес" className="w-full p-3 bg-gray-700 rounded" />
+      {/* ROLE SWITCH */}
+      <div className="flex gap-4 mb-6">
+        <button
+          type="button"
+          onClick={() => setRole("client")}
+          className={`px-6 py-2 rounded-lg font-bold ${
+            role === "client" ? "bg-blue-600" : "bg-gray-700 hover:bg-gray-600"
+          }`}
+        >
+          Клиент
+        </button>
 
-        <input name="category" onChange={handleChange} placeholder="Категория" className="w-full p-3 bg-gray-700 rounded" />
+        <button
+          type="button"
+          onClick={() => setRole("worker")}
+          className={`px-6 py-2 rounded-lg font-bold ${
+            role === "worker" ? "bg-green-600" : "bg-gray-700 hover:bg-gray-600"
+          }`}
+        >
+          Майстор
+        </button>
+      </div>
 
-        <textarea
-          name="description"
-          onChange={handleChange}
-          placeholder="Описание"
-          className="w-full p-3 bg-gray-700 rounded"
+      <form
+        onSubmit={submit}
+        className="bg-gray-800 p-8 rounded-xl w-full max-w-lg space-y-4 shadow-xl"
+      >
+        {role === "client" ? (
+          <input
+            name="name"
+            placeholder="Име"
+            className="w-full p-3 rounded bg-gray-700"
+            value={form.name}
+            onChange={change}
+            required
+          />
+        ) : (
+          <>
+            <input
+              name="fullName"
+              placeholder="Трите имена"
+              className="w-full p-3 rounded bg-gray-700"
+              value={form.fullName}
+              onChange={change}
+              required
+            />
+
+            <input
+              name="phone"
+              placeholder="Телефон"
+              className="w-full p-3 rounded bg-gray-700"
+              value={form.phone}
+              onChange={change}
+              required
+            />
+
+            <input
+              name="city"
+              placeholder="Град"
+              className="w-full p-3 rounded bg-gray-700"
+              value={form.city}
+              onChange={change}
+              required
+            />
+
+            <div className="flex gap-2 flex-wrap">
+              {["ВиК", "Електро", "Шпакловка", "Зидария", "Плочки"].map((s) => (
+                <button
+                  type="button"
+                  key={s}
+                  onClick={() => toggleSkill(s)}
+                  className={`px-3 py-1 rounded ${
+                    form.skills.includes(s) ? "bg-blue-600" : "bg-gray-700"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <input
+          name="email"
+          placeholder="Имейл"
+          className="w-full p-3 rounded bg-gray-700"
+          value={form.email}
+          onChange={change}
+          required
         />
 
-        <button className="w-full bg-blue-600 p-3 rounded font-bold">Изпрати</button>
+        <input
+          name="password"
+          type="password"
+          placeholder="Парола"
+          className="w-full p-3 rounded bg-gray-700"
+          value={form.password}
+          onChange={change}
+          required
+        />
+
+        <input
+          name="confirmPassword"
+          type="password"
+          placeholder="Потвърди парола"
+          className="w-full p-3 rounded bg-gray-700"
+          value={form.confirmPassword}
+          onChange={change}
+          required
+        />
+
+        <button className="w-full bg-red-600 hover:bg-red-700 p-3 rounded font-bold">
+          Регистрация
+        </button>
       </form>
     </div>
   );

@@ -1,4 +1,3 @@
-// src/users/user.entity.ts
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { RequestEntity } from '../requests/entities/request.entity';
 
@@ -17,7 +16,7 @@ export class UserEntity {
   password: string;
 
   @Column({ default: 'client' })
-  role: string; // FIXED
+  role: string;
 
   @OneToMany(() => RequestEntity, (request) => request.client)
   requests: RequestEntity[];
