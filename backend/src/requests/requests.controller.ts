@@ -16,7 +16,6 @@ import { CreateRequestDto } from './dto/create-request.dto';
 export class RequestsController {
   constructor(private readonly requests: RequestsService) {}
 
-  // ✅ CREATE REQUEST (CLIENT ONLY)
   @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
@@ -35,7 +34,15 @@ export class RequestsController {
   @Get('worker')
   async workerFeed(@Req() req: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.getForWorkersFeed();
+    return this.requests.getForWorkersFeed(Number(req.user.id));
+  }
+
+  // ✅ worker история (завършени)
+  @UseGuards(JwtAuthGuard)
+  @Get('worker/completed')
+  async workerCompleted(@Req() req: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.getCompletedForWorker(Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -61,5 +68,13 @@ export class RequestsController {
   async unassign(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
     return this.requests.unassignWorker(Number(id), Number(req.user.id));
+  }
+
+  // ✅ worker затваря заявка
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/complete')
+  async complete(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.completeRequest(Number(id), Number(req.user.id));
   }
 }

@@ -7,13 +7,15 @@ import { RequestsController } from './requests.controller';
 import { MailModule } from '../mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkersModule } from '../workers/workers.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([RequestEntity]),
     MailModule,
     AuthModule,
-    WorkersModule, // <-- IMPORTANT for applicants enrichment
+    WorkersModule,
+    NotificationsModule, // ✅ важно
   ],
   controllers: [RequestsController],
   providers: [RequestsService],

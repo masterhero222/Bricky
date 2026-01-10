@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
+import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -18,6 +19,9 @@ export class WorkersService {
   constructor(
     @InjectRepository(Worker)
     private readonly workerRepository: Repository<Worker>,
+
+    @InjectRepository(WorkerGalleryImage)
+    private readonly galleryRepo: Repository<WorkerGalleryImage>,
   ) {}
 
   /**
@@ -50,10 +54,7 @@ export class WorkersService {
 
     const saved = (await this.workerRepository.save(worker as any)) as Worker;
 
-    this.logger.log(
-      `Нов майстор (legacy): ${saved.fullName ?? '-'} (${saved.email ?? '-'})`,
-    );
-
+    this.logger.log(`Нов майстор (legacy): ${saved.fullName ?? '-'} (${saved.email ?? '-'})`);
     return saved;
   }
 
@@ -71,17 +72,16 @@ export class WorkersService {
 
   /**
    * ✅ SMART LOOKUP:
-   * Clients might send worker.id (from appliedWorkers) OR userId (from JWT-based flows).
-   * This resolves both.
+   * Clients might send worker.id OR userId.
    */
   async findOneSmart(idOrUserId: number) {
     const n = Number(idOrUserId);
     if (!Number.isFinite(n) || n <= 0) throw new BadRequestException('Invalid worker identifier');
 
-    // 1) try as userId (users.id)
+    // 1) try as userId
     let worker = await this.workerRepository.findOne({ where: { userId: n } });
 
-    // 2) fallback: try as primary key id (worker.id)
+    // 2) fallback: try as primary key id
     if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
 
     if (!worker) throw new NotFoundException('Worker not found');
@@ -112,9 +112,6 @@ export class WorkersService {
     return saved;
   }
 
-  /**
-   * Existing bulk by userIds (kept)
-   */
   async findByUserIds(userIds: number[]) {
     if (!Array.isArray(userIds) || userIds.length === 0) return [];
 
@@ -129,10 +126,6 @@ export class WorkersService {
     });
   }
 
-  /**
-   * ✅ Optional: bulk smart (matches both id and userId)
-   * Use if your appliedWorkers sometimes stores worker.id.
-   */
   async findByIdsSmart(ids: number[]) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
 
@@ -143,10 +136,7 @@ export class WorkersService {
     if (clean.length === 0) return [];
 
     return this.workerRepository.find({
-      where: [
-        { id: In(clean) },
-        { userId: In(clean) },
-      ],
+      where: [{ id: In(clean) }, { userId: In(clean) }],
     });
   }
 
@@ -162,5 +152,49 @@ export class WorkersService {
 
   async getAll() {
     return this.workerRepository.find();
+  }
+
+  // =========================
+  // ✅ GALLERY
+  // =========================
+  async getGalleryByUserId(userId: number) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    return this.galleryRepo.find({
+      where: { userId: uid },
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  async addGalleryImages(userId: number, urls: string[]) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    const clean = (Array.isArray(urls) ? urls : [])
+      .map((u) => String(u || '').trim())
+      .filter(Boolean);
+
+    if (clean.length === 0) throw new BadRequestException('No images');
+
+    const rows = clean.map((url) => this.galleryRepo.create({ userId: uid, url }));
+    await this.galleryRepo.save(rows);
+
+    return this.getGalleryByUserId(uid);
+  }
+
+  async deleteGalleryImage(userId: number, imageId: number) {
+    const uid = Number(userId);
+    const id = Number(imageId);
+
+    if (!uid) throw new BadRequestException('Invalid userId');
+    if (!id) throw new BadRequestException('Invalid imageId');
+
+    const img = await this.galleryRepo.findOne({ where: { id } });
+    if (!img) throw new NotFoundException('Image not found');
+    if (Number(img.userId) !== uid) throw new BadRequestException('Not your image');
+
+    await this.galleryRepo.delete({ id });
+    return { ok: true };
   }
 }

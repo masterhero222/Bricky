@@ -7,6 +7,8 @@ import { WorkersModule } from './workers/workers.module';
 import { MailModule } from './mail/mail.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ReviewModule } from './reviews/review.module';
 
 @Module({
   imports: [
@@ -28,7 +30,9 @@ import { UsersModule } from './users/users.module';
 
     UsersModule,
     AuthModule,
+    ReviewModule,
     MailModule,
+    NotificationsModule,
     RequestsModule,
     WorkersModule,
   ],

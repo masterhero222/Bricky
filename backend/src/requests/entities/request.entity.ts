@@ -49,17 +49,18 @@ export class RequestEntity {
   })
   status: string;
 
-  /**
-   * Store applicants as WORKER USER IDs (users.id)
-   */
   @Column('simple-array', { nullable: true })
   appliedWorkers: number[];
 
-  /**
-   * assigned worker USER ID (users.id)
-   */
   @Column({ type: 'int', nullable: true })
   assignedWorkerId: number | null;
+
+  // ✅ NEW: completion info
+  @Column({ type: 'datetime', nullable: true })
+  completedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  completedByWorkerId: number | null;
 
   @CreateDateColumn()
   created_at: Date;

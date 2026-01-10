@@ -6,10 +6,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { RequestEntity } from './entities/request.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 function normalizeNumberArray(arr: any): number[] {
   const a = Array.isArray(arr) ? arr : [];
@@ -23,6 +24,7 @@ export class RequestsService {
     @InjectRepository(RequestEntity)
     private readonly repo: Repository<RequestEntity>,
     private readonly mailService: MailService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(dto: CreateRequestDto, clientUserId: number) {
@@ -39,13 +41,14 @@ export class RequestsService {
       status: 'нова',
       appliedWorkers: [],
       assignedWorkerId: null,
+      completedAt: null,
+      completedByWorkerId: null,
     });
 
     const saved = await this.repo.save(request);
 
-    this.mailService
-      .sendRequestConfirmation({ email: saved.email, clientName: saved.clientName })
-      .catch(() => null);
+    // без имейл засега (ти така искаш)
+    // this.mailService.sendRequestConfirmation(...).catch(() => null);
 
     return saved;
   }
@@ -59,8 +62,39 @@ export class RequestsService {
     });
   }
 
-  async getForWorkersFeed() {
+  /**
+   * Worker feed:
+   * - свободни (assignedWorkerId IS NULL) + незатворени
+   * - плюс assigned на ТОЗИ worker + незатворени
+   */
+  async getForWorkersFeed(workerUserId: number) {
+    if (!workerUserId) throw new BadRequestException('Missing worker id');
+
+    return this.repo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.client', 'client')
+      .where(
+        new Brackets((qb) => {
+          qb.where('r.assignedWorkerId IS NULL')
+            .andWhere('r.status != :done', { done: 'завършена' })
+            .andWhere('r.status != :canceled', { canceled: 'отказана' });
+        }),
+      )
+      .orWhere(
+        new Brackets((qb) => {
+          qb.where('r.assignedWorkerId = :wid', { wid: workerUserId })
+            .andWhere('r.status != :done', { done: 'завършена' })
+            .andWhere('r.status != :canceled', { canceled: 'отказана' });
+        }),
+      )
+      .orderBy('r.created_at', 'DESC')
+      .getMany();
+  }
+
+  async getCompletedForWorker(workerUserId: number) {
+    if (!workerUserId) throw new BadRequestException('Missing worker id');
     return this.repo.find({
+      where: { assignedWorkerId: workerUserId, status: 'завършена' },
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
@@ -70,9 +104,8 @@ export class RequestsService {
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
 
-    if (req.assignedWorkerId) {
-      throw new BadRequestException('Request already has assigned worker');
-    }
+    if (req.assignedWorkerId) throw new BadRequestException('Request already has assigned worker');
+    if (req.status === 'завършена' || req.status === 'отказана') throw new BadRequestException('Request is closed');
 
     const applied = normalizeNumberArray(req.appliedWorkers);
 
@@ -81,9 +114,7 @@ export class RequestsService {
       req.appliedWorkers = applied;
     }
 
-    if ((req.status || '').toLowerCase() === 'нова') {
-      req.status = 'кандидатствана';
-    }
+    if ((req.status || '').toLowerCase() === 'нова') req.status = 'кандидатствана';
 
     return this.repo.save(req);
   }
@@ -96,13 +127,22 @@ export class RequestsService {
       throw new ForbiddenException('Not your request');
     }
 
+    if (req.status === 'завършена' || req.status === 'отказана') {
+      throw new BadRequestException('Request is closed');
+    }
+
     const applied = normalizeNumberArray(req.appliedWorkers);
     if (!applied.includes(workerUserId)) {
       throw new BadRequestException('This worker has not applied to this request');
     }
 
     req.assignedWorkerId = workerUserId;
-    req.status = 'в процес'; // или 'назначена' ако предпочиташ
+    req.status = 'в процес';
+    req.completedAt = null;
+    req.completedByWorkerId = null;
+
+    // без имейл, може нотификация по желание
+    // await this.notifications.notifyWorkerAssigned(workerUserId, req.id).catch(() => null);
 
     return this.repo.save(req);
   }
@@ -115,10 +155,34 @@ export class RequestsService {
       throw new ForbiddenException('Not your request');
     }
 
+    if (req.status === 'завършена') throw new BadRequestException('Already completed');
+
     req.assignedWorkerId = null;
 
     const applied = normalizeNumberArray(req.appliedWorkers);
     req.status = applied.length > 0 ? 'кандидатствана' : 'нова';
+
+    return this.repo.save(req);
+  }
+
+  // ✅ WORKER: complete request
+  async completeRequest(requestId: number, workerUserId: number) {
+    if (!requestId) throw new BadRequestException('Missing request id');
+    if (!workerUserId) throw new BadRequestException('Missing worker id');
+
+    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+
+    if (Number(req.assignedWorkerId) !== Number(workerUserId)) {
+      throw new ForbiddenException('Not your job');
+    }
+
+    if (req.status === 'завършена') return req;
+    if (req.status === 'отказана') throw new BadRequestException('Request canceled');
+
+    req.status = 'завършена';
+    req.completedAt = new Date();
+    req.completedByWorkerId = workerUserId;
 
     return this.repo.save(req);
   }

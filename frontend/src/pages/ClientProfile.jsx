@@ -26,6 +26,12 @@ function uniqNums(arr) {
   return out;
 }
 
+function safeRatingValue(x) {
+  const n = Number(x);
+  if (Number.isFinite(n) && n >= 1 && n <= 5) return n;
+  return 5;
+}
+
 export default function ClientProfile() {
   const [activeTab, setActiveTab] = useState("requests");
 
@@ -56,6 +62,13 @@ export default function ClientProfile() {
   const [actionMsg, setActionMsg] = useState("");
   const [assigningKey, setAssigningKey] = useState("");
 
+  // ✅ reviews state (real, not session-fantasy)
+  const [reviewDraft, setReviewDraft] = useState({}); // { [requestId]: { rating, comment } }
+  const [reviewMsg, setReviewMsg] = useState({}); // { [requestId]: string }
+  const [reviewSaving, setReviewSaving] = useState({}); // { [requestId]: boolean }
+  const [myReviews, setMyReviews] = useState([]); // array
+  const [reviewMap, setReviewMap] = useState({}); // { [requestId]: review }
+
   useEffect(() => {
     loadData();
   }, []);
@@ -85,7 +98,46 @@ export default function ClientProfile() {
       const reqs = Array.isArray(reqRes.data) ? reqRes.data : [];
       setRequests(reqs);
 
+      // ✅ (optional) load my reviews so UI knows "already rated"
+      // If endpoint missing, UI still works (backend prevents duplicates).
+      try {
+        const revRes = await apiGet("/reviews/client");
+        const items = Array.isArray(revRes.data) ? revRes.data : [];
+        setMyReviews(items);
+
+        const map = {};
+        items.forEach((x) => {
+          if (x?.requestId) map[Number(x.requestId)] = x;
+        });
+        setReviewMap(map);
+      } catch (e) {
+        console.log("GET /reviews/client not available (ok for MVP):", e);
+        setMyReviews([]);
+        setReviewMap({});
+      }
+
       await hydrateWorkers(reqs);
+
+      // ✅ ensure drafts exist for completed + assigned requests
+      setReviewDraft((prev) => {
+        const next = { ...prev };
+        reqs.forEach((r) => {
+          const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+          const assignedUserId = Number(r.assignedWorkerId || 0) || null;
+          if (!isCompleted || !assignedUserId) return;
+
+          if (!next[r.id]) {
+            next[r.id] = { rating: 5, comment: "" };
+          } else {
+            // normalize rating if some weird value got in
+            next[r.id] = {
+              rating: safeRatingValue(next[r.id]?.rating),
+              comment: next[r.id]?.comment ?? "",
+            };
+          }
+        });
+        return next;
+      });
     } catch (err) {
       console.error("LOAD ERROR:", err);
       setActionMsg("Грешка при зареждане. Виж конзолата.");
@@ -183,6 +235,44 @@ export default function ClientProfile() {
     }
   }
 
+  // ✅ Create review (request must be completed; backend checks ownership + status + duplicates)
+  async function submitReview(requestId) {
+    try {
+      setReviewMsg((p) => ({ ...p, [requestId]: "" }));
+      setReviewSaving((p) => ({ ...p, [requestId]: true }));
+
+      const draft = reviewDraft[requestId] || {};
+      const rating = safeRatingValue(draft.rating);
+
+      if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+        setReviewMsg((p) => ({ ...p, [requestId]: "Избери рейтинг 1 до 5." }));
+        return;
+      }
+
+      await apiPost("/reviews", {
+        requestId,
+        rating,
+        comment: (draft.comment || "").trim(),
+      });
+
+      setReviewMsg((p) => ({ ...p, [requestId]: "Отзивът е записан ✅" }));
+      await loadData(); // ✅ refresh reviewMap so UI flips to "Оценено"
+    } catch (err) {
+      console.error(err);
+      const status = err?.response?.status;
+      if (status === 401) setReviewMsg((p) => ({ ...p, [requestId]: "401: логни се пак." }));
+      else if (status === 403) setReviewMsg((p) => ({ ...p, [requestId]: "403: трябва client." }));
+      else {
+        setReviewMsg((p) => ({
+          ...p,
+          [requestId]: err?.response?.data?.message || "Грешка при изпращане на отзив.",
+        }));
+      }
+    } finally {
+      setReviewSaving((p) => ({ ...p, [requestId]: false }));
+    }
+  }
+
   const requestsSorted = useMemo(() => {
     return [...requests].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [requests]);
@@ -249,6 +339,16 @@ export default function ClientProfile() {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
+                  const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+                  const reviewedItem = reviewMap?.[Number(r.id)] || null;
+                  const alreadyReviewed = !!reviewedItem;
+                  const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
+
+                  const draft = reviewDraft[r.id] || { rating: 5, comment: "" };
+                  const ratingValue = safeRatingValue(draft.rating);
+                  const msg = reviewMsg[r.id] || "";
+                  const saving = !!reviewSaving[r.id];
+
                   return (
                     <div key={r.id} className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                       <div className="flex items-start justify-between gap-3">
@@ -286,6 +386,77 @@ export default function ClientProfile() {
                           <strong>Описание:</strong> {r.description || "—"}
                         </p>
                       </div>
+
+                      {/* ✅ REVIEW SECTION */}
+                      {isCompleted && assignedUserId && (
+                        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-4">
+                          <h3 className="font-bold text-lg">Отзив за майстора</h3>
+
+                          {alreadyReviewed ? (
+                            <div className="mt-2">
+                              <div className="text-green-400 font-bold">
+                                Оценено ✅ ({reviewedItem?.rating ?? "?"}/5)
+                              </div>
+                              {reviewedItem?.comment ? (
+                                <div className="text-gray-300 mt-2">
+                                  <strong>Коментар:</strong> {reviewedItem.comment}
+                                </div>
+                              ) : (
+                                <div className="text-gray-400 mt-2">(без коментар)</div>
+                              )}
+                            </div>
+                          ) : showReviewForm ? (
+                            <>
+                              <div className="mt-3 grid md:grid-cols-2 gap-3">
+                                <select
+                                  value={ratingValue}
+                                  onChange={(e) =>
+                                    setReviewDraft((p) => ({
+                                      ...p,
+                                      [r.id]: { ...(p[r.id] || {}), rating: Number(e.target.value) },
+                                    }))
+                                  }
+                                  className="p-3 rounded bg-gray-800 border border-gray-700 w-full"
+                                >
+                                  {[5, 4, 3, 2, 1].map((n) => (
+                                    <option key={n} value={n}>
+                                      {n} ⭐
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <button
+                                  disabled={saving}
+                                  onClick={() => submitReview(r.id)}
+                                  className={
+                                    saving
+                                      ? "bg-gray-700 px-5 py-3 rounded-lg font-bold cursor-not-allowed"
+                                      : "bg-green-600 hover:bg-green-700 px-5 py-3 rounded-lg font-bold"
+                                  }
+                                >
+                                  {saving ? "Изпращам..." : "Изпрати отзив"}
+                                </button>
+                              </div>
+
+                              <textarea
+                                value={draft.comment || ""}
+                                onChange={(e) =>
+                                  setReviewDraft((p) => ({
+                                    ...p,
+                                    [r.id]: { ...(p[r.id] || {}), comment: e.target.value },
+                                  }))
+                                }
+                                className="mt-3 p-3 rounded bg-gray-800 border border-gray-700 w-full h-24"
+                                placeholder="Коментар (по желание)"
+                              />
+
+                              {msg && <div className="mt-2 text-yellow-300 font-bold">{msg}</div>}
+                            </>
+                          ) : (
+                            <div className="text-gray-400 mt-2">Няма какво да оценяваш тук.</div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-4">
                         <h3 className="font-bold text-lg">Кандидати ({appliedList.length})</h3>
