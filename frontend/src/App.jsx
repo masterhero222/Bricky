@@ -1,5 +1,6 @@
 // src/App.jsx
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./layouts/Layout";
 
 // BASIC PAGES
@@ -14,22 +15,23 @@ import Register from "./pages/Register";
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
 
-// WORKER (REAL PAGES THAT EXIST)
+// WORKER
 import WorkerLogin from "./pages/workers/WorkerLogin";
 import WorkersRegister from "./pages/workers/WorkersRegister";
-import WorkerProfile from "./pages/workers/WorkerProfile"; 
+import WorkerProfile from "./pages/workers/WorkerProfile";
 import WorkerPreview from "./pages/workers/WorkerPreview";
 
 // REQUESTS
 import Requests from "./pages/Requests";
 
+// ✅ PUBLIC WORKERS
+import Workers from "./pages/workers/Workers";
 import WorkerPage from "./pages/WorkerPage";
 
 export default function App() {
   return (
     <Router>
       <Routes>
-
         {/* AUTH OUTSIDE LAYOUT */}
         <Route path="/auth" element={<AuthGate />} />
         <Route path="/auth/login" element={<Login />} />
@@ -37,17 +39,20 @@ export default function App() {
 
         {/* LAYOUT PAGES */}
         <Route element={<Layout />}>
-
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
+
+          {/* ✅ PUBLIC WORKERS */}
+          <Route path="/workers" element={<Workers />} />
+          <Route path="/workers/:id" element={<WorkerPage />} />
 
           {/* CLIENT PROFILE */}
           <Route
             path="/client/profile"
             element={
-              <RequireClient>
+              <RequireRole role="client">
                 <ClientProfile />
-              </RequireClient>
+              </RequireRole>
             }
           />
 
@@ -59,9 +64,9 @@ export default function App() {
           <Route
             path="/worker/profile"
             element={
-              <RequireWorker>
+              <RequireRole role="worker">
                 <WorkerProfile />
-              </RequireWorker>
+              </RequireRole>
             }
           />
 
@@ -71,21 +76,24 @@ export default function App() {
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
 
-            <Route path="/worker/:userId" element={<WorkerPage />} />
+          {/* ✅ optional: old route -> new route (KEEP ID) */}
+          <Route path="/worker/:userId" element={<WorkerIdRedirect />} />
+
+          {/* fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </Router>
   );
 }
 
-function RequireClient({ children }) {
-  return localStorage.getItem("role") === "client"
-    ? children
-    : (window.location.href = "/auth");
+function RequireRole({ role, children }) {
+  const current = localStorage.getItem("role");
+  return current === role ? children : <Navigate to="/auth" replace />;
 }
 
-function RequireWorker({ children }) {
-  return localStorage.getItem("role") === "worker"
-    ? children
-    : (window.location.href = "/auth");
+function WorkerIdRedirect() {
+  // redirect /worker/:userId -> /workers/:id (same id)
+  const userId = window.location.pathname.split("/").pop();
+  return <Navigate to={`/workers/${userId}`} replace />;
 }

@@ -1,0 +1,394 @@
+Script started on 2025-11-15 16:15:52+00:00 [TERM="xterm-256color" TTY="/dev/pts/2" COLUMNS="120" LINES="55"]
+[?2004h]0;root@Bricky: /var/www/Bricky/frontendroot@Bricky:/var/www/Bricky/frontend# cat /etc/nginx/sites-available/bricky.configlear[Kat /etc/nginx/sites-available/bricky.config[11Purl -l http://bricky.bg/requests
+[?2004l[{"id":9,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"ВиК","description":"30m2","status":"нова","created_at":"2025-11-14T15:12:48.741Z"},{"id":8,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"ВиК","description":"asd","status":"нова","created_at":"2025-11-14T14:44:29.210Z"},{"id":7,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"ВиК","description":"30м2","status":"нова","created_at":"2025-11-14T14:31:37.759Z"},{"id":6,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"ВиК","description":"ww","status":"нова","created_at":"2025-11-14T14:19:11.062Z"},{"id":5,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"Шпакловка и боя","description":"30m2","status":"нова","created_at":"2025-11-14T14:05:33.400Z"},{"id":4,"clientName":"Иван Петров","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"ВиК","description":",,","status":"нова","created_at":"2025-11-14T13:54:48.079Z"},{"id":3,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"Шпакловка и боя","description":"33m2","status":"нова","created_at":"2025-11-14T13:45:09.561Z"},{"id":2,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"Плочки","description":"30m2","status":"нова","created_at":"2025-11-14T09:45:18.381Z"},{"id":1,"clientName":"Цветослав Паскалев","email":"tsvetoslavpaskalev@gmail.com","phone":"0882406081","address":"бул. „Цар Борис III“ 211","category":"Шпакловка и боя","description":"30м2","status":"нова","created_at":"2025-11-13T14:37:22.157Z"}][?2004h]0;root@Bricky: /var/www/Bricky/frontendroot@Bricky:/var/www/Bricky/frontend# clera  ear
+[?2004lbash: cleear: command not found
+[?2004h]0;root@Bricky: /var/www/Bricky/frontendroot@Bricky:/var/www/Bricky/frontend# clear
+[?2004l[H[2J[3J[?2004h]0;root@Bricky: /var/www/Bricky/frontendroot@Bricky:/var/www/Bricky/frontend# cd  
+[?2004l[?2004h]0;root@Bricky: ~root@Bricky:~# [Kcd [7m /var/www/Bricky/backend/dist/[27m /var/www/Bricky/backend/dist/
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# ls
+[?2004lapp.controller.d.ts    app.module.d.ts    app.service.d.ts    [0m[01;34mmail[0m       main.js.map                 [01;34mworkers[0m
+app.controller.js      app.module.js      app.service.js      main.d.ts  [01;34mrequests[0m
+app.controller.js.map  app.module.js.map  app.service.js.map  main.js    tsconfig.build.tsbuildinfo
+[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# clear
+[?2004l[H[2J[3J[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# ls
+[?2004lapp.controller.d.ts    app.module.d.ts    app.service.d.ts    [0m[01;34mmail[0m       main.js.map                 [01;34mworkers[0m
+app.controller.js      app.module.js      app.service.js      main.d.ts  [01;34mrequests[0m
+app.controller.js.map  app.module.js.map  app.service.js.map  main.js    tsconfig.build.tsbuildinfo
+[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# grep -R "enableCros: "
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# grep -R "enableCros"
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backend/distroot@Bricky:/var/www/Bricky/backend/dist# grep -R "enableCros"ls[Kclear[3Plscd  /var/www/Bricky/backend/dist/      
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# npm install
+[?2004l[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K[1mnpm[22m [33mwarn[39m [94mdeprecated[39m inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+[1G[0K/[1G[0K[1mnpm[22m [33mwarn[39m [94mdeprecated[39m glob@7.2.3: Glob versions prior to v9 are no longer supported
+[1G[0K-[1G[0K\[1G[0K|[1G[0K/n[1G[0K-[1G[0K\p[1G[0K|[1G[0K/[1G[0K-m[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K
+added 540 packages, and audited 1036 packages in 7s
+[1G[0K-[1G[0K
+[1G[0K-[1G[0K197 packages are looking for funding
+[1G[0K-[1G[0K  run `npm fund` for details
+[1G[0K-[1G[0K
+[31m[1m53[22m[39m vulnerabilities (21 [33m[1mmoderate[22m[39m, 32 [31m[1mhigh[22m[39m)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[1G[0K-[1G[0K[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# npmn  run build
+[?2004l
+> backend@0.0.1 build
+> nest build
+
+[1G[0Kpm2 d[1G[0K\[1G[0K[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# pm2 delete bricky-backend
+[?2004l[32m[PM2] [39mApplying action deleteProcessId on app [bricky-backend](ids: [ 1 ])
+[32m[PM2] [39m[bricky-backend](1) ✓
+[90m┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐[39m
+[90m│[39m[1m[36m id [39m[22m[90m│[39m[1m[36m name               [39m[22m[90m│[39m[1m[36m mode     [39m[22m[90m│[39m[1m[36m ↺    [39m[22m[90m│[39m[1m[36m status    [39m[22m[90m│[39m[1m[36m cpu      [39m[22m[90m│[39m[1m[36m memory   [39m[22m[90m│[39m
+[90m├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤[39m
+[90m│[39m[1m[36m [1m[36m0[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-frontend    [90m│[39m [7m[1mfork[22m[27m     [90m│[39m 0    [90m│[39m [31m[1mstopped[22m[39m   [90m│[39m 0%       [90m│[39m 0b       [90m│[39m
+[90m└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘[39m
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# pm2 start dist/main.js --name bricky-backend
+[?2004l[32m[PM2] [39mStarting /var/www/Bricky/backend/dist/main.js in fork_mode (1 instance)
+(node:12886) [DEP0176] DeprecationWarning: fs.R_OK is deprecated, use fs.constants.R_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[32m[PM2] [39mDone.
+[90m┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐[39m
+[90m│[39m[1m[36m id [39m[22m[90m│[39m[1m[36m name               [39m[22m[90m│[39m[1m[36m mode     [39m[22m[90m│[39m[1m[36m ↺    [39m[22m[90m│[39m[1m[36m status    [39m[22m[90m│[39m[1m[36m cpu      [39m[22m[90m│[39m[1m[36m memory   [39m[22m[90m│[39m
+[90m├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤[39m
+[90m│[39m[1m[36m [1m[36m2[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-backend     [90m│[39m [7m[1mfork[22m[27m     [90m│[39m 0    [90m│[39m [32m[1monline[22m[39m    [90m│[39m 0%       [90m│[39m 32.9mb   [90m│[39m
+[90m│[39m[1m[36m [1m[36m0[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-frontend    [90m│[39m [7m[1mfork[22m[27m     [90m│[39m 0    [90m│[39m [31m[1mstopped[22m[39m   [90m│[39m 0%       [90m│[39m 0b       [90m│[39m
+[90m└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘[39m
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [Kpm2 infor bricky-backend
+[?2004l[31m[PM2][ERROR] [39m[1mCommand not found[22m
+[1m[22m
+usage: pm2 [options] <command>
+
+pm2 -h, --help             all available commands and options
+pm2 examples               display pm2 usage examples
+pm2 <command> -h           help on a specific command
+
+Access pm2 files in ~/.pm2
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [7mcurl -X POST http://94.72.143.22:3000/requests -H "Content-Type: application/json" [27m[7m-[27m[7m-d '{"clientName":"test"}'[27m
+[A[Aroot@Bricky:/var/www/Bricky/backend# curl -X POST http://94.72.143.22:3000/requests -H "Content-Type: application/json" -d '{"clientName":"test"}'
+[A
+[?2004l{"message":["email must be an email","phone should not be empty","phone must be a string"],"error":"Bad Request","statusCode":400}[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [K[K]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [7mcurl -X POST http://94.72.143.22:3000/requests \[27m
+[7m  -H "Content-Type: application/json" \[27m
+[7m  -d '{"clientName":"Test","email":"test@test.com","phone":"0000","address":"test","category":"ВиК","description":"test desc"}'[27m
+[A[A[Aroot@Bricky:/var/www/Bricky/backend# curl -X POST http://94.72.143.22:3000/requests \
+  -H "Content-Type: application/json" \
+  -d '{"clientName":"Test","email":"test@test.com","phone":"0000","address":"test","category":"ВиК","description":"test desc"}'
+[A
+[?2004l{"statusCode":500,"message":"Internal server error"}[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [Kcd src
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backend/srcroot@Bricky:/var/www/Bricky/backend/src# ls
+[?2004lapp.controller.spec.ts  app.controller.ts  app.module.ts  app.service.ts  [0m[01;34mmail[0m  main.ts  [01;34mrequests[0m  [01;34mworkers[0m
+[?2004h]0;root@Bricky: /var/www/Bricky/backend/srcroot@Bricky:/var/www/Bricky/backend/src# nano / .env
+[?2004l[?2004h[?1049h[22;0;0t[1;70r(B[m[4l[?7h[39;49m[?1h=[?1h=[?25l[39;49m(B[m[H[2J[68;113H(B[0;7m[ New File ](B[m[H(B[0;7m  GNU nano 6.2 [104b.env [112b [1;236H(B[m[69d(B[0;7m^G(B[m Help[69;19H(B[0;7m^O(B[m Write Out[37G(B[0;7m^W(B[m Where Is[55G(B[0;7m^K(B[m Cut[69;73H(B[0;7m^T(B[m Execute[69;91H(B[0;7m^C(B[m Location[109G(B[0;7mM-U(B[m Undo[69;127H(B[0;7mM-A(B[m Set Mark[145G(B[0;7mM-](B[m To Bracket    (B[0;7mM-Q(B[m Previous[181G(B[0;7m^B(B[m Back[69;199H(B[0;7m^Left(B[m Prev Word   (B[0;7m^A(B[m Home[70d(B[0;7m^X(B[m Exit[70;19H(B[0;7m^R(B[m Read File[37G(B[0;7m^\(B[m Replace[70;55H(B[0;7m^U(B[m Paste[70;73H(B[0;7m^J(B[m Justify[70;91H(B[0;7m^/(B[m Go To Line     (B[0;7mM-E(B[m Redo[70;127H(B[0;7mM-6(B[m Copy[70;145H(B[0;7m^Q(B[m Where Was[163G(B[0;7mM-W(B[m Next[70;181H(B[0;7m^F(B[m Forward[70;199H(B[0;7m^Right(B[m Next Word  (B[0;7m^E(B[m End[2d[?12l[?25h[?25l[68d[J[70d[?12l[?25h[70;1H[?1049l[23;0;0t[?1l>[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backend/srcroot@Bricky:/var/www/Bricky/backend/src# cd [7m/var/www/Bricky/backend/[27m/var/www/Bricky/backend/
+[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# nano .env
+[?2004l[?2004h[?1049h[22;0;0t[1;70r(B[m[4l[?7h[39;49m[?1h=[?1h=[?25l[39;49m(B[m[H[2J[68;112H(B[0;7m[ Reading... ](B[m[68;111H(B[0;7m[ Read 25 lines ](B[m[H(B[0;7m  GNU nano 6.2 [104b.env [112b [1;236H(B[m[69d(B[0;7m^G(B[m Help[69;19H(B[0;7m^O(B[m Write Out[37G(B[0;7m^W(B[m Where Is[55G(B[0;7m^K(B[m Cut[69;73H(B[0;7m^T(B[m Execute[69;91H(B[0;7m^C(B[m Location[109G(B[0;7mM-U(B[m Undo[69;127H(B[0;7mM-A(B[m Set Mark[145G(B[0;7mM-](B[m To Bracket    (B[0;7mM-Q(B[m Previous[181G(B[0;7m^B(B[m Back[69;199H(B[0;7m^Left(B[m Prev Word   (B[0;7m^A(B[m Home[70d(B[0;7m^X(B[m Exit[70;19H(B[0;7m^R(B[m Read File[37G(B[0;7m^\(B[m Replace[70;55H(B[0;7m^U(B[m Paste[70;73H(B[0;7m^J(B[m Justify[70;91H(B[0;7m^/(B[m Go To Line     (B[0;7mM-E(B[m Redo[70;127H(B[0;7mM-6(B[m Copy[70;145H(B[0;7m^Q(B[m Where Was[163G(B[0;7mM-W(B[m Next[70;181H(B[0;7m^F(B[m Forward[70;199H(B[0;7m^Right(B[m Next Word  (B[0;7m^E(B[m End[2d[36m# ===== Server =====[3d[39m(B[mPORT=3000[4dNODE_ENV=production[6d[36m# ===== Database =====[7d[39m(B[mDB_HOST=localhost[8dDB_PORT=3306[9dDB_USER=root[10dDB_PASS=yourpassword[11dDB_NAME=bricky[13d[36m# ===== JWT Auth =====[14d[39m(B[mJWT_SECRET=supersecretkey[15dJWT_EXPIRES_IN=7d[17d[36m# ===== Frontend =====[18d[39m(B[mFRONTEND_URL=http://localhost:5173[20d[36m# ===== Logging =====[21d[39m(B[mLOG_LEVEL=debug[23d[36m# ===== Mailtrap Config =====[24d[39m(B[mMAILTRAP_TOKEN=d9a5e14b5c9e67139e4bf29d012af2fb[25dMAIL_FROM_NAME=Bricky[26dMAIL_FROM_ADDR=no-reply@bricky.local[2d[?12l[?25h[?25l[?12l[?25h[3d[?25l[?12l[?25h[4d[?25l[?12l[?25h[5d[?25l[?12l[?25h[6d[?25l[?12l[?25h[7d[?25l[?12l[?25h[8d[?25l[?12l[?25hD[?25l[?12l[?25h[9d[?25l[?12l[?25hB[?25l[?12l[?25h_[?25l[?12l[?25hU[?25l[?12l[?25hS[?25l[?12l[?25hE[?25l[?12l[?25hR[?25l[?12l[?25h=[?25l[?12l[?25hr[?25l[?12l[?25ho[?25l[?12l[?25ho[?25l[?12l[?25ht[?25l[1;125H(B[0;7m*[68d(B[m[K[1;236H[?12l[?25h[9;12H [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25ha[?25l[?12l[?25hd[?25l[?12l[?25hm[?25l[?12l[?25hi[?25l[?12l[?25hn[?25l[?12l[?25h[10d[?25l[?12l[?25ha[?25l[?12l[?25hs[?25l[?12l[?25hs[?25l[?12l[?25hw[?25l[?12l[?25ho[?25l[?12l[?25hr[?25l[?12l[?25hd[?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25h [?25l[?12l[?25ha[?25l[?12l[?25hd[?25l[?12l[?25hm[?25l[?12l[?25hi[?25l[?12l[?25hn[?25l[?12l[?25h[11d[?25l[?12l[?25hy[?25l[?12l[?25h_[?25l[?12l[?25hd[?25l[?12l[?25hb[?25l[68;112H(B[0;7m[ Writing... ](B[m[1;125H(B[0;7m [236G(B[m[68;110H(B[0;7m[ Wrote 25 lines ](B[m[?12l[?25h[11;18H[?25l[1;125H(B[0;7m*[236G(B[m[11;68r[68;1H
+[1;70r[67;1H[K[11d[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[10;68r[68;1H[2S[1;70r[10;1HDB_PASS=admin[K[11d[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[11;68r[68;1H
+[1;70r[11;1H[?12l[?25h[?25l[K[?12l[?25h[?25l[68;110H(B[0;7m[ Nothing was cut ](B[m[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[68;129H[?12l[?25h[11d[?25l[?12l[?25h[A[?25l[?12l[?25h[A[?25l[?12l[?25h[A[?25l[?12l[?25h[A[?25l[?12l[?25h[5d[?25l[?12l[?25h[A[?25l[?12l[?25h[A[?25l[?12l[?25h[A[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[1;236H[70;223H[H[2J(B[0;7m  GNU nano 6.2 [104b.env * [110b [2;1H(B[0m[36m# ===== Server =====[3d[39m(B[mPORT=3000[4dNODE_ENV=production[6d[36m# ===== Database =====[7d[39m(B[mDB_HOST=localhost[8dDB_PORT=3306[9dDB_USER=admin[10dDB_PASS=admin[68;110H(B[0;7m[ Nothing was cut ][69d^G(B[m Help[69;19H(B[0;7m^O(B[m Write Out[37G(B[0;7m^W(B[m Where Is[55G(B[0;7m^K(B[m Cut[69;73H(B[0;7m^T(B[m Execute[69;91H(B[0;7m^C(B[m Location[109G(B[0;7mM-U(B[m Undo[69;127H(B[0;7mM-A(B[m Set Mark[145G(B[0;7mM-](B[m To Bracket    (B[0;7mM-Q(B[m Previous[181G(B[0;7m^B(B[m Back[69;199H(B[0;7m^Left(B[m Prev Word   (B[0;7m^A(B[m Home[70d(B[0;7m^X(B[m Exit[70;19H(B[0;7m^R(B[m Read File[37G(B[0;7m^\(B[m Replace[70;55H(B[0;7m^U(B[m Paste[70;73H(B[0;7m^J(B[m Justify[70;91H(B[0;7m^/(B[m Go To Line     (B[0;7mM-E(B[m Redo[70;127H(B[0;7mM-6(B[m Copy[70;145H(B[0;7m^Q(B[m Where Was[163G(B[0;7mM-W(B[m Next[70;181H(B[0;7m^F(B[m Forward[70;199H(B[0;7m^Right(B[m Next Word  (B[0;7m^E(B[m End[?12l[?25h[2d[?25l[2;68r[68;1H
+[1;70r[67;1H[K[2d[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[K[?12l[?25h[?25l[68;110H(B[0;7m[ Nothing was cut ](B[m[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68d[K[2d[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[?12l[?25h[?25l[68;107H(B[0;1m[37m[41m[ To suspend, type ^T^Z ][39;49m(B[m[?12l[?25h[2d[?25l[68d(B[0;7mSave modified buffer? [214b [69;1H Y(B[m Yes[K[70d(B[0;7m N(B[m No  [70;17H(B[0;7m^C(B[m Cancel[K[68;23H[?12l[?25h[?25l[J[70d[?12l[?25h[70;1H[?1049l[23;0;0t[?1l>[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# nano .env
+[?2004l[?2004h[?1049h[22;0;0t[1;70r(B[m[4l[?7h[39;49m[?1h=[?1h=[?25l[39;49m(B[m[H[2J[68;112H(B[0;7m[ Reading... ](B[m[68;111H(B[0;7m[ Read 25 lines ](B[m[H(B[0;7m  GNU nano 6.2 [104b.env [112b [1;236H(B[m[69d(B[0;7m^G(B[m Help[69;19H(B[0;7m^O(B[m Write Out[37G(B[0;7m^W(B[m Where Is[55G(B[0;7m^K(B[m Cut[69;73H(B[0;7m^T(B[m Execute[69;91H(B[0;7m^C(B[m Location[109G(B[0;7mM-U(B[m Undo[69;127H(B[0;7mM-A(B[m Set Mark[145G(B[0;7mM-](B[m To Bracket    (B[0;7mM-Q(B[m Previous[181G(B[0;7m^B(B[m Back[69;199H(B[0;7m^Left(B[m Prev Word   (B[0;7m^A(B[m Home[70d(B[0;7m^X(B[m Exit[70;19H(B[0;7m^R(B[m Read File[37G(B[0;7m^\(B[m Replace[70;55H(B[0;7m^U(B[m Paste[70;73H(B[0;7m^J(B[m Justify[70;91H(B[0;7m^/(B[m Go To Line     (B[0;7mM-E(B[m Redo[70;127H(B[0;7mM-6(B[m Copy[70;145H(B[0;7m^Q(B[m Where Was[163G(B[0;7mM-W(B[m Next[70;181H(B[0;7m^F(B[m Forward[70;199H(B[0;7m^Right(B[m Next Word  (B[0;7m^E(B[m End[2d[36m# ===== Server =====[3d[39m(B[mPORT=3000[4dNODE_ENV=production[6d[36m# ===== Database =====[7d[39m(B[mDB_HOST=localhost[8dDB_PORT=3306[9dDB_USER=admin[10dDB_PASS=admin[11dDB_NAME=bricky_db[13d[36m# ===== JWT Auth =====[14d[39m(B[mJWT_SECRET=supersecretkey[15dJWT_EXPIRES_IN=7d[17d[36m# ===== Frontend =====[18d[39m(B[mFRONTEND_URL=http://localhost:5173[20d[36m# ===== Logging =====[21d[39m(B[mLOG_LEVEL=debug[23d[36m# ===== Mailtrap Config =====[24d[39m(B[mMAILTRAP_TOKEN=d9a5e14b5c9e67139e4bf29d012af2fb[25dMAIL_FROM_NAME=Bricky[26dMAIL_FROM_ADDR=no-reply@bricky.local[2d[?12l[?25h[?25l[1;125H(B[0;7m*[236G(B[m[2;68r[68;1H
+[1;70r[67;1H[K[2d[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H[2S[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[2;68r[68;1H
+[1;70r[2;1H[?12l[?25h[?25l[K[?12l[?25h[?25l[68;110H(B[0;7m[ Nothing was cut ](B[m[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68;129H[?12l[?25h[2d[?25l[68d[K[2dPORT=3000[3dNODE_ENV=production[5d[36m# ==== Database ====[6d[39m(B[mDB_HOST=localhost[7dDB_PORT=3306[8dDB_USER=admin[9dDB_PASS=admin[10dDB_NAME=bricky_db[12d[36m# ==== JWT ====[13d[39m(B[mJWT_SECRET=supersecretkey[14dJWT_EXPIRES_IN=7d[16d[36m# ==== Frontend ====[17d[39m(B[mFRONTEND_URL=[94mhttp://bricky.bg[19d[36m# ==== Logging ====[20d[39m(B[mLOG_LEVEL=debug[22d[36m# ==== Mailtrap (optional) ====[23d[39m(B[mMAILTRAP_TOKEN=d9a5e14b5c9e67139e4bf29d012af2fb[24dMAIL_FROM_NAME=Bricky[25dMAIL_FROM_ADDR=no-reply@bricky.local[?12l[?25h[?25l[68;112H(B[0;7m[ Writing... ](B[m[1;125H(B[0;7m [236G(B[m[68;110H(B[0;7m[ Wrote 24 lines ](B[m[?12l[?25h[25;37H[?25l[68d[J[70d[?12l[?25h[70;1H[?1049l[23;0;0t[?1l>[?2004l[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# pm2 stop bricky-backend
+[?2004l[32m[PM2] [39mApplying action stopProcessId on app [bricky-backend](ids: [ 2 ])
+[32m[PM2] [39m[bricky-backend](2) ✓
+[90m┌────┬────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐[39m
+[90m│[39m[1m[36m id [39m[22m[90m│[39m[1m[36m name               [39m[22m[90m│[39m[1m[36m namespace   [39m[22m[90m│[39m[1m[36m version [39m[22m[90m│[39m[1m[36m mode    [39m[22m[90m│[39m[1m[36m pid      [39m[22m[90m│[39m[1m[36m uptime [39m[22m[90m│[39m[1m[36m ↺    [39m[22m[90m│[39m[1m[36m status    [39m[22m[90m│[39m[1m[36m cpu      [39m[22m[90m│[39m[1m[36m mem      [39m[22m[90m│[39m[1m[36m user     [39m[22m[90m│[39m[1m[36m watching [39m[22m[90m│[39m
+[90m├────┼────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤[39m
+[90m│[39m[1m[36m [1m[36m2[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-backend     [90m│[39m default     [90m│[39m 0.0.1   [90m│[39m [7m[1mfork[22m[27m    [90m│[39m 0        [90m│[39m 0      [90m│[39m 0    [90m│[39m [31m[1mstopped[22m[39m   [90m│[39m 0%       [90m│[39m 0b       [90m│[39m [1mroot[22m     [90m│[39m [90mdisabled[39m [90m│[39m
+[90m│[39m[1m[36m [1m[36m0[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-frontend    [90m│[39m default     [90m│[39m N/A     [90m│[39m [7m[1mfork[22m[27m    [90m│[39m N/A      [90m│[39m 0      [90m│[39m 0    [90m│[39m [31m[1mstopped[22m[39m   [90m│[39m 0%       [90m│[39m 0b       [90m│[39m [1mroot[22m     [90m│[39m [90mdisabled[39m [90m│[39m
+[90m└────┴────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘[39m
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# pm2 s run build
+[?2004l[31m[PM2][ERROR] [39m[1mCommand not found[22m
+[1m[22m
+usage: pm2 [options] <command>
+
+pm2 -h, --help             all available commands and options
+pm2 examples               display pm2 usage examples
+pm2 <command> -h           help on a specific command
+
+Access pm2 files in ~/.pm2
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# npm run build
+[?2004l
+> backend@0.0.1 build
+> nest build
+
+[1G[0Kmp2 [1G[0K\[1G[0K[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# mp2 start dist/main.js --name bricky-backend
+[?2004lbash: mp2: command not found
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [Kmp2 start dist/main.js --name bricky-backendmp[1P[1P[1@p[1@m
+[?2004l[32m[PM2] [39mApplying action restartProcessId on app [bricky-backend](ids: [ 2 ])
+[32m[PM2] [39m[bricky-backend](2) ✓
+[32m[PM2] [39mProcess successfully started
+[90m┌────┬────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐[39m
+[90m│[39m[1m[36m id [39m[22m[90m│[39m[1m[36m name               [39m[22m[90m│[39m[1m[36m namespace   [39m[22m[90m│[39m[1m[36m version [39m[22m[90m│[39m[1m[36m mode    [39m[22m[90m│[39m[1m[36m pid      [39m[22m[90m│[39m[1m[36m uptime [39m[22m[90m│[39m[1m[36m ↺    [39m[22m[90m│[39m[1m[36m status    [39m[22m[90m│[39m[1m[36m cpu      [39m[22m[90m│[39m[1m[36m mem      [39m[22m[90m│[39m[1m[36m user     [39m[22m[90m│[39m[1m[36m watching [39m[22m[90m│[39m
+[90m├────┼────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤[39m
+[90m│[39m[1m[36m [1m[36m2[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-backend     [90m│[39m default     [90m│[39m 0.0.1   [90m│[39m [7m[1mfork[22m[27m    [90m│[39m 13264    [90m│[39m 0s     [90m│[39m 0    [90m│[39m [32m[1monline[22m[39m    [90m│[39m 0%       [90m│[39m 28.8mb   [90m│[39m [1mroot[22m     [90m│[39m [90mdisabled[39m [90m│[39m
+[90m│[39m[1m[36m [1m[36m0[39m[36m[22m[1m  [39m[22m[90m│[39m bricky-frontend    [90m│[39m default     [90m│[39m N/A     [90m│[39m [7m[1mfork[22m[27m    [90m│[39m N/A      [90m│[39m 0      [90m│[39m 0    [90m│[39m [31m[1mstopped[22m[39m   [90m│[39m 0%       [90m│[39m 0b       [90m│[39m [1mroot[22m     [90m│[39m [90mdisabled[39m [90m│[39m
+[90m└────┴────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘[39m
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [K[7mcurl -X POST http://94.72.143.22:3000/requests \[27m
+[7m  -H "Content-Type: application/json" \[27m
+[7m  -d '{"clientName":"Test","email":"test@test.com","phone":"000","address":"sofia","category":"ВиК","description":"test"}'[27m
+[A[A[Aroot@Bricky:/var/www/Bricky/backend# curl -X POST http://94.72.143.22:3000/requests \
+  -H "Content-Type: application/json" \
+  -d '{"clientName":"Test","email":"test@test.com","phone":"000","address":"sofia","category":"ВиК","description":"test"}'
+[A
+[?2004lcurl: (7) Failed to connect to 94.72.143.22 port 3000 after 0 ms: Connection refused
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [K[7mcurl -X POST http://94.72.143.22:3000/requests \[27m
+[7m  -H "Content-Type: application/json" \[27m
+[7m  -d '{"clientName":"Test","email":"test@test.com","phone":"000","address":"sofia","category":"ВиК","description":"test"}'[27m
+[A[A[Aroot@Bricky:/var/www/Bricky/backend# curl -X POST http://94.72.143.22:3000/requests \
+  -H "Content-Type: application/json" \
+  -d '{"clientName":"Test","email":"test@test.com","phone":"000","address":"sofia","category":"ВиК","description":"test"}'
+[A
+[?2004lcurl: (7) Failed to connect to 94.72.143.22 port 3000 after 0 ms: Connection refused
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [Kclear
+[?2004l[H,"phone":"000","address":"sofia","category":"ВиК","description":"test"}'
+[A
+[?2004lcurl: (7) Failed to connect to 94.72.143.22 port 3000 after 0 ms: Connection refused
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [Kclear
+[?2004l[H[2J[3J[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# pm2 logs bricky-backend --lines 50
+[?2004l[1m[90m[TAILING] Tailing last 50 lines for [bricky-backend] process (change the value with --lines option)[39m[22m
+[90m/root/.pm2/logs/bricky-backend-out.log last 50 lines:[39m
+[32m2|bricky-b | [39m[32m[Nest] 13264  - [39m11/15/2025, 4:29:51 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13264  - [39m11/15/2025, 4:29:51 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +75ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +222ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13289  - [39m11/15/2025, 4:30:16 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +78ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +224ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13312  - [39m11/15/2025, 4:30:41 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:06 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:06 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +76ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:06 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:06 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:07 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +219ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:07 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:07 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13336  - [39m11/15/2025, 4:31:07 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:31 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +74ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +214ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13357  - [39m11/15/2025, 4:31:32 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +76ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +216ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13382  - [39m11/15/2025, 4:31:57 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +75ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +220ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-b | [39m[32m[Nest] 13404  - [39m11/15/2025, 4:32:22 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+
+[90m/root/.pm2/logs/bricky-backend-error.log last 50 lines:[39m
+[31m2|bricky-b | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-b | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-b | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:31 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (4)...[39m
+[31m2|bricky-b | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-b | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-b | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-b | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-b | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-b | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-b | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-b | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-b | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-b | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-b | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-b | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:34 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (5)...[39m
+[31m2|bricky-b | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-b | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-b | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-b | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-b | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-b | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-b | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-b | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-b | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-b | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-b | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-b | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:37 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (6)...[39m
+[31m2|bricky-b | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-b | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-b | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-b | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-b | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-b | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-b | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-b | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-b | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-b | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-b | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-b | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:40 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (7)...[39m
+[31m2|bricky-b | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-b | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-b | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-b | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-b | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-b | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-b | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-b | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-b | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-b | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-b | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+
+[31m2|bricky-backend  | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:44 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (8)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/75:16)
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-backend  | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-backend  | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-backend  | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:47 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (9)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-backend  | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-backend  | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-backend  | [39m[31m[Nest] 13404  - [39m11/15/2025, 4:32:47 PM [31m  ERROR[39m [38;5;3m[ExceptionHandler] [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/packets/packet.js:740:17[90m)[39m
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/commands/command.js:29:26[90m)[39m
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/base/connection.js:477:34[90m)[39m
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/base/connection.js:93:12[90m)[39m
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/packet_parser.js:75:16[90m)[39m
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> [90m(/var/www/Bricky/backend/[39mnode_modules/[4mmysql2[24m/lib/base/connection.js:100:25[90m)[39m
+[31m2|bricky-backend  | [39m[90m    at Socket.emit (node:events:508:28)[39m
+[31m2|bricky-backend  | [39m[90m    at addChunk (node:internal/streams/readable:559:12)[39m
+[31m2|bricky-backend  | [39m[90m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)[39m
+[31m2|bricky-backend  | [39m[90m    at Socket.Readable.push (node:internal/streams/readable:390:5)[39m {
+[31m2|bricky-backend  | [39m  code: [32m'ER_ACCESS_DENIED_ERROR'[39m,
+[31m2|bricky-backend  | [39m  errno: [33m1045[39m,
+[31m2|bricky-backend  | [39m  sqlState: [32m'28000'[39m,
+[31m2|bricky-backend  | [39m  sqlMessage: [32m"Access denied for user 'admin'@'localhost' (using password: YES)"[39m,
+[31m2|bricky-backend  | [39m  sql: [90mundefined[39m
+[31m2|bricky-backend  | [39m}
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:47 PM [32m    LOG[39m [38;5;3m[NestFactory] [39mcess denied for user 'admin'@'localhost' (using password: YES)"[39m,
+[31m2|bricky-backend  | [39m  sql: [90mundefined[39m
+[31m2|bricky-backend  | [39m}
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:47 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +83ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +251ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailerCoreModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m2|bricky-backend  | [39m[32m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMailModule dependencies initialized[39m[38;5;3m +0ms[39m
+[31m2|bricky-backend  | [39m[31m[Nest] 13441  - [39m11/15/2025, 4:32:48 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (1)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-backend  | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-backend  | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-backend  | [39m[31m[Nest] 13441  - [39m11/15/2025, 4:32:51 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (2)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-backend  | [39m[31m[Nest] 13441  - [39m11/15/2025, 4:32:54 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (3)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-backend  | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-backend  | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+[31m2|bricky-backend  | [39m[31m[Nest] 13441  - [39m11/15/2025, 4:32:57 PM [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (4)...[39m
+[31m2|bricky-backend  | [39mError: Access denied for user 'admin'@'localhost' (using password: YES)
+[31m2|bricky-backend  | [39m    at Packet.asError (/var/www/Bricky/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+[31m2|bricky-backend  | [39m    at ClientHandshake.execute (/var/www/Bricky/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+[31m2|bricky-backend  | [39m    at PoolConnection.handlePacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:477:34)
+[31m2|bricky-backend  | [39m    at PacketParser.onPacket (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+[31m2|bricky-backend  | [39m    at PacketParser.executeStart (/var/www/Bricky/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+[31m2|bricky-backend  | [39m    at Socket.<anonymous> (/var/www/Bricky/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+[31m2|bricky-backend  | [39m    at Socket.emit (node:events:508:28)
+[31m2|bricky-backend  | [39m    at addChunk (node:internal/streams/readable:559:12)
+[31m2|bricky-backend  | [39m    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+[31m2|bricky-backend  | [39m    at Socket.Readable.push (node:internal/streams/readable:390:5)
+^C
+[?2004h]0;root@Bricky: /var/www/Bricky/backendroot@Bricky:/var/www/Bricky/backend# [?2004l
+exit
+
+Script done on 2025-11-15 18:44:20+00:00 [COMMAND_EXIT_CODE="130"]

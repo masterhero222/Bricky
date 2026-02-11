@@ -1,21 +1,44 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { PhoneCall, CheckCircle, XCircle, Star } from "lucide-react";
+import { PhoneCall, CheckCircle, XCircle, Star, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiGet, apiPost } from "../../services/api";
 
+function joinUrl(base, path) {
+  const b = String(base || "").replace(/\/+$/, "");
+  const p = String(path || "").replace(/^\/+/, "");
+  return `${b}/${p}`;
+}
+
+// ✅ IMPORTANT:
+// - VITE_API_URL често е https://bricky.bg/api (само за API)
+// - uploads са на https://bricky.bg/uploads (без /api)
+// Така че за изображения ползваме asset base (или API base без /api)
+function getAssetBase() {
+  const explicit = import.meta.env.VITE_ASSET_BASE_URL;
+  if (explicit) return String(explicit).replace(/\/+$/, "");
+
+  const api = String(import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+  if (!api) return "";
+
+  // махаме /api ако е накрая
+  return api.replace(/\/api$/i, "");
+}
+
 function absUrl(url) {
-  if (!url) return "";
-  if (typeof url !== "string") return "";
+  if (!url || typeof url !== "string") return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${import.meta.env.VITE_API_URL}${url}`;
+
+  const base = getAssetBase();
+  if (!base) return "";
+
+  // url може да е "/uploads/.." или "uploads/.."
+  return joinUrl(base, url);
 }
 
 function StarsRow({ value = 0 }) {
   const v = Number(value);
   const safe = Number.isFinite(v) ? v : 0;
-
-  // simple MVP visual: round average to nearest star
   const filledCount = Math.max(0, Math.min(5, Math.round(safe)));
 
   return (
@@ -32,6 +55,139 @@ function StarsRow({ value = 0 }) {
   );
 }
 
+function GalleryModal({ open, images, startIndex = 0, onClose }) {
+  const [viewIndex, setViewIndex] = useState(startIndex);
+  const [mode, setMode] = useState("grid"); // "grid" | "view"
+
+  useEffect(() => {
+    if (!open) return;
+    setViewIndex(startIndex);
+    setMode("grid");
+  }, [open, startIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+      if (mode === "view" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        if (e.key === "ArrowLeft") setViewIndex((p) => (p - 1 + images.length) % images.length);
+        if (e.key === "ArrowRight") setViewIndex((p) => (p + 1) % images.length);
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, mode, images.length, onClose]);
+
+  if (!open) return null;
+
+  const safeImages = Array.isArray(images) ? images : [];
+  const current = safeImages[viewIndex];
+
+  const goPrev = () => setViewIndex((p) => (p - 1 + safeImages.length) % safeImages.length);
+  const goNext = () => setViewIndex((p) => (p + 1) % safeImages.length);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      <div className="w-full max-w-5xl bg-white rounded-2xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div className="font-bold text-gray-800">
+            Галерия ({safeImages.length})
+            <span className="ml-3 text-sm text-gray-500">
+              {mode === "grid" ? "Избери снимка" : `${viewIndex + 1}/${safeImages.length}`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {mode === "view" && (
+              <button
+                onClick={() => setMode("grid")}
+                className="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-bold"
+              >
+                Всички
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {mode === "grid" ? (
+          <div className="p-4 max-h-[75vh] overflow-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {safeImages.map((img, idx) => (
+                <button
+                  key={img.id || img.url || idx}
+                  className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90"
+                  onClick={() => {
+                    setViewIndex(idx);
+                    setMode("view");
+                  }}
+                  title="Отвори"
+                >
+                  <div className="aspect-square">
+                    <img src={img.url} alt="gallery" className="w-full h-full object-cover" loading="lazy" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="relative bg-black">
+            <div className="max-h-[75vh] flex items-center justify-center">
+              {/* main image */}
+              <img
+                src={current?.url}
+                alt="preview"
+                className="max-h-[75vh] w-auto object-contain"
+                draggable={false}
+              />
+            </div>
+
+            {/* controls */}
+            {safeImages.length > 1 && (
+              <>
+                <button
+                  onClick={goPrev}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2"
+                  aria-label="Previous"
+                >
+                  <ChevronLeft size={22} />
+                </button>
+                <button
+                  onClick={goNext}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2"
+                  aria-label="Next"
+                >
+                  <ChevronRight size={22} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function WorkerPreview() {
   const [sp] = useSearchParams();
   const requestId = Number(sp.get("requestId") || 0);
@@ -43,6 +199,10 @@ export default function WorkerPreview() {
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  // ✅ modal state
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [startIndex, setStartIndex] = useState(0);
 
   useEffect(() => {
     load();
@@ -71,14 +231,21 @@ export default function WorkerPreview() {
       setWorker(wRes.data || null);
 
       const g = Array.isArray(gRes.data) ? gRes.data : [];
-      setGallery(
-        g
-          .map((x) => ({
-            ...x,
-            url: absUrl(x.url || x.imageUrl || x.path || ""),
-          }))
-          .filter((x) => !!x.url)
-      );
+
+      const normalized = g
+        .map((x) => {
+          const raw = x?.url || x?.imageUrl || x?.path || x?.filePath || x?.filename || "";
+          const finalUrl = absUrl(raw);
+          return { ...x, url: finalUrl, _raw: raw };
+        })
+        .filter((x) => !!x.url);
+
+      if (normalized.length === 0 && g.length > 0) {
+        console.log("Gallery raw items:", g);
+        console.log("Asset base:", getAssetBase());
+      }
+
+      setGallery(normalized);
 
       const info = rRes?.data || {};
       const total = Number(info.total);
@@ -165,6 +332,14 @@ export default function WorkerPreview() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pt-24 pb-20 px-6">
+      {/* ✅ modal */}
+      <GalleryModal
+        open={galleryOpen}
+        images={gallery}
+        startIndex={startIndex}
+        onClose={() => setGalleryOpen(false)}
+      />
+
       <div className="max-w-5xl mx-auto bg-white text-black rounded-3xl shadow-xl p-10">
         <div className="flex flex-col items-center">
           <img
@@ -176,7 +351,6 @@ export default function WorkerPreview() {
           <h2 className="text-3xl font-extrabold mt-6">{worker.skills?.[0] || "Специалност"}</h2>
           <div className="text-gray-600 mt-1">Майстор</div>
 
-          {/* ✅ RATING */}
           <div className="mt-4 bg-gray-100 rounded-2xl px-5 py-3 flex items-center gap-3">
             <StarsRow value={ratingInfo.average} />
             <div className="text-sm text-gray-700">
@@ -208,26 +382,48 @@ export default function WorkerPreview() {
             <div className="text-xl font-bold text-red-600 text-center mb-3">Снимки от обекти</div>
 
             {gallery.length === 0 ? (
-              <div className="text-gray-500 text-center">(MVP) Няма качени снимки.</div>
+              <div className="text-gray-500 text-center">(MVP) Няма качени снимки или URL-ите са грешни.</div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {gallery.slice(0, 6).map((img) => (
-                  <a
-                    key={img.id || img.url}
-                    href={img.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-xl overflow-hidden border border-gray-200 bg-white"
-                    title="Отвори снимката"
-                  >
-                    <img src={img.url} className="w-full h-28 object-cover" loading="lazy" />
-                  </a>
-                ))}
-              </div>
-            )}
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  {gallery.slice(0, 6).map((img, idx) => (
+                    <button
+                      key={img.id || img.url}
+                      className="block rounded-xl overflow-hidden border border-gray-200 bg-white"
+                      title="Отвори"
+                      onClick={() => {
+                        setStartIndex(idx);
+                        setGalleryOpen(true);
+                      }}
+                    >
+                      <img
+                        src={img.url}
+                        alt="gallery"
+                        className="w-full h-28 object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          console.log("IMG ERROR:", img._raw, "->", img.url);
+                          e.currentTarget.style.opacity = "0.3";
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
 
-            {gallery.length > 6 && (
-              <div className="text-center text-gray-500 text-sm mt-3">+ още {gallery.length - 6} снимки</div>
+                {gallery.length > 6 && (
+                  <div className="text-center mt-3">
+                    <button
+                      onClick={() => {
+                        setStartIndex(0);
+                        setGalleryOpen(true);
+                      }}
+                      className="text-sm font-bold text-gray-600 hover:text-gray-900 underline"
+                    >
+                      + още {gallery.length - 6} снимки
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
