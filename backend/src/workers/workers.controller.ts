@@ -144,16 +144,6 @@ export class WorkersController {
     return this.workersService.deleteGalleryImage(userId, imageId);
   }
 
-  // =========================
-  // ✅ GALLERY (PUBLIC) for WorkerPreview
-  // =========================
-  @Get(':userId/gallery')
-  async galleryByUserId(@Param('userId') userId: string) {
-    const uid = Number(userId);
-    if (!uid) throw new BadRequestException('Invalid userId');
-    return this.workersService.getGalleryByUserId(uid);
-  }
-
   // IMPORTANT: here param is userId (from users table)
   @Get(':userId')
   async getByUserId(@Param('userId') userId: string) {

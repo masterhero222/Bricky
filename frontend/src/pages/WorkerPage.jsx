@@ -1,29 +1,44 @@
-// src/pages/WorkerPage.jsx
-// @ts-nocheck
-import React, { useEffect } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { apiGet } from "../services/api";
+import WorkerPreview from "../components/UI/WorkerPreview";
 
 export default function WorkerPage() {
-  const { id } = useParams(); // това е userId (пример: 1010)
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [sp] = useSearchParams();
+  const [worker, setWorker] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // ако имаме requestId в URL (примерно от клиентски flow), го пренасяме
-    const requestId = sp.get("requestId");
-    const qs = new URLSearchParams();
-
-    if (requestId) qs.set("requestId", requestId);
-    qs.set("userId", String(id || ""));
-
-    // ✅ това е правилната страница, която ти вече имаш и работи
-    navigate(`/worker-preview?${qs.toString()}`, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadWorker();
   }, [id]);
 
+  async function loadWorker() {
+    try {
+      const res = await apiGet(`/workers/${id}`);
+      setWorker(res.data);
+    } catch (e) {
+      console.error("Cannot load worker", e);
+      setWorker(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="text-white text-center pt-40">Зареждане...</div>;
+  }
+
+  if (!worker) {
+    return <div className="text-white text-center pt-40">Няма данни за този майстор.</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-      Зареждане...
-    </div>
+    <WorkerPreview
+      worker={worker}
+      onChoose={() => alert("TODO: assign worker")}
+      onReject={() => navigate(-1)}
+      previewMode
+    />
   );
 }

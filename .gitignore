@@ -5,3 +5,6 @@ uploads/
 coverage/
 *.log
 .DS_Store
+# Nest / build junk
+backend/backend@*
+backend/nest

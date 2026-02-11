@@ -3,13 +3,21 @@ import { motion } from "framer-motion";
 import { Wrench, CheckCircle, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+
 export default function Home() {
   const navigate = useNavigate();
 
   return (
     <div className="relative bg-gray-950 text-white min-h-screen flex flex-col overflow-hidden">
+
       {/* 🎥 VIDEO BACKGROUND */}
-      <video autoPlay loop muted playsInline className="absolute w-full h-full object-cover">
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute w-full h-full object-cover"
+      >
         <source src="/src/media_files/loop.mp4" type="video/mp4" />
       </video>
 
@@ -33,7 +41,8 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
-          Свързваме клиенти и майстори — бързо, лесно и надеждно. Без излишни обаждания и хаос.
+          Свързваме клиенти и майстори — бързо, лесно и надеждно.
+          Без излишни обаждания и хаос.
         </motion.p>
 
         <motion.div
@@ -48,10 +57,8 @@ export default function Home() {
           >
             Създай заявка 🧱
           </button>
-
-          {/* ✅ FIX: не към /workers, а към регистрация като worker */}
           <button
-            onClick={() => navigate("/auth/register?role=worker")}
+            onClick={() => navigate("/workers")}
             className="bg-gray-800 hover:bg-gray-700 text-white px-8 py-3 rounded-xl text-lg font-semibold transition"
           >
             Стани майстор 🔧
@@ -99,6 +106,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      
 
       {/* ⚒️ FOOTER */}
       <footer className="relative z-10 bg-gray-950/90 border-t border-gray-800 py-6 text-center text-gray-400 text-sm">

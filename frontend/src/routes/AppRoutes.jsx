@@ -6,6 +6,9 @@ import Clients from "../pages/Clients";
 import Settings from "../pages/Settings";
 import AboutUs from "../pages/AboutUs";
 import WorkerLogin from "../pages/WorkerLogin";
+import Workers from "../pages/Workers";
+import WorkerPage from "../pages/WorkerPage";
+
 
 export default function AppRoutes() {
   return (
@@ -19,7 +22,8 @@ export default function AppRoutes() {
       <Route path="/about" element={<AboutUs />} />
       <Route path="/client/register" element={<ClientRegister />} />
       <Route path="/client/login" element={<ClientLogin />} />
-      
+      <Route path="/workers" element={<Workers />} />
+<Route path="/workers/:id" element={<WorkerPage />} />
     </Routes>
   );
 }
