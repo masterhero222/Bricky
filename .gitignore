@@ -1,10 +1,20 @@
 node_modules/
 dist/
-.env
+backend/dist/
+frontend/dist/
 uploads/
-coverage/
+backend/uploads/
+
+.env
+.env.*
+!.env.example
+
 *.log
+*.bak
 .DS_Store
-# Nest / build junk
-backend/backend@*
-backend/nest
+
+backend_dist_backup/
+frontend_dist_backup/
+frontend_working_backups/
+Bricky__backup_*/
+legacy_root_src/

@@ -9,7 +9,7 @@ function joinUrl(base, path) {
 }
 
 function getApiBase() {
-  return String(import.meta.env.VITE_API_URL || "http://94.72.143.22:3000").replace(/\/+$/, "");
+  return String(import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 }
 
 function getAssetBase() {
@@ -68,7 +68,6 @@ export default function Workers() {
       const id = w.userId || w.id;
       const name = w.fullName || w.name || `Майстор #${id || "?"}`;
       const city = w.city || "—";
-      const phone = w.phone || "—";
       const skill =
         Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
       const description = w.description || "Няма описание.";
@@ -79,7 +78,6 @@ export default function Workers() {
         _id: id,
         _name: name,
         _city: city,
-        _phone: phone,
         _skill: skill,
         _description: description,
         _avatar: avatar,
@@ -93,12 +91,7 @@ export default function Workers() {
         <div className="flex items-center justify-between gap-4 mb-8">
           <h1 className="text-3xl font-extrabold">Майстори</h1>
 
-          <button
-            onClick={() => navigate("/auth/register?role=worker")}
-            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl font-bold"
-          >
-            Стани майстор
-          </button>
+
         </div>
 
         {loading && (
@@ -142,7 +135,6 @@ export default function Workers() {
 
                   <div className="mt-4 text-sm text-gray-700 space-y-1">
                     <div><b>Град:</b> {w._city}</div>
-                    <div><b>Телефон:</b> {w._phone}</div>
                   </div>
 
                   <div className="mt-4 text-sm text-gray-600 line-clamp-3">

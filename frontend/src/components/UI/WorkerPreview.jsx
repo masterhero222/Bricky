@@ -1,138 +1,89 @@
-// src/components/UI/WorkerPreview.jsx
-import React, { useState } from "react";
-import { ArrowLeft, ArrowRight, PhoneCall } from "lucide-react";
+import React from "react";
+import { PhoneCall, XCircle } from "lucide-react";
 
-export default function WorkerPreview() {
-  const workers = [
-    {
-      name: "Алекс Константинов Петров",
-      skill: "Шпакловка",
-      description: "Собственик на фирма за строителни ремонти",
-      price: "Оферта към вас: 4000 лв",
-      equipment:
-        "Бригадата е напълно оборудвана за работа като гарантират срок от 7 до 10 дни (+2 дни ако има извънредни ситуации).",
-      images: [
-        "/media_files/banq.jpg",
-        "/media_files/banq2.jpg",
-        "/media_files/banq3.jpg",
-      ],
-      avatar: "/media_files/Snejan.jpg",
-    },
-    {
-      name: "Ивайло Георгиев",
-      skill: "Електро",
-      description: "Фирмен електротехник с 12 години опит",
-      price: "Оферта към вас: 3200 лв",
-      equipment: "Работи с тествано оборудване. Срок: 5–7 дни.",
-      images: ["/media_files/banq2.jpg", "/media_files/banq3.jpg"],
-      avatar: "/media_files/Snejan.jpg",
-    },
-  ];
+function apiBase() {
+  return (import.meta.env.VITE_ASSET_BASE_URL || import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+}
 
-  const [index, setIndex] = useState(0);
+function absUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${apiBase()}${url.startsWith("/") ? url : `/${url}`}`;
+}
 
-  const next = () => setIndex((prev) => (prev + 1) % workers.length);
-  const prev = () =>
-    setIndex((prev) => (prev - 1 + workers.length) % workers.length);
+export default function WorkerPreview({ worker, gallery = [], onReject }) {
+  if (!worker) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        Няма избран майстор.
+      </div>
+    );
+  }
 
-  const w = workers[index];
+  const images = Array.isArray(gallery)
+    ? gallery.map((img) => absUrl(img.url || img.imageUrl || img.path || "")).filter(Boolean)
+    : [];
+
+  const avatarSrc = worker.avatarUrl ? absUrl(worker.avatarUrl) : "/media_files/Snejan.jpg";
+  const title = Array.isArray(worker.skills) && worker.skills.length ? worker.skills[0] : "Майстор";
 
   return (
-    <div className="relative w-full flex justify-center mt-20 mb-28">
-      {/* ЛЯВА ВЕРТИКАЛНА СТРЕЛКА */}
-      <button
-        onClick={prev}
-        className="hidden md:flex flex-col items-center justify-center
-                   h-40 w-14 rounded-2xl bg-red-600 text-white
-                   absolute left-6 top-1/2 -translate-y-1/2
-                   shadow-lg active:scale-95 transition"
-      >
-        <ArrowLeft size={26} />
-      </button>
-
-      {/* ДЯСНА ВЕРТИКАЛНА СТРЕЛКА */}
-      <button
-        onClick={next}
-        className="hidden md:flex flex-col items-center justify-center
-                   h-40 w-14 rounded-2xl bg-red-600 text-white
-                   absolute right-6 top-1/2 -translate-y-1/2
-                   shadow-lg active:scale-95 transition"
-      >
-        <ArrowRight size={26} />
-      </button>
-
-      {/* За мобилни – стрелки под картата, да не се чупи UI */}
-      <div className="absolute -bottom-16 left-0 right-0 flex justify-center gap-6 md:hidden">
-        <button
-          onClick={prev}
-          className="bg-red-600 text-white px-4 py-3 rounded-xl active:scale-95 transition"
-        >
-          <ArrowLeft size={22} />
-        </button>
-        <button
-          onClick={next}
-          className="bg-red-600 text-white px-4 py-3 rounded-xl active:scale-95 transition"
-        >
-          <ArrowRight size={22} />
-        </button>
-      </div>
-
-      {/* ГЛАВНА КАРТА */}
-      <div className="bg-white text-black shadow-xl rounded-3xl max-w-4xl w-full p-8 md:mx-32">
-        {/* АВАТАР + СПЕЦИАЛНОСТ */}
-        <div className="flex flex-col items-center mb-6">
+    <div className="min-h-screen bg-gray-900 text-white pt-24 pb-20 px-6">
+      <div className="max-w-5xl mx-auto bg-white text-black rounded-3xl shadow-xl p-10">
+        <div className="flex flex-col items-center">
           <img
-            src={w.avatar}
+            src={avatarSrc}
             className="w-40 h-40 rounded-full object-cover border-4 border-red-500"
-            alt={w.name}
+            alt={worker.fullName || "Майстор"}
+            onError={(e) => {
+              e.currentTarget.src = "/media_files/Snejan.jpg";
+            }}
           />
-          <h2 className="text-3xl font-bold mt-4">{w.skill}</h2>
+          <h2 className="text-3xl font-extrabold mt-6">{title}</h2>
+          <div className="text-gray-600 mt-1">Майстор</div>
         </div>
 
-        {/* ИНФО БЛОКОВЕ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* ЛЯВ ПАНЕЛ */}
+        <div className="grid md:grid-cols-2 gap-6 mt-10">
           <div className="bg-red-500 text-white p-6 rounded-2xl">
-            <p className="text-xl font-semibold">{w.name}</p>
-            <p className="mt-2">{w.description}</p>
-            <p className="mt-4 text-lg font-bold">{w.price}</p>
+            <div className="text-xl font-bold">{worker.fullName || `Майстор #${worker.userId || worker.id}`}</div>
+            <div className="mt-3"><b>Град:</b> {worker.city || "—"}</div>
+            <div className="mt-4 opacity-95"><b>Описание:</b> {worker.description || "—"}</div>
+            <div className="mt-4 opacity-95"><b>Опит:</b> {worker.experience || "—"}</div>
           </div>
 
-          {/* СНИМКИ */}
-          <div className="bg-gray-100 p-4 rounded-2xl">
-            <h3 className="text-xl font-bold text-center mb-3 text-red-600">
-              Снимки
-            </h3>
-            <div className="flex gap-2 overflow-x-auto">
-              {w.images.map((img, i) => (
-                <img
-                  key={i}
-                  src={img}
-                  className="h-28 w-40 object-cover rounded-lg flex-shrink-0"
-                  alt={`Снимка ${i + 1}`}
-                />
-              ))}
-            </div>
+          <div className="bg-gray-100 p-6 rounded-2xl">
+            <div className="text-xl font-bold text-red-600 text-center mb-3">Снимки от обекти</div>
+            {images.length === 0 ? (
+              <div className="text-gray-500 text-center">Няма качени снимки.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+                {images.map((url) => (
+                  <a key={url} href={url} target="_blank" rel="noreferrer" className="block rounded-xl overflow-hidden border border-gray-200 bg-white">
+                    <img src={url} className="w-full h-28 object-cover" loading="lazy" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* ОБОРУДВАНЕ / СРОК */}
           <div className="bg-gray-100 p-6 rounded-2xl md:col-span-2">
-            <h3 className="text-xl font-bold mb-3 text-red-600">
-              Оборудване / Срок
-            </h3>
-            <p>{w.equipment}</p>
+            <div className="text-xl font-bold text-red-600 mb-3">Оборудване / Срок</div>
+            <div>{worker.equipment || "—"}</div>
           </div>
         </div>
 
-        {/* CTA БУТОН */}
-        <button className="w-full bg-red-600 text-white py-4 mt-8 rounded-xl font-semibold flex items-center justify-center gap-2 text-lg active:scale-95 transition">
-          <PhoneCall size={22} />
-          Приемам обаждане от майстора
-        </button>
+        <div className="flex flex-col md:flex-row gap-4 mt-10">
+          <button className="flex-1 bg-red-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+            <PhoneCall size={20} />
+            Приемам обаждане от майстора
+          </button>
 
-        {/* ДОЛЕН ПЛЕЙСХОЛДЪР */}
-        <div className="mt-6 text-center text-gray-400 text-sm">
-          Слайдове за избиране на следващ профил (placeholder)
+          {onReject && (
+            <button onClick={onReject} className="md:w-56 bg-gray-200 hover:bg-gray-300 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+              <XCircle size={20} />
+              Назад
+            </button>
+          )}
         </div>
       </div>
     </div>

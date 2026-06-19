@@ -144,6 +144,13 @@ export class WorkersController {
     return this.workersService.deleteGalleryImage(userId, imageId);
   }
 
+  @Get(':userId/gallery')
+  async publicGallery(@Param('userId') userId: string) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+    return this.workersService.getGalleryByUserId(uid);
+  }
+
   // IMPORTANT: here param is userId (from users table)
   @Get(':userId')
   async getByUserId(@Param('userId') userId: string) {

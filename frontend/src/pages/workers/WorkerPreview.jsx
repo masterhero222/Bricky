@@ -1,7 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { PhoneCall, CheckCircle, XCircle, Star } from "lucide-react";
 import { apiGet, apiPost } from "../../services/api";
 
 function absUrl(url) {
@@ -193,7 +192,6 @@ export default function WorkerPreview() {
               <b>Град:</b> {worker.city || "—"}
             </div>
             <div className="mt-2">
-              <b>Телефон:</b> {worker.phone || "—"}
             </div>
 
             <div className="mt-4 opacity-95">
@@ -239,7 +237,6 @@ export default function WorkerPreview() {
 
         <div className="flex flex-col md:flex-row gap-4 mt-10">
           <button className="flex-1 bg-red-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-            <PhoneCall size={20} />
             Приемам обаждане от майстора
           </button>
 

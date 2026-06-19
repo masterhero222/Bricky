@@ -7,6 +7,7 @@ export default function WorkerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [worker, setWorker] = useState(null);
+  const [gallery, setGallery] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,30 +16,34 @@ export default function WorkerPage() {
 
   async function loadWorker() {
     try {
-      const res = await apiGet(`/workers/${id}`);
-      setWorker(res.data);
+      setLoading(true);
+
+      const workerRes = await apiGet(`/workers/${id}`);
+      setWorker(workerRes?.data || null);
+
+      try {
+        const galleryRes = await apiGet(`/workers/${id}/gallery`);
+        setGallery(Array.isArray(galleryRes?.data) ? galleryRes.data : []);
+      } catch {
+        setGallery([]);
+      }
     } catch (e) {
       console.error("Cannot load worker", e);
       setWorker(null);
+      setGallery([]);
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) {
-    return <div className="text-white text-center pt-40">Зареждане...</div>;
-  }
-
-  if (!worker) {
-    return <div className="text-white text-center pt-40">Няма данни за този майстор.</div>;
-  }
+  if (loading) return <div className="text-white text-center pt-40">Зареждане...</div>;
+  if (!worker) return <div className="text-white text-center pt-40">Няма данни за този майстор.</div>;
 
   return (
     <WorkerPreview
       worker={worker}
-      onChoose={() => alert("TODO: assign worker")}
+      gallery={gallery}
       onReject={() => navigate(-1)}
-      previewMode
     />
   );
 }

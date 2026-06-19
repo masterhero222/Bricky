@@ -81,7 +81,7 @@ export default function ClientProfile() {
     try {
       // optional client profile endpoint
       try {
-        const clientRes = await apiGet("/client/me");
+        const clientRes = await apiGet("/requests/client");
         setClient(clientRes.data || {});
         setNewReq((p) => ({
           ...p,

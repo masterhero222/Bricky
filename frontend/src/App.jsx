@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./layouts/Layout";
 
 // BASIC PAGES
@@ -14,22 +14,23 @@ import Register from "./pages/Register";
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
 
-// WORKER (REAL PAGES THAT EXIST)
+// WORKER
 import WorkerLogin from "./pages/workers/WorkerLogin";
 import WorkersRegister from "./pages/workers/WorkersRegister";
-import WorkerProfile from "./pages/workers/WorkerProfile"; 
+import WorkerProfile from "./pages/workers/WorkerProfile";
 import WorkerPreview from "./pages/workers/WorkerPreview";
+import Workers from "./pages/workers/Workers";
 
 // REQUESTS
 import Requests from "./pages/Requests";
 
+// PUBLIC WORKER DETAILS
 import WorkerPage from "./pages/WorkerPage";
 
 export default function App() {
   return (
     <Router>
       <Routes>
-
         {/* AUTH OUTSIDE LAYOUT */}
         <Route path="/auth" element={<AuthGate />} />
         <Route path="/auth/login" element={<Login />} />
@@ -37,9 +38,12 @@ export default function App() {
 
         {/* LAYOUT PAGES */}
         <Route element={<Layout />}>
-
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
+
+          {/* PUBLIC WORKERS */}
+          <Route path="/workers" element={<Workers />} />
+          <Route path="/workers/:id" element={<WorkerPage />} />
 
           {/* CLIENT PROFILE */}
           <Route
@@ -65,13 +69,14 @@ export default function App() {
             }
           />
 
-          {/* WORKER PREVIEW (customer sees worker) */}
+          {/* WORKER PREVIEW */}
           <Route path="/worker-preview" element={<WorkerPreview />} />
 
-          {/* REQUESTS LIST */}
+          {/* REQUESTS */}
           <Route path="/requests" element={<Requests />} />
 
-            <Route path="/worker/:userId" element={<WorkerPage />} />
+          {/* OLD FALLBACK */}
+          <Route path="/worker/:userId" element={<Navigate to="/workers" replace />} />
         </Route>
       </Routes>
     </Router>
