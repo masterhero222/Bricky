@@ -39,6 +39,12 @@ export class RequestsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('map')
+  async mapRequests(@Req() req: any) {
+    return this.requests.getMapRequests(req.user);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('worker')
   async workerFeed(@Req() req: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');

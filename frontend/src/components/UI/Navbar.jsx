@@ -20,6 +20,7 @@ export default function Navbar() {
         <nav className="hidden md:flex gap-8 text-gray-300 font-medium">
           <Link to="/">Начало</Link>
           <Link to="/workers">Майсторите</Link>
+          {role === "worker" && <Link to="/repair-map">Карта</Link>}
           <Link to="/about">За нас</Link>
         </nav>
 
@@ -57,6 +58,7 @@ export default function Navbar() {
         <div className="md:hidden bg-black/90 px-6 py-4 flex flex-col gap-4 text-gray-200 border-t border-gray-800">
           <Link to="/" onClick={() => setOpen(false)}>Начало</Link>
           <Link to="/workers" onClick={() => setOpen(false)}>Майсторите</Link>
+          {role === "worker" && <Link to="/repair-map" onClick={() => setOpen(false)}>Карта</Link>}
           <Link to="/about" onClick={() => setOpen(false)}>За нас</Link>
 
           {!role && (

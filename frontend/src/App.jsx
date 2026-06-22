@@ -13,6 +13,7 @@ import Register from "./pages/Register";
 
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
+import RepairMap from "./pages/RepairMap";
 
 // WORKER (REAL PAGES THAT EXIST)
 import WorkerLogin from "./pages/workers/WorkerLogin";
@@ -41,6 +42,14 @@ export default function App() {
 
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
+          <Route
+            path="/repair-map"
+            element={
+              <RequireWorker>
+                <RepairMap />
+              </RequireWorker>
+            }
+          />
 
           {/* CLIENT PROFILE */}
           <Route

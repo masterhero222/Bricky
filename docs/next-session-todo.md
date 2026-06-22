@@ -79,15 +79,28 @@
 
 ## Map Feature
 
-- Add a map of repair activities.
-- Reference visual direction: Payday 2 Crime.Net map style, but adapted for Bricky.
-- Requests should appear as map markers/cards with:
-  - repair category icon;
-  - location/area;
-  - urgency/status;
-  - short title/description;
-  - number of interested workers or assigned state.
-- Start with Sofia mock data, then wire to real request addresses/geocoding later.
+- FEATURE BRANCH: `codex/feature-sofia-request-map`.
+- DONE in dev/mock: worker-only `/repair-map` route.
+- DONE in dev/mock: client accounts do not have access to the request map.
+- DONE in dev/mock: worker menu/nav links expose the map only to workers.
+- DONE in dev/mock: Sofia interactive slippy map with drag/pan and wheel zoom.
+- DONE in dev/mock: scroll over the map zooms the map instead of scrolling the page.
+- DONE in dev/mock: Payday 2 Crime.Net-inspired skin, toned down so streets remain readable.
+- DONE in dev/mock: requests appear as map markers at realistic Sofia addresses.
+- DONE in dev/mock: close requests cluster into a bubble with request count.
+- DONE in dev/mock: clicking a cluster expands requests so they can be selected individually.
+- DONE in dev/mock: hovering a request marker highlights it.
+- DONE in dev/mock: clicking a request updates the right-side panel.
+- DONE in dev/mock: request photos show in the right-side map details panel.
+- DONE in dev/mock: workers can apply from the selected map request.
+- NEXT: add real address geocoding for manually typed client addresses.
+- NEXT: add production DB migration for request `latitude`, `longitude`, and `locationSource`.
+- NEXT: decide map provider for production:
+  - OpenStreetMap tiles;
+  - Google Maps;
+  - or paid commercial tile provider.
+- NEXT: add category/status filters and category-specific marker icons.
+- NEXT: add moderation/AI checks before requests appear on the worker map.
 
 ## Categories And Calculator
 

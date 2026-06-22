@@ -736,6 +736,7 @@ export default function WorkerProfile() {
           {[
             ["dashboard", "Контрол панел"],
             ["requests", "Заявки"],
+            ["map", "Карта заявки"],
             ["profile", "Профил"],
             ["gallery", "Галерия"],
             ["calculator", "Калкулатор"],
@@ -744,7 +745,10 @@ export default function WorkerProfile() {
           ].map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
+              onClick={() => {
+                if (key === "map") window.location.href = "/repair-map";
+                else setActiveTab(key);
+              }}
               className={activeTab === key ? "text-red-400 font-bold" : "hover:text-red-300"}
             >
               {label}

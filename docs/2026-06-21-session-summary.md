@@ -204,3 +204,37 @@ After deploying to the server, the local/dev mock flow looked good, but the prod
   - public worker preview must be hardened so missing photos/history never crash the profile.
 
 Important: these issues are server/production integration problems, not the same as the dev/mock gallery flow that was stabilized locally.
+
+## Sofia Request Map Feature Branch - 2026-06-22
+
+A separate feature branch was created for the request map:
+
+- `codex/feature-sofia-request-map`
+
+This keeps the map optional until approved for the final app.
+
+Added in the feature branch:
+
+- worker-only `/repair-map` route;
+- worker navbar/sidebar access to the map;
+- clients are blocked from the request map;
+- interactive Sofia map using OSM tiles;
+- drag/pan and wheel zoom;
+- mouse-wheel scroll over the map zooms the map instead of scrolling the page;
+- Payday 2 Crime.Net-inspired UI layer, toned down so streets remain readable;
+- Sofia mock requests placed on realistic streets;
+- request marker clustering with expandable cluster bubbles;
+- hover highlight for individual requests;
+- right-side request details panel;
+- request photos in the map details panel;
+- worker apply action directly from the map;
+- request `latitude`, `longitude`, and `locationSource` fields in frontend/mock/backend DTO/entity/service.
+
+Verification:
+
+- frontend build passed;
+- backend build passed.
+
+Production note:
+
+- before deploying this feature against the real DB, add a DB migration for the new request location columns.

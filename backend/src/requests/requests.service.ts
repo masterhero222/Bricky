@@ -150,6 +150,9 @@ export class RequestsService {
       email: dto.email,
       phone: dto.phone,
       address: dto.address,
+      latitude: Number.isFinite(Number(dto.latitude)) ? Number(dto.latitude) : null,
+      longitude: Number.isFinite(Number(dto.longitude)) ? Number(dto.longitude) : null,
+      locationSource: dto.locationSource || 'manual',
       category: dto.category,
       description: dto.description,
       photos: normalizePhotos(dto.photos),
@@ -178,6 +181,22 @@ export class RequestsService {
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
+  }
+
+  async getMapRequests(user: any) {
+    const role = String(user?.role || '');
+    const userId = Number(user?.id);
+    if (!userId) throw new BadRequestException('Missing user id');
+
+    if (role === 'client') {
+      return this.getByClientUserId(userId);
+    }
+
+    if (role === 'worker') {
+      return this.getForWorkersFeed(userId);
+    }
+
+    throw new BadRequestException('Unsupported role');
   }
 
   /**

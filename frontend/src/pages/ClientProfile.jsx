@@ -100,10 +100,15 @@ export default function ClientProfile() {
     category: "ВиК",
     description: "",
     photos: [],
+    latitude: null,
+    longitude: null,
+    locationSource: "manual",
   });
 
   const [createError, setCreateError] = useState("");
   const [createOk, setCreateOk] = useState("");
+  const [locationStatus, setLocationStatus] = useState("manual");
+  const [locationMessage, setLocationMessage] = useState("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
   const [actionMsg, setActionMsg] = useState("");
   const [assigningKey, setAssigningKey] = useState("");
 
@@ -256,10 +261,51 @@ export default function ClientProfile() {
     }));
   }
 
+  function requestCurrentLocation() {
+    setCreateError("");
+
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      setLocationMessage("Браузърът не поддържа автоматична локация. Въведи точния адрес ръчно.");
+      setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationMessage("Питам браузъра за достъп до локацията...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        setNewReq((p) => ({
+          ...p,
+          latitude,
+          longitude,
+          locationSource: "gps",
+        }));
+        setLocationStatus("granted");
+        setLocationMessage(`Локацията е добавена към заявката: ${latitude}, ${longitude}.`);
+      },
+      (err) => {
+        console.warn("Geolocation denied/unavailable:", err);
+        setLocationStatus("denied");
+        setLocationMessage("Локацията е отказана или недостъпна. Въведи точния адрес ръчно, за да сложим заявката на картата.");
+        setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
   async function createRequest() {
     setCreateError("");
     setCreateOk("");
     try {
+      if (!String(newReq.address || "").trim() && !newReq.latitude && !newReq.longitude) {
+        setCreateError("Добави текуща локация или въведи точен адрес за заявката.");
+        return;
+      }
+
       const res = await apiPost("/requests", {
         clientName: newReq.clientName,
         email: newReq.email,
@@ -268,10 +314,15 @@ export default function ClientProfile() {
         category: newReq.category,
         description: newReq.description,
         photos: newReq.photos || [],
+        latitude: newReq.latitude,
+        longitude: newReq.longitude,
+        locationSource: newReq.locationSource || "manual",
       });
 
       setCreateOk(`Заявката е създадена! (#${res.data?.id ?? "?"})`);
-      setNewReq((p) => ({ ...p, description: "", photos: [] }));
+      setNewReq((p) => ({ ...p, description: "", photos: [], latitude: null, longitude: null, locationSource: "manual" }));
+      setLocationStatus("manual");
+      setLocationMessage("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
       setActiveTab("requests");
       await loadData();
     } catch (err) {
@@ -659,6 +710,28 @@ export default function ClientProfile() {
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
                 placeholder="Адрес"
               />
+
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <div className="font-bold">Локация за картата</div>
+                    <p className="text-sm text-gray-400 mt-1">{locationMessage}</p>
+                    {newReq.latitude && newReq.longitude && (
+                      <p className="text-xs text-cyan-300 mt-2">
+                        GPS: {newReq.latitude}, {newReq.longitude}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={requestCurrentLocation}
+                    disabled={locationStatus === "loading"}
+                    className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-700 px-4 py-3 rounded-lg font-bold"
+                  >
+                    {locationStatus === "loading" ? "Проверявам..." : "Използвай текуща локация"}
+                  </button>
+                </div>
+              </div>
 
               <select
                 value={newReq.category}

@@ -84,7 +84,8 @@ function nowIso() {
 
 function seedDb() {
   return {
-    nextRequestId: 4,
+    mapSeedVersion: 2,
+    nextRequestId: 7,
     nextReviewId: 1,
     clients: CLIENTS,
     workers: WORKERS,
@@ -96,12 +97,21 @@ function seedDb() {
         clientName: CLIENTS[0].name,
         email: CLIENTS[0].email,
         phone: CLIENTS[0].phone,
-        address: CLIENTS[0].address,
+        address: "София, ул. Граф Игнатиев 18",
+        latitude: 42.690781,
+        longitude: 23.326193,
+        locationSource: "seed",
         category: "ВиК",
         description: "Тече под мивката в кухнята.",
         status: "нова",
-        photos: [],
-        beforePhotos: [],
+        photos: [
+          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
+          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
+        ],
+        beforePhotos: [
+          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
+          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
+        ],
         afterPhotos: [],
         appliedWorkers: [],
         assignedWorkerId: null,
@@ -116,12 +126,19 @@ function seedDb() {
         clientName: CLIENTS[1].name,
         email: CLIENTS[1].email,
         phone: CLIENTS[1].phone,
-        address: CLIENTS[1].address,
+        address: "София, бул. Витоша 72",
+        latitude: 42.687389,
+        longitude: 23.319482,
+        locationSource: "seed",
         category: "Електро",
         description: "Няколко контакта не работят след ремонт.",
         status: "кандидатствана",
-        photos: [],
-        beforePhotos: [],
+        photos: [
+          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
+        ],
+        beforePhotos: [
+          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
+        ],
         afterPhotos: [],
         appliedWorkers: [202],
         assignedWorkerId: null,
@@ -136,15 +153,93 @@ function seedDb() {
         clientName: CLIENTS[2].name,
         email: CLIENTS[2].email,
         phone: CLIENTS[2].phone,
-        address: CLIENTS[2].address,
+        address: "София, ул. Цар Симеон 143",
+        latitude: 42.704901,
+        longitude: 23.312384,
+        locationSource: "seed",
         category: "Плочки",
         description: "Лепене на плочки в малка баня.",
         status: "в процес",
-        photos: [],
-        beforePhotos: [],
+        photos: [
+          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
+          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
+        ],
+        beforePhotos: [
+          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
+          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
+        ],
         afterPhotos: [],
         appliedWorkers: [203],
         assignedWorkerId: 203,
+        completedAt: null,
+        completedByWorkerId: null,
+        durationDays: null,
+        created_at: nowIso(),
+      },
+      {
+        id: 4,
+        clientUserId: 101,
+        clientName: CLIENTS[0].name,
+        email: CLIENTS[0].email,
+        phone: CLIENTS[0].phone,
+        address: "София, ул. Козяк 12",
+        latitude: 42.661811,
+        longitude: 23.333928,
+        locationSource: "seed",
+        category: "Освежителен ремонт",
+        description: "Освежаване на дневна и коридор, нужни са шпакловка и боя.",
+        status: "нова",
+        photos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
+        beforePhotos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
+        afterPhotos: [],
+        appliedWorkers: [],
+        assignedWorkerId: null,
+        completedAt: null,
+        completedByWorkerId: null,
+        durationDays: null,
+        created_at: nowIso(),
+      },
+      {
+        id: 5,
+        clientUserId: 102,
+        clientName: CLIENTS[1].name,
+        email: CLIENTS[1].email,
+        phone: CLIENTS[1].phone,
+        address: "София, ул. Фредерик Жолио-Кюри 9",
+        latitude: 42.671482,
+        longitude: 23.350402,
+        locationSource: "seed",
+        category: "Ремонт на бани",
+        description: "Смяна на плочки и душ зона в малка баня.",
+        status: "нова",
+        photos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
+        beforePhotos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
+        afterPhotos: [],
+        appliedWorkers: [],
+        assignedWorkerId: null,
+        completedAt: null,
+        completedByWorkerId: null,
+        durationDays: null,
+        created_at: nowIso(),
+      },
+      {
+        id: 6,
+        clientUserId: 103,
+        clientName: CLIENTS[2].name,
+        email: CLIENTS[2].email,
+        phone: CLIENTS[2].phone,
+        address: "София, бул. Черни връх 100",
+        latitude: 42.658832,
+        longitude: 23.316522,
+        locationSource: "seed",
+        category: "Електро инсталация",
+        description: "Проверка на табло и добавяне на нов кръг за кухня.",
+        status: "нова",
+        photos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
+        beforePhotos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
+        afterPhotos: [],
+        appliedWorkers: [],
+        assignedWorkerId: null,
         completedAt: null,
         completedByWorkerId: null,
         durationDays: null,
@@ -157,7 +252,21 @@ function seedDb() {
 function readDb() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const db = JSON.parse(raw);
+      if (Number(db?.mapSeedVersion || 0) < 2) {
+        const seeded = seedDb();
+        const migrated = {
+          ...db,
+          mapSeedVersion: seeded.mapSeedVersion,
+          requests: seeded.requests,
+          nextRequestId: Math.max(Number(db.nextRequestId || 0), seeded.nextRequestId),
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      return db;
+    }
   } catch {}
   const db = seedDb();
   writeDb(db);
@@ -518,6 +627,10 @@ export async function mockRequest(method, url, data) {
     return response(sortNewest(db.requests.filter((r) => Number(r.clientUserId) === userId)));
   }
 
+  if (method === "get" && path === "/requests/map") {
+    return response(sortNewest(db.requests));
+  }
+
   if (method === "get" && path === "/requests/worker") {
     const items = db.requests.filter((r) => {
       const assigned = Number(r.assignedWorkerId || 0);
@@ -541,6 +654,9 @@ export async function mockRequest(method, url, data) {
       email: data.email || client.email,
       phone: data.phone || client.phone,
       address: data.address || client.address || "",
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      locationSource: data.locationSource || "manual",
       category: data.category || "ВиК",
       description: data.description || "",
       status: "нова",
