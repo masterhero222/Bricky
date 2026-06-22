@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import axios from "axios";
+import { apiPost } from "../services/api";
 
 export default function ClientRegister() {
   const [form, setForm] = useState({
@@ -28,12 +28,12 @@ export default function ClientRegister() {
     }
 
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, {
-  name: form.fullName,
-  email: form.email,
-  phone: form.phone,
-  password: form.password,
-});
+      await apiPost("/auth/register", {
+        role: "client",
+        name: form.name,
+        email: form.email,
+        password: form.password,
+      });
 
 
       setSuccess("Успешна регистрация!");

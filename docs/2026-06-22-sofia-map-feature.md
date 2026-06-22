@@ -129,6 +129,14 @@ Local test URL:
 
 - `http://127.0.0.1:5173/repair-map`
 
+Production notes:
+
+- Live route: `https://bricky.bg/repair-map`.
+- The route is guarded and opens only for accounts whose saved role is `worker`.
+- The global navbar shows `Карта` only after worker login.
+- Production frontend must be built with `VITE_API_URL=/api`; this avoids HTTPS mixed-content failures and keeps all browser API calls behind nginx.
+- Legacy register pages were moved away from direct `VITE_API_URL` calls and now use the shared API wrapper.
+
 ## Known Follow-Ups
 
 - Add real geocoding for manually typed addresses.

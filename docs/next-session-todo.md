@@ -16,6 +16,14 @@
 
 ## Production Server Fixes
 
+- DONE on map branch: production frontend uses `/api` instead of the server IP over HTTP.
+- DONE on map branch: legacy client/worker register pages use the shared API wrapper.
+- Verify on `bricky.bg` after deploy:
+  - worker login works;
+  - the worker navbar shows `Карта`;
+  - direct route `https://bricky.bg/repair-map` opens after worker login;
+  - `/api/workers` returns `200`;
+  - real `POST /api/auth/login` returns a JSON error for wrong credentials, not nginx `502`.
 - Fix public worker profile navigation from the workers grid:
   - `/workers` card click should always open a valid worker profile route;
   - profile route must support the same id/userId shape returned by production `/api/workers`;
