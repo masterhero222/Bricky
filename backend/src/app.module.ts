@@ -25,7 +25,7 @@ import { ReviewModule } from './reviews/review.module';
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
     }),
 
     UsersModule,
@@ -38,3 +38,4 @@ import { ReviewModule } from './reviews/review.module';
   ],
 })
 export class AppModule {}
+
