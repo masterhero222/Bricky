@@ -188,3 +188,19 @@ Verification:
 Deployment note:
 
 - The current version is intended to be committed, pushed to GitHub, and deployed to the server after this documentation update.
+
+## Production Server Check - 2026-06-22
+
+After deploying to the server, the local/dev mock flow looked good, but the production server still has real backend/static-file issues:
+
+- `bricky.bg/workers` loads the workers grid, but opening a worker profile from the grid can break the public profile flow.
+- The worker gallery on the server shows broken images instead of real thumbnails.
+- Browser console shows many `404 Not Found` errors for gallery image files such as `gallery_1011_...jpg`.
+- The worker profile/gallery page also shows `404 Not Found` for `/api/workers/me/history`.
+- This means the frontend is now exposing the missing production wiring:
+  - real uploaded files are not served from the paths stored in the database;
+  - gallery URLs need backend/static asset normalization;
+  - the production backend needs a real `/workers/me/history` endpoint or the frontend needs to stop calling it until it exists;
+  - public worker preview must be hardened so missing photos/history never crash the profile.
+
+Important: these issues are server/production integration problems, not the same as the dev/mock gallery flow that was stabilized locally.

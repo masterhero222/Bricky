@@ -2,11 +2,40 @@
 
 ## Highest Priority
 
+- Production server is not stable yet:
+  - opening a worker profile from `/workers` can break the page;
+  - gallery thumbnails/photos are broken on `bricky.bg`;
+  - browser console shows many `404` errors for `gallery_1011_...jpg` files;
+  - `/api/workers/me/history` returns `404`;
+  - fix production uploads/static file serving before polishing the UI further.
 - DONE in dev/mock: request workflow is stable enough for local testing from both client and worker sides.
 - DONE in dev/mock: changing worker profile settings no longer breaks the mock test profile.
 - DONE in dev/mock: worker profile photo/avatar and public grid cards use the saved mock profile data.
 - Continue removing remaining direct `axios` calls from pages that should go through the shared mock-aware API layer.
 - Keep localStorage image usage low in dev/mock mode; use `Dev test` reset when old large image blobs already exist.
+
+## Production Server Fixes
+
+- Fix public worker profile navigation from the workers grid:
+  - `/workers` card click should always open a valid worker profile route;
+  - profile route must support the same id/userId shape returned by production `/api/workers`;
+  - missing worker data should show a clean empty/error state, not break the page.
+- Fix gallery image URLs on production:
+  - inspect how gallery filenames are stored in the database;
+  - serve uploaded files from a stable public path such as `/uploads/...`;
+  - normalize frontend image URLs so raw filenames like `gallery_1011_...jpg` become valid asset URLs;
+  - add `onError` fallback UI so broken files do not visually explode the gallery.
+- Implement or remove `/api/workers/me/history`:
+  - backend should expose completed worker history with before/after photos and duration;
+  - or frontend should not call this endpoint in production until backend support exists.
+- Add server smoke tests after deploy:
+  - `curl https://bricky.bg/api/workers`;
+  - `curl https://bricky.bg/api/workers/{id}`;
+  - `curl https://bricky.bg/api/workers/me/history` with auth token when available;
+  - open `/workers`, one public worker profile, and the worker gallery in browser.
+- Clean up the server repository state:
+  - remove accidental embedded `Bricky` repo from the server git index if it is still present;
+  - avoid committing server-only merge commits back to `main` unless intentionally syncing live changes.
 
 ## Client Requests
 
@@ -26,7 +55,7 @@
 - DONE in dev/mock: closing a request can attach "after" photos and save before/after photos in worker history.
 - DONE in dev/mock: completed objects are grouped into compact portfolio/CV-style albums with cover photos and a viewer for all images.
 - DONE in dev/mock: public worker profile shows completed Bricky objects as proof of real work through the platform.
-- Wire worker gallery and completed-job photos to real backend file upload/storage.
+- URGENT for production: wire worker gallery and completed-job photos to real backend file upload/storage.
 - Verify the same gallery/history behavior with production backend storage after upload endpoints are connected.
 - Decide whether repair photos are:
   - general portfolio photos;
