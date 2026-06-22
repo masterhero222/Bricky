@@ -34,13 +34,22 @@ export class RequestEntity {
 
   @Column({
     type: 'enum',
-    enum: ['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки'],
+    enum: ['???', '???????', '????????? ? ???', '??????', '?????? ?? ???????', '?????? ?? ????', '??????? ??????', '??????? ??????????', '?????????????', '??????????? ??????'],
     nullable: true,
   })
   category: string;
 
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  photos: any[] | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  beforePhotos: any[] | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  afterPhotos: any[] | null;
 
   @Column({
     type: 'enum',
@@ -55,12 +64,15 @@ export class RequestEntity {
   @Column({ type: 'int', nullable: true })
   assignedWorkerId: number | null;
 
-  // ✅ NEW: completion info
+  // ? NEW: completion info
   @Column({ type: 'datetime', nullable: true })
   completedAt: Date | null;
 
   @Column({ type: 'int', nullable: true })
   completedByWorkerId: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  durationDays: number | null;
 
   @CreateDateColumn()
   created_at: Date;

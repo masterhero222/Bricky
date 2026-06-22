@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { apiGet, apiPost } from "../../services/api";
+import { apiGet, apiPost, apiPut } from "../../services/api";
+import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
 
 const PRICE_TABLE = {
@@ -26,8 +27,32 @@ function getToken() {
 
 function absUrl(url) {
   if (!url) return "";
+  const raw = String(url);
+  const dataIndex = raw.indexOf("data:image/");
+  if (dataIndex > 0) return raw.slice(dataIndex);
+  if (/^(data:|blob:)/i.test(raw)) return raw;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${import.meta.env.VITE_API_URL}${url}`;
+  if (url.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${url}`;
+  return url;
+}
+
+function photoUrl(photo) {
+  const raw =
+    typeof photo === "string"
+      ? photo
+      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
+
+  return absUrl(raw);
+}
+
+function requestPhotos(req) {
+  const photos = Array.isArray(req?.photos)
+    ? req.photos
+    : Array.isArray(req?.beforePhotos)
+    ? req.beforePhotos
+    : [];
+
+  return photos.filter((photo) => photoUrl(photo));
 }
 
 function normalizeArr(x) {
@@ -44,6 +69,44 @@ function normalizeArr(x) {
       .filter(Boolean);
   }
   return [];
+}
+
+function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const scale = Math.min(1, maxSize / Math.max(img.width || 1, img.height || 1));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round((img.width || 1) * scale));
+      canvas.height = Math.max(1, Math.round((img.height || 1) * scale));
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Cannot read image"));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+function filesToPhotos(files) {
+  const images = Array.from(files || []).filter((file) => String(file.type || "").startsWith("image/"));
+  return Promise.all(
+    images.map(async (file) => ({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: file.name,
+      url: await imageFileToDataUrl(file),
+    }))
+  );
 }
 
 function toNum(x) {
@@ -71,6 +134,7 @@ export default function WorkerProfile() {
   const [saving, setSaving] = useState(false);
 
   const [requests, setRequests] = useState([]);
+  const [completedRequests, setCompletedRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [reqError, setReqError] = useState("");
 
@@ -79,6 +143,7 @@ export default function WorkerProfile() {
 
   // ✅ COMPLETE state
   const [completingId, setCompletingId] = useState(null);
+  const [completionPhotos, setCompletionPhotos] = useState({});
 
   // ✅ REVIEWS state (worker rating)
   const [ratingInfo, setRatingInfo] = useState({ total: 0, average: 0, items: [] });
@@ -108,10 +173,12 @@ export default function WorkerProfile() {
   const [galleryFiles, setGalleryFiles] = useState([]); // File[]
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [albumViewer, setAlbumViewer] = useState(null); // { albumIndex, photoIndex }
 
   useEffect(() => {
     loadMeProfile();
     loadRequests();
+    loadCompletedRequests();
     loadGallery();
   }, []);
 
@@ -137,6 +204,21 @@ export default function WorkerProfile() {
     }
   }
 
+  async function loadCompletedRequests() {
+    try {
+      const [completedRes, historyRes] = await Promise.all([
+        apiGet("/requests/worker/completed").catch(() => ({ data: [] })),
+        apiGet("/workers/me/history").catch(() => ({ data: [] })),
+      ]);
+      const completed = Array.isArray(completedRes.data) ? completedRes.data : [];
+      const history = Array.isArray(historyRes.data) ? historyRes.data : [];
+      setCompletedRequests(history.length ? history : completed);
+    } catch (err) {
+      console.error("Error loading completed requests:", err);
+      setCompletedRequests([]);
+    }
+  }
+
   async function loadMyReviews() {
     try {
       setRatingError("");
@@ -158,9 +240,7 @@ export default function WorkerProfile() {
       const token = getToken();
       if (!token) return;
 
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/workers/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet("/workers/me");
 
       const w = res.data || {};
 
@@ -206,12 +286,29 @@ export default function WorkerProfile() {
     return isAssignedToMe(req) && (st === "в процес" || st === "назначена");
   }
 
+  async function handleCompletionPhotos(requestId, files) {
+    try {
+      const photos = await filesToPhotos(files);
+      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...photos] }));
+    } catch (err) {
+      console.error(err);
+      setApplyMsg("Не успях да прочета снимките след ремонта.");
+    }
+  }
+
+  function removeCompletionPhoto(requestId, photoId) {
+    setCompletionPhotos((p) => ({
+      ...p,
+      [requestId]: (p[requestId] || []).filter((photo) => String(photo.id) !== String(photoId)),
+    }));
+  }
+
   async function completeRequest(requestId) {
     try {
       setApplyMsg("");
       setCompletingId(requestId);
 
-      await apiPost(`/requests/${requestId}/complete`, {});
+      await apiPost(`/requests/${requestId}/complete`, { afterPhotos: completionPhotos[requestId] || [] });
 
       setApplyMsg(`Заявка #${requestId} е затворена ✅`);
       await loadRequests();
@@ -265,6 +362,17 @@ export default function WorkerProfile() {
     if (!token) throw new Error("No token");
     if (!profile.avatar) return null;
 
+    if (isDevMockToken()) {
+      const updated = await uploadDevWorkerAvatar(profile.avatar);
+      if (updated?.avatarUrl) {
+        setProfile((p) => ({ ...p, avatarUrl: updated.avatarUrl, avatar: null }));
+        setPreviewAvatar(absUrl(updated.avatarUrl));
+      } else {
+        setProfile((p) => ({ ...p, avatar: null }));
+      }
+      return updated;
+    }
+
     const fd = new FormData();
     fd.append("avatar", profile.avatar);
 
@@ -295,31 +403,40 @@ export default function WorkerProfile() {
         return;
       }
 
-      const res = await axios.put(
-        `${import.meta.env.VITE_API_URL}/workers/me`,
-        {
+      let updated = null;
+
+      if (isDevMockToken()) {
+        updated = saveDevWorkerProfile({
           fullName: profile.fullName,
           city: profile.city,
           description: profile.description,
           experience: profile.experience,
           equipment: profile.equipment,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+        });
+      } else {
+        const res = await apiPut("/workers/me", {
+          fullName: profile.fullName,
+          city: profile.city,
+          description: profile.description,
+          experience: profile.experience,
+          equipment: profile.equipment,
+        });
+        updated = res.data || {};
+      }
 
-      const updated = res.data || {};
       setProfile((p) => ({
         ...p,
-        fullName: updated.fullName || p.fullName,
-        city: updated.city || p.city,
-        description: updated.description || p.description,
-        experience: updated.experience || p.experience,
-        equipment: updated.equipment || p.equipment,
-        avatarUrl: updated.avatarUrl || p.avatarUrl,
+        fullName: updated?.fullName || p.fullName,
+        city: updated?.city || p.city,
+        description: updated?.description || p.description,
+        experience: updated?.experience || p.experience,
+        equipment: updated?.equipment || p.equipment,
+        avatarUrl: updated?.avatarUrl || p.avatarUrl,
       }));
 
-      if (updated.avatarUrl && !profile.avatar) setPreviewAvatar(absUrl(updated.avatarUrl));
+      if (updated?.avatarUrl && !profile.avatar) setPreviewAvatar(absUrl(updated.avatarUrl));
       if (profile.avatar) await uploadAvatarIfNeeded();
+      await loadMeProfile();
 
       alert("Профилът е обновен!");
     } catch (err) {
@@ -363,7 +480,7 @@ export default function WorkerProfile() {
       setGallery(
         data.map((x) => ({
           ...x,
-          url: absUrl(x.url || x.imageUrl || x.path || ""),
+          url: photoUrl(x),
         }))
       );
     } catch (err) {
@@ -400,6 +517,14 @@ export default function WorkerProfile() {
       }
 
       setUploadingGallery(true);
+
+      if (isDevMockToken()) {
+        await uploadDevWorkerGallery(galleryFiles);
+        setGalleryMsg("Снимките са качени.");
+        setGalleryFiles([]);
+        await loadGallery();
+        return;
+      }
 
       const fd = new FormData();
       galleryFiles.forEach((f) => fd.append("images", f));
@@ -500,6 +625,87 @@ export default function WorkerProfile() {
     const set = new Set(requests.map((r) => (r.status || "").toLowerCase()).filter(Boolean));
     return ["all", ...Array.from(set)];
   }, [requests]);
+
+  const galleryAlbums = useMemo(() => {
+    const cleanPhotos = (items = []) =>
+      (Array.isArray(items) ? items : [])
+        .map((photo) => ({ ...photo, url: photoUrl(photo) }))
+        .filter((photo) => !!photo.url);
+
+    const completedAlbums = (Array.isArray(completedRequests) ? completedRequests : [])
+      .map((job) => {
+        const before = cleanPhotos(job.beforePhotos || job.photos);
+        const after = cleanPhotos(job.afterPhotos);
+        const photos = [...after, ...before];
+        const id = job.requestId || job.id;
+
+        return {
+          id: `job-${id}`,
+          type: "job",
+          title: `Обект #${id} • ${job.category || "Ремонт"}`,
+          subtitle: job.address || "Завършен ремонт",
+          meta: `${job.durationDays || 1} дни`,
+          photos,
+          cover: photos[0],
+          date: job.completedAt || job.created_at || job.createdAt,
+        };
+      })
+      .filter((album) => album.photos.length > 0);
+
+    const jobRequestIds = new Set(
+      completedAlbums
+        .map((album) => String(album.id).replace(/^job-/, ""))
+        .filter(Boolean)
+    );
+
+    const loosePhotos = cleanPhotos(gallery).filter((photo) => {
+      if (!photo.requestId) return true;
+      return !jobRequestIds.has(String(photo.requestId));
+    });
+
+    const manualAlbum =
+      loosePhotos.length > 0
+        ? [
+            {
+              id: "manual-gallery",
+              type: "manual",
+              title: "Качени снимки",
+              subtitle: "Общи портфолио снимки",
+              meta: `${loosePhotos.length} снимки`,
+              photos: loosePhotos,
+              cover: loosePhotos[0],
+              date: loosePhotos[0]?.created_at || loosePhotos[0]?.createdAt,
+            },
+          ]
+        : [];
+
+    return [...completedAlbums, ...manualAlbum];
+  }, [completedRequests, gallery]);
+
+  const activeAlbum =
+    albumViewer && galleryAlbums[albumViewer.albumIndex] ? galleryAlbums[albumViewer.albumIndex] : null;
+  const activePhoto =
+    activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
+      ? activeAlbum.photos[albumViewer?.photoIndex || 0]
+      : null;
+
+  function openAlbum(albumIndex, photoIndex = 0) {
+    setAlbumViewer({ albumIndex, photoIndex });
+  }
+
+  function closeAlbum() {
+    setAlbumViewer(null);
+  }
+
+  function stepAlbumPhoto(delta) {
+    setAlbumViewer((viewer) => {
+      if (!viewer) return viewer;
+      const album = galleryAlbums[viewer.albumIndex];
+      if (!album?.photos?.length) return viewer;
+      const next = (viewer.photoIndex + delta + album.photos.length) % album.photos.length;
+      return { ...viewer, photoIndex: next };
+    });
+  }
 
   const avatarSrc =
     previewAvatar || (profile.avatarUrl ? absUrl(profile.avatarUrl) : "") || "/media_files/Snejan.jpg";
@@ -619,12 +825,13 @@ export default function WorkerProfile() {
                     const hasAssigned = !!toNum(r.assignedWorkerId);
                     const assignedToMe = isAssignedToMe(r);
 
-                    const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
-                    const showContact = assignedToMe;
-                    const showComplete = canComplete(r);
+                      const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
+                      const showContact = assignedToMe;
+                      const showComplete = canComplete(r);
+                      const beforePhotos = requestPhotos(r);
 
-                    return (
-                      <div key={r.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+                      return (
+                        <div key={r.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div className="font-bold">
                             #{r.id} • {r.category} • {r.clientName}
@@ -635,6 +842,25 @@ export default function WorkerProfile() {
                         <div className="text-sm text-gray-400 mt-2">
                           {r.address || "—"} • {formatBG(r.created_at)}
                         </div>
+
+                        {beforePhotos.length > 0 && (
+                          <div className="mt-3">
+                            <div className="text-xs font-bold text-gray-300 mb-2">Снимки от клиента</div>
+                            <div className="flex flex-wrap gap-2">
+                              {beforePhotos.map((photo) => (
+                                <a
+                                  key={photo.id || photoUrl(photo)}
+                                  href={photoUrl(photo)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block h-20 w-20 overflow-hidden rounded-lg border border-gray-700 bg-gray-950"
+                                >
+                                  <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* ✅ Когато е назначена на този майстор */}
                         {showContact && (
@@ -666,6 +892,23 @@ export default function WorkerProfile() {
                           )}
 
                           {/* ✅ Complete button */}
+                          {showComplete && (
+                            <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
+                              <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
+                              <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(r.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
+                              {Array.isArray(completionPhotos[r.id]) && completionPhotos[r.id].length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  {completionPhotos[r.id].map((photo) => (
+                                    <div key={photo.id || photoUrl(photo)} className="relative h-14 w-14 overflow-hidden rounded border border-gray-700">
+                                      <img src={photoUrl(photo)} alt={photo.name || "Снимка след ремонта"} className="h-full w-full object-cover" />
+                                      <button type="button" onClick={() => removeCompletionPhoto(r.id, photo.id)} className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1">x</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {showComplete && (
                             <button
                               onClick={() => completeRequest(r.id)}
@@ -772,6 +1015,7 @@ export default function WorkerProfile() {
                   const disabledApply = applied || closed || hasAssigned || applyingId === req.id;
                   const showContact = assignedToMe;
                   const showComplete = canComplete(req);
+                  const beforePhotos = requestPhotos(req);
 
                   return (
                     <div key={req.id} className="bg-gray-800 p-5 rounded-xl border border-gray-700">
@@ -800,6 +1044,25 @@ export default function WorkerProfile() {
                       <p className="text-gray-400 mt-3">{req.description || "Няма описание."}</p>
 
                       <p className="text-gray-500 text-sm mt-3">Създадена: {formatBG(req.created_at)}</p>
+
+                      {beforePhotos.length > 0 && (
+                        <div className="mt-4">
+                          <div className="text-sm font-bold text-gray-300 mb-2">Снимки от клиента</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {beforePhotos.map((photo) => (
+                              <a
+                                key={photo.id || photoUrl(photo)}
+                                href={photoUrl(photo)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+                              >
+                                <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {showContact && (
                         <div className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4">
@@ -833,6 +1096,23 @@ export default function WorkerProfile() {
 
                         <div className="flex items-center gap-2">
                           {showComplete && (
+                            <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
+                              <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
+                              <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(req.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
+                              {Array.isArray(completionPhotos[req.id]) && completionPhotos[req.id].length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  {completionPhotos[req.id].map((photo) => (
+                                    <div key={photo.id || photoUrl(photo)} className="relative h-14 w-14 overflow-hidden rounded border border-gray-700">
+                                      <img src={photoUrl(photo)} alt={photo.name || "Снимка след ремонта"} className="h-full w-full object-cover" />
+                                      <button type="button" onClick={() => removeCompletionPhoto(req.id, photo.id)} className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1">x</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {showComplete && (
                             <button
                               onClick={() => completeRequest(req.id)}
                               disabled={completingId === req.id}
@@ -864,6 +1144,40 @@ export default function WorkerProfile() {
                               : "Кандидатствай"}
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {activeTab === "history" && (
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <h1 className="text-3xl font-bold">История на ремонтите</h1>
+              <button onClick={loadCompletedRequests} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">Обнови</button>
+            </div>
+            {completedRequests.length === 0 ? (
+              <p className="text-gray-400">Все още няма завършени ремонти.</p>
+            ) : (
+              <div className="space-y-4">
+                {completedRequests.map((job) => {
+                  const before = Array.isArray(job.beforePhotos) ? job.beforePhotos : Array.isArray(job.photos) ? job.photos : [];
+                  const after = Array.isArray(job.afterPhotos) ? job.afterPhotos : [];
+                  const duration = job.durationDays || 1;
+                  return (
+                    <div key={job.id || job.requestId} className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div><h2 className="text-xl font-bold">#{job.requestId || job.id} • {job.category || "Ремонт"}</h2><p className="text-gray-400 text-sm mt-1">{job.address || "—"}</p></div>
+                        <div className="text-right text-sm"><div className="text-green-400 font-bold">Завършена</div><div className="text-gray-400 mt-1">Време: {duration} дни</div></div>
+                      </div>
+                      <p className="text-gray-300 mt-3">{job.description || "Няма описание."}</p>
+                      <div className="grid md:grid-cols-2 gap-4 mt-5">
+                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
                       </div>
                     </div>
                   );
@@ -1023,43 +1337,71 @@ export default function WorkerProfile() {
             <div className="mt-6">
               {galleryLoading ? (
                 <p className="text-gray-400">Зареждане...</p>
-              ) : gallery.length === 0 ? (
+              ) : galleryAlbums.length === 0 ? (
                 <p className="text-gray-400">Няма качени снимки.</p>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {gallery.map((img) => (
-                    <div key={img.id || img.url} className="bg-gray-800 border border-gray-700 rounded-xl p-3">
-                      <div className="aspect-square overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                        <img src={img.url} alt="gallery" className="w-full h-full object-cover" loading="lazy" />
-                      </div>
+                <div className="space-y-3">
+                  {galleryAlbums.map((album, albumIndex) => (
+                    <button
+                      key={album.id}
+                      type="button"
+                      onClick={() => openAlbum(albumIndex)}
+                      className="w-full text-left bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-blue-500 transition"
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-green-600/20 border border-green-500/40 px-3 py-1 text-xs font-bold text-green-300">
+                              Реален обект
+                            </span>
+                            <span className="rounded-full bg-blue-600/20 border border-blue-500/40 px-3 py-1 text-xs font-bold text-blue-200">
+                              {album.photos.length} снимки
+                            </span>
+                          </div>
 
-                      <div className="flex items-center justify-between gap-2 mt-3">
-                        <span className="text-xs text-gray-400">{formatBG(img.created_at || img.createdAt)}</span>
+                          <div className="mt-3 text-xl font-extrabold leading-tight">{album.title.replace(/^Обект #\d+\s•\s/, "")}</div>
+                          <div className="mt-1 text-sm text-gray-300">{album.subtitle}</div>
 
-                        <button
-                          disabled={deletingId === img.id}
-                          onClick={() => deleteGalleryImage(img.id)}
-                          className={
-                            deletingId === img.id
-                              ? "bg-gray-700 text-gray-300 px-3 py-1 rounded font-bold cursor-not-allowed text-xs"
-                              : "bg-red-600 hover:bg-red-700 px-3 py-1 rounded font-bold text-xs"
-                          }
-                        >
-                          {deletingId === img.id ? "Трия..." : "Изтрий"}
-                        </button>
+                          <div className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
+                            <div className="rounded-lg bg-gray-900 px-3 py-2">
+                              <div className="text-gray-500 text-xs">Статус</div>
+                              <div className="font-bold text-green-400">{album.type === "job" ? "Завършен" : "Портфолио"}</div>
+                            </div>
+                            <div className="rounded-lg bg-gray-900 px-3 py-2">
+                              <div className="text-gray-500 text-xs">Време</div>
+                              <div className="font-bold">{album.meta}</div>
+                            </div>
+                            <div className="rounded-lg bg-gray-900 px-3 py-2">
+                              <div className="text-gray-500 text-xs">Дата</div>
+                              <div className="font-bold">{formatBG(album.date)}</div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 text-sm font-bold text-blue-300">
+                            Виж всички снимки →
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
+                          <div className="overflow-hidden rounded-lg bg-gray-900">
+                            <img src={album.cover.url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                          </div>
+                          <div className="relative overflow-hidden rounded-lg bg-gray-900">
+                            <img src={(album.photos[1] || album.cover).url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                            {album.photos.length > 2 && (
+                              <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-lg font-extrabold">
+                                +{album.photos.length - 2}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="mt-8 bg-gray-800 border border-gray-700 rounded-xl p-5">
-              <h3 className="font-bold mb-2">Следваща стъпка (когато я вържем към заявки)</h3>
-              <p className="text-gray-300 text-sm">
-                Ще добавим <strong>requestId</strong> към качването и ще показваме галерията вътре в конкретна заявка.
-              </p>
-            </div>
           </div>
         )}
 
@@ -1132,6 +1474,66 @@ export default function WorkerProfile() {
           </div>
         )}
       </main>
+
+      {activeAlbum && activePhoto && (
+        <div className="fixed inset-0 z-[80] bg-black/85 px-4 py-6 flex items-center justify-center">
+          <div className="w-full max-w-5xl">
+            <div className="mb-3 flex items-center justify-between gap-3 text-white">
+              <div>
+                <div className="font-bold">{activeAlbum.title}</div>
+                <div className="text-sm text-gray-300">
+                  {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
+                </div>
+              </div>
+              <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
+                Затвори
+              </button>
+            </div>
+
+            <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
+              <img src={activePhoto.url} alt={activePhoto.name || activeAlbum.title} className="max-h-[72vh] w-full object-contain" />
+
+              {activeAlbum.photos.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => stepAlbumPhoto(-1)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stepAlbumPhoto(1)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+            </div>
+
+            {activeAlbum.photos.length > 1 && (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {activeAlbum.photos.map((photo, idx) => (
+                  <button
+                    key={photo.id || photo.url || idx}
+                    type="button"
+                    onClick={() => setAlbumViewer((viewer) => ({ ...viewer, photoIndex: idx }))}
+                    className={
+                      idx === albumViewer.photoIndex
+                        ? "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-blue-500"
+                        : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
+                    }
+                  >
+                    <img src={photo.url} alt={photo.name || activeAlbum.title} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

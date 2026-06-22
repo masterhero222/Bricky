@@ -1,5 +1,5 @@
-// src/App.jsx
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+﻿// src/App.jsx
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./layouts/Layout";
 
 // BASIC PAGES
@@ -19,11 +19,13 @@ import WorkerLogin from "./pages/workers/WorkerLogin";
 import WorkersRegister from "./pages/workers/WorkersRegister";
 import WorkerProfile from "./pages/workers/WorkerProfile"; 
 import WorkerPreview from "./pages/workers/WorkerPreview";
+import Workers from "./pages/workers/Workers";
 
 // REQUESTS
 import Requests from "./pages/Requests";
 
 import WorkerPage from "./pages/WorkerPage";
+import DevTestPanel from "./components/DevTestPanel";
 
 export default function App() {
   return (
@@ -66,12 +68,14 @@ export default function App() {
           />
 
           {/* WORKER PREVIEW (customer sees worker) */}
+          <Route path="/workers" element={<Workers />} />
           <Route path="/worker-preview" element={<WorkerPreview />} />
 
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
 
             <Route path="/worker/:userId" element={<WorkerPage />} />
+            <Route path="/workers/:id" element={<WorkerPage />} />
         </Route>
       </Routes>
     </Router>
@@ -89,3 +93,6 @@ function RequireWorker({ children }) {
     ? children
     : (window.location.href = "/auth");
 }
+
+
+

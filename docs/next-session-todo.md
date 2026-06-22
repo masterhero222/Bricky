@@ -1,0 +1,93 @@
+# Next Session TODO
+
+## Highest Priority
+
+- DONE in dev/mock: request workflow is stable enough for local testing from both client and worker sides.
+- DONE in dev/mock: changing worker profile settings no longer breaks the mock test profile.
+- DONE in dev/mock: worker profile photo/avatar and public grid cards use the saved mock profile data.
+- Continue removing remaining direct `axios` calls from pages that should go through the shared mock-aware API layer.
+- Keep localStorage image usage low in dev/mock mode; use `Dev test` reset when old large image blobs already exist.
+
+## Client Requests
+
+- DONE in dev/mock: client can upload photos of the place/problem that needs repair from the `Направи заявка` form.
+- Photos must appear:
+  - DONE in dev/mock: in the client request details;
+  - DONE in dev/mock: in the worker request feed/dashboard;
+  - in any request preview/details view.
+- Wire request photos to real backend file upload/storage instead of localStorage data URLs.
+- Client should receive an approximate price estimate while creating the request.
+- Estimate should use repair category, quantity/area/points, materials, and labor range.
+
+## Worker Gallery
+
+- DONE in dev/mock: workers can upload photos from completed/previous repairs.
+- DONE in dev/mock: worker gallery accepts data URLs and can display them locally.
+- DONE in dev/mock: closing a request can attach "after" photos and save before/after photos in worker history.
+- DONE in dev/mock: completed objects are grouped into compact portfolio/CV-style albums with cover photos and a viewer for all images.
+- DONE in dev/mock: public worker profile shows completed Bricky objects as proof of real work through the platform.
+- Wire worker gallery and completed-job photos to real backend file upload/storage.
+- Verify the same gallery/history behavior with production backend storage after upload endpoints are connected.
+- Decide whether repair photos are:
+  - general portfolio photos;
+  - linked to a specific completed request;
+  - or both.
+
+## Worker Profiles
+
+- DONE in dev/mock: worker profile avatar can be uploaded and saved.
+- DONE in dev/mock: worker profile information can be edited and saved.
+- DONE in dev/mock: `/workers` grid uses saved worker avatars and profile details.
+- Wire avatar/profile save to real backend storage and verify persistence after server deploy.
+- Add validation for profile fields so public profiles stay clean and professional.
+- Add moderation/AI review for uploaded profile images and portfolio photos before they become public.
+
+## Communication Rules
+
+- Remove worker phone numbers from client-facing UI.
+- Client-worker communication should happen through Bricky, not direct phone contact.
+- Replace phone/contact blocks with Bricky messaging/contact request flow.
+
+## Map Feature
+
+- Add a map of repair activities.
+- Reference visual direction: Payday 2 Crime.Net map style, but adapted for Bricky.
+- Requests should appear as map markers/cards with:
+  - repair category icon;
+  - location/area;
+  - urgency/status;
+  - short title/description;
+  - number of interested workers or assigned state.
+- Start with Sofia mock data, then wire to real request addresses/geocoding later.
+
+## Categories And Calculator
+
+- Review and finalize category list:
+  - repair roofs;
+  - bathroom renovation;
+  - full renovation;
+  - electrical installation;
+  - repainting;
+  - light refresh renovation;
+  - plus existing categories.
+- Research approximate material and labor prices.
+- Replace rough hardcoded estimates with a clearer pricing model:
+  - per square meter;
+  - per electrical/plumbing point;
+  - fixed base fee;
+  - difficulty multiplier;
+  - optional material quality level.
+
+## Cleanup
+
+- Stabilize `DevTestPanel` and mock localStorage DB.
+- Add a reset/seed explanation in docs or UI.
+- Audit all changed pages for direct `axios` calls.
+- Keep backend DTO/entity category enums aligned with frontend constants.
+- Add a production deployment checklist:
+  - backend env variables;
+  - database migrations/schema sync;
+  - upload storage path or object storage;
+  - nginx/static frontend config;
+  - PM2 backend restart;
+  - smoke test for `/workers`, login, request creation, and worker profile.

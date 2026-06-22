@@ -7,6 +7,7 @@ import { apiGet, apiPost } from "../../services/api";
 function absUrl(url) {
   if (!url) return "";
   if (typeof url !== "string") return "";
+  if (/^(data:|blob:)/i.test(url)) return url;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   return `${import.meta.env.VITE_API_URL}${url}`;
 }
@@ -39,7 +40,9 @@ export default function WorkerPreview() {
 
   const [worker, setWorker] = useState(null);
   const [gallery, setGallery] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
   const [ratingInfo, setRatingInfo] = useState({ total: 0, average: 0 });
+  const [albumViewer, setAlbumViewer] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -58,13 +61,15 @@ export default function WorkerPreview() {
         setErr("Липсва userId в URL.");
         setWorker(null);
         setGallery([]);
+        setCompletedJobs([]);
         setRatingInfo({ total: 0, average: 0 });
         return;
       }
 
-      const [wRes, gRes, rRes] = await Promise.all([
+      const [wRes, gRes, hRes, rRes] = await Promise.all([
         apiGet(`/workers/${userId}`),
         apiGet(`/workers/${userId}/gallery`).catch(() => ({ data: [] })),
+        apiGet(`/workers/${userId}/history`).catch(() => ({ data: [] })),
         apiGet(`/reviews/worker/${userId}`).catch(() => ({ data: { total: 0, average: 0 } })),
       ]);
 
@@ -80,6 +85,8 @@ export default function WorkerPreview() {
           .filter((x) => !!x.url)
       );
 
+      setCompletedJobs(Array.isArray(hRes.data) ? hRes.data : []);
+
       const info = rRes?.data || {};
       const total = Number(info.total);
       const average = Number(info.average);
@@ -93,6 +100,7 @@ export default function WorkerPreview() {
       setErr("Не успях да заредя профила на майстора.");
       setWorker(null);
       setGallery([]);
+      setCompletedJobs([]);
       setRatingInfo({ total: 0, average: 0 });
     } finally {
       setLoading(false);
@@ -130,6 +138,81 @@ export default function WorkerPreview() {
     const v = Number(ratingInfo.average);
     return Number.isFinite(v) ? v.toFixed(1) : "0.0";
   }, [ratingInfo.average]);
+
+  const workerAlbums = useMemo(() => {
+    const cleanPhotos = (items = []) =>
+      (Array.isArray(items) ? items : [])
+        .map((photo) => ({
+          ...photo,
+          url: absUrl(typeof photo === "string" ? photo : photo?.url || photo?.dataUrl || photo?.imageUrl || photo?.path || ""),
+        }))
+        .filter((photo) => !!photo.url);
+
+    const jobAlbums = (Array.isArray(completedJobs) ? completedJobs : [])
+      .map((job) => {
+        const before = cleanPhotos(job.beforePhotos || job.photos);
+        const after = cleanPhotos(job.afterPhotos);
+        const photos = [...after, ...before];
+        const id = job.requestId || job.id;
+
+        return {
+          id: `job-${id}`,
+          type: "job",
+          title: job.category || "Ремонт",
+          subtitle: job.address || "Завършен обект през Bricky",
+          meta: `${job.durationDays || 1} дни`,
+          date: job.completedAt || job.created_at || job.createdAt,
+          photos,
+          cover: photos[0],
+        };
+      })
+      .filter((album) => album.photos.length > 0);
+
+    if (jobAlbums.length > 0) return jobAlbums;
+
+    const loosePhotos = cleanPhotos(gallery);
+    return loosePhotos.length
+      ? [
+          {
+            id: "portfolio",
+            type: "manual",
+            title: "Портфолио снимки",
+            subtitle: "Качени снимки от обекти",
+            meta: `${loosePhotos.length} снимки`,
+            date: loosePhotos[0]?.created_at || loosePhotos[0]?.createdAt,
+            photos: loosePhotos,
+            cover: loosePhotos[0],
+          },
+        ]
+      : [];
+  }, [completedJobs, gallery]);
+
+  const activeAlbum =
+    albumViewer && workerAlbums[albumViewer.albumIndex] ? workerAlbums[albumViewer.albumIndex] : null;
+  const activePhoto =
+    activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
+      ? activeAlbum.photos[albumViewer?.photoIndex || 0]
+      : null;
+
+  function openAlbum(albumIndex, photoIndex = 0) {
+    setAlbumViewer({ albumIndex, photoIndex });
+  }
+
+  function closeAlbum() {
+    setAlbumViewer(null);
+  }
+
+  function stepAlbumPhoto(delta) {
+    setAlbumViewer((viewer) => {
+      if (!viewer) return viewer;
+      const album = workerAlbums[viewer.albumIndex];
+      if (!album?.photos?.length) return viewer;
+      return {
+        ...viewer,
+        photoIndex: (viewer.photoIndex + delta + album.photos.length) % album.photos.length,
+      };
+    });
+  }
 
   if (loading) {
     return (
@@ -205,29 +288,48 @@ export default function WorkerPreview() {
           </div>
 
           <div className="bg-gray-100 p-6 rounded-2xl">
-            <div className="text-xl font-bold text-red-600 text-center mb-3">Снимки от обекти</div>
+            <div className="text-xl font-bold text-red-600 mb-3">Реални обекти през Bricky</div>
 
-            {gallery.length === 0 ? (
-              <div className="text-gray-500 text-center">(MVP) Няма качени снимки.</div>
+            {workerAlbums.length === 0 ? (
+              <div className="text-gray-500">(MVP) Няма качени обекти.</div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {gallery.slice(0, 6).map((img) => (
-                  <a
-                    key={img.id || img.url}
-                    href={img.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-xl overflow-hidden border border-gray-200 bg-white"
-                    title="Отвори снимката"
+              <div className="space-y-3">
+                {workerAlbums.map((album, albumIndex) => (
+                  <button
+                    key={album.id}
+                    type="button"
+                    onClick={() => openAlbum(albumIndex)}
+                    className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 hover:border-red-300 hover:shadow-md transition"
                   >
-                    <img src={img.url} className="w-full h-28 object-cover" loading="lazy" />
-                  </a>
+                    <div className="flex gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-green-700">Завършен обект</div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-950">{album.title}</div>
+                        <div className="mt-1 text-sm text-gray-600 line-clamp-1">{album.subtitle}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-gray-100 px-2 py-1 font-bold">{album.meta}</span>
+                          <span className="rounded-full bg-blue-100 text-blue-700 px-2 py-1 font-bold">{album.photos.length} снимки</span>
+                        </div>
+                        <div className="mt-3 text-sm font-bold text-red-600">Разгледай обекта →</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 w-36 h-24 shrink-0">
+                        <div className="overflow-hidden rounded-lg bg-gray-200">
+                          <img src={album.cover.url} alt={album.title} className="h-full w-full object-cover" loading="lazy" />
+                        </div>
+                        <div className="relative overflow-hidden rounded-lg bg-gray-200">
+                          <img src={(album.photos[1] || album.cover).url} alt={album.title} className="h-full w-full object-cover" loading="lazy" />
+                          {album.photos.length > 2 && (
+                            <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-white font-extrabold">
+                              +{album.photos.length - 2}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
                 ))}
               </div>
-            )}
-
-            {gallery.length > 6 && (
-              <div className="text-center text-gray-500 text-sm mt-3">+ още {gallery.length - 6} снимки</div>
             )}
           </div>
 
@@ -264,6 +366,66 @@ export default function WorkerPreview() {
           Preview режим: клиентът разглежда профил и избира майстор за заявката.
         </div>
       </div>
+
+      {activeAlbum && activePhoto && (
+        <div className="fixed inset-0 z-[80] bg-black/85 px-4 py-6 flex items-center justify-center">
+          <div className="w-full max-w-5xl">
+            <div className="mb-3 flex items-center justify-between gap-3 text-white">
+              <div>
+                <div className="font-bold">{activeAlbum.title}</div>
+                <div className="text-sm text-gray-300">
+                  {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
+                </div>
+              </div>
+              <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
+                Затвори
+              </button>
+            </div>
+
+            <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
+              <img src={activePhoto.url} alt={activePhoto.name || activeAlbum.title} className="max-h-[72vh] w-full object-contain" />
+
+              {activeAlbum.photos.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => stepAlbumPhoto(-1)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stepAlbumPhoto(1)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+            </div>
+
+            {activeAlbum.photos.length > 1 && (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {activeAlbum.photos.map((photo, idx) => (
+                  <button
+                    key={photo.id || photo.url || idx}
+                    type="button"
+                    onClick={() => setAlbumViewer((viewer) => ({ ...viewer, photoIndex: idx }))}
+                    className={
+                      idx === albumViewer.photoIndex
+                        ? "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-red-500"
+                        : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
+                    }
+                  >
+                    <img src={photo.url} alt={photo.name || activeAlbum.title} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

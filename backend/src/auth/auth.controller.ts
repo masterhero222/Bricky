@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+﻿import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -12,6 +12,11 @@ export class AuthController {
     return this.auth.register(dto);
   }
 
+
+  @Post('dev-login')
+  devLogin(@Body() dto: { role?: 'client' | 'worker' }) {
+    return this.auth.devLogin(dto?.role === 'worker' ? 'worker' : 'client');
+  }
   @Post('login')
   login(@Body() dto: LoginUserDto) {
     return this.auth.login(dto);
@@ -29,4 +34,5 @@ registerWorker(@Body() dto: any) {
 
 
 }
+
 

@@ -1,6 +1,5 @@
-// src/pages/WorkerLogin.jsx
-import { useState } from "react";
-import axios from "axios";
+﻿import { useState } from "react";
+import { apiPost } from "../../services/api";
 
 export default function WorkerLogin() {
   const [form, setForm] = useState({
@@ -9,12 +8,32 @@ export default function WorkerLogin() {
   });
 
   const [error, setError] = useState("");
+  const [devLoading, setDevLoading] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError("");
   };
 
+  const finishLogin = (data) => {
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("role", data.user.role);
+    localStorage.setItem("userName", data.user.name || "");
+    window.location.href = "/worker/profile";
+  };
+
+
+  const finishDevLoginOffline = (role) => {
+    finishLogin({
+      token: `local-dev-token-${role}`,
+      user: {
+        id: role === "client" ? 1 : 2,
+        role,
+        name: role === "client" ? "Dev Client" : "Dev Worker",
+        email: `${role}.dev@bricky.local`,
+      },
+    });
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -24,17 +43,26 @@ export default function WorkerLogin() {
         password: form.password,
       };
 
-      const res = await axios.post(
-        `${import.meta.env.VITE_API_URL}/auth/login`,
-        payload
-      );
-
-      // очакваме token в res.data.token
-      localStorage.setItem("token", res.data.token);
-      window.location.href = "/worker/profile";
+      const res = await apiPost("/auth/login", payload);
+      finishLogin(res.data);
     } catch (err) {
       console.error("Worker login error:", err?.response?.data || err.message);
       setError("Грешен имейл или парола.");
+    }
+  };
+
+  const devLogin = async () => {
+    setError("");
+    setDevLoading(true);
+
+    try {
+      const res = await apiPost("/auth/dev-login", { role: "worker" });
+      finishLogin(res.data);
+    } catch (err) {
+      console.error("Worker dev login error:", err?.response?.data || err.message);
+      finishDevLoginOffline("worker");
+    } finally {
+      setDevLoading(false);
     }
   };
 
@@ -71,7 +99,20 @@ export default function WorkerLogin() {
         <button className="w-full bg-blue-600 p-3 rounded font-bold">
           Вход
         </button>
+
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            onClick={devLogin}
+            disabled={devLoading}
+            className="w-full rounded bg-amber-700 p-3 font-bold hover:bg-amber-600 disabled:opacity-60"
+          >
+            {devLoading ? "Влизам..." : "Dev: влез като майстор"}
+          </button>
+        )}
       </form>
     </div>
   );
 }
+
+

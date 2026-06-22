@@ -1,5 +1,5 @@
-import { useState } from "react";
-import axios from "axios";
+﻿import { useState } from "react";
+import { apiPost } from "../services/api";
 
 export default function Register() {
   const [role, setRole] = useState("client");
@@ -56,7 +56,7 @@ export default function Register() {
           };
 
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, payload);
+      await apiPost(endpoint, payload);
       alert("Успешна регистрация!");
       window.location.href = "/auth/login";
     } catch (err) {
@@ -187,3 +187,4 @@ export default function Register() {
     </div>
   );
 }
+

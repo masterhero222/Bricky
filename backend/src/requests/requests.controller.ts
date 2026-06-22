@@ -11,11 +11,19 @@ import {
 import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRequestDto } from './dto/create-request.dto';
+import { RequestDraftDto } from './dto/request-draft.dto';
 
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly requests: RequestsService) {}
 
+
+  @UseGuards(JwtAuthGuard)
+  @Post('draft')
+  async draft(@Req() req: any, @Body() dto: RequestDraftDto) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.draftRequest(dto.prompt, dto.address);
+  }
   @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
@@ -37,7 +45,7 @@ export class RequestsController {
     return this.requests.getForWorkersFeed(Number(req.user.id));
   }
 
-  // ✅ worker история (завършени)
+  // ? worker ������� (���������)
   @UseGuards(JwtAuthGuard)
   @Get('worker/completed')
   async workerCompleted(@Req() req: any) {
@@ -70,11 +78,11 @@ export class RequestsController {
     return this.requests.unassignWorker(Number(id), Number(req.user.id));
   }
 
-  // ✅ worker затваря заявка
+  // ? worker ������� ������
   @UseGuards(JwtAuthGuard)
   @Post(':id/complete')
-  async complete(@Req() req: any, @Param('id') id: string) {
+  async complete(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.completeRequest(Number(id), Number(req.user.id));
+    return this.requests.completeRequest(Number(id), Number(req.user.id), body?.afterPhotos || []);
   }
 }

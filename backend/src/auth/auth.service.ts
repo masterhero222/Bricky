@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+﻿import { Injectable, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
@@ -60,6 +60,27 @@ export class AuthService {
     throw new BadRequestException('Невалидна роля');
   }
 
+
+  async devLogin(role: 'client' | 'worker') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new BadRequestException('Dev login is disabled in production');
+    }
+
+    const safeRole = role === 'worker' ? 'worker' : 'client';
+    const user = {
+      id: safeRole === 'client' ? 1 : 2,
+      role: safeRole,
+      name: safeRole === 'client' ? 'Dev Client' : 'Dev Worker',
+      email: safeRole === 'client' ? 'client.dev@bricky.local' : 'worker.dev@bricky.local',
+    };
+
+    const token = await this.jwt.signAsync({
+      id: user.id,
+      role: user.role,
+    });
+
+    return { token, user };
+  }
   async login(dto: LoginUserDto) {
     const user = await this.users.findByEmail(dto.email);
     if (!user) throw new BadRequestException('Грешен имейл или парола');
@@ -83,3 +104,4 @@ export class AuthService {
     };
   }
 }
+

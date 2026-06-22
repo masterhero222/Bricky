@@ -1,13 +1,9 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { apiPost } from "../services/api";
+import { REPAIR_CATEGORIES, estimateRepairPrice } from "../constants/repairCatalog";
 import { useAuthModal } from "../context/AuthModalContext";
 
-const PRICE_TABLE = {
-  "Баня": { material: 140, labor: 90 },
-  "Шпакловка и боя": { material: 18, labor: 20 },
-  "Плочки": { material: 40, labor: 32 },
-  "ВиК": { material: 55, labor: 45 },
-};
+
 
 export default function Requests() {
   const { showLogin } = useAuthModal();
@@ -164,12 +160,13 @@ export default function Requests() {
               onChange={handleChange}
               className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             >
-              <option value="">Избери категория ремонт</option>
-              <option value="ВиК">ВиК</option>
-              <option value="Електро">Електро</option>
-              <option value="Шпакловка и боя">Шпакловка и боя</option>
-              <option value="Плочки">Плочки</option>
-            </select>
+              <option value="">Тип ремонт</option>
+            {REPAIR_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
 
             <textarea
               name="description"
@@ -206,19 +203,20 @@ export default function Requests() {
             className="w-full p-3 rounded bg-gray-700 border border-gray-600"
           >
             <option value="">Тип ремонт</option>
-            <option value="Баня">Баня</option>
-            <option value="Шпакловка и боя">Шпакловка и боя</option>
-            <option value="Плочки">Плочки</option>
-            <option value="ВиК">ВиК</option>
+            {REPAIR_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
           </select>
 
           <input
             type="number"
             min="0"
             step="0.1"
-            value={calc.area}
-            onChange={(e) => updateCalc("area", e.target.value)}
-            placeholder="Площ (кв.м)"
+            value={calc.quantity}
+            onChange={(e) => updateCalc("quantity", e.target.value)}
+            placeholder={`Количество (${calc.unit || "кв.м / точка"})`}
             className="w-full p-3 rounded bg-gray-700 border border-gray-600"
           />
 
@@ -250,3 +248,4 @@ export default function Requests() {
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { apiGet } from "../../services/api";
 
 function joinUrl(base, path) {
   const b = String(base || "").replace(/\/+$/, "");
@@ -22,6 +22,7 @@ function getAssetBase() {
 
 function absUrl(url) {
   if (!url || typeof url !== "string") return "";
+  if (/^(data:|blob:)/i.test(url)) return url;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   return joinUrl(getAssetBase(), url);
 }
@@ -41,14 +42,7 @@ export default function Workers() {
       setLoading(true);
       setError("");
 
-      const token =
-        localStorage.getItem("token") ||
-        localStorage.getItem("access_token") ||
-        "";
-
-      const res = await axios.get(`${getApiBase()}/workers`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiGet("/workers");
 
       const data = Array.isArray(res?.data) ? res.data : [];
       setWorkers(data);
@@ -73,6 +67,8 @@ export default function Workers() {
         Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
       const description = w.description || "Няма описание.";
       const avatar = w.avatarUrl ? absUrl(w.avatarUrl) : "/media_files/Snejan.jpg";
+      const completedJobs = Array.isArray(w.completedJobs) ? w.completedJobs : [];
+      const jobTypes = Array.from(new Set(completedJobs.map((job) => job.category).filter(Boolean))).slice(0, 3);
 
       return {
         ...w,
@@ -83,6 +79,8 @@ export default function Workers() {
         _skill: skill,
         _description: description,
         _avatar: avatar,
+        _completedCount: completedJobs.length,
+        _jobTypes: jobTypes,
       };
     });
   }, [workers]);
@@ -122,28 +120,48 @@ export default function Workers() {
             {cards.map((w) => (
               <button
                 key={w._id}
-                onClick={() => navigate(`/workers/${w._id}`)}
+                onClick={() => navigate(`/worker-preview?userId=${w._id}`)}
                 className="text-left bg-white text-black rounded-2xl shadow-xl overflow-hidden hover:scale-[1.01] transition"
               >
-                <div className="h-48 bg-gray-200">
-                  <img
-                    src={w._avatar}
-                    alt={w._name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = "/media_files/Snejan.jpg";
-                    }}
-                  />
+                <div className="bg-gradient-to-br from-gray-100 to-gray-200 px-5 pt-6 pb-5">
+                  <div className="flex items-center gap-4">
+                    <div className="h-24 w-24 shrink-0 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-300">
+                      <img
+                        src={w._avatar}
+                        alt={w._name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "/media_files/Snejan.jpg";
+                        }}
+                      />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="text-lg font-extrabold leading-tight">{w._name}</div>
+                      <div className="text-sm text-gray-600 mt-1">{w._skill}</div>
+                      <div className="mt-3 inline-flex rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-bold">
+                        {w._completedCount} обекта през Bricky
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="p-5">
-                  <div className="text-lg font-extrabold">{w._name}</div>
-                  <div className="text-sm text-gray-600 mt-1">{w._skill}</div>
 
                   <div className="mt-4 text-sm text-gray-700 space-y-1">
                     <div><b>Град:</b> {w._city}</div>
-                    <div><b>Телефон:</b> {w._phone}</div>
+                    <div><b>Профилна снимка:</b> {w.avatarUrl ? "качена" : "очаква се"}</div>
                   </div>
+
+                  {w._jobTypes.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {w._jobTypes.map((type) => (
+                        <span key={type} className="rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-bold">
+                          {type}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="mt-4 text-sm text-gray-600 line-clamp-3">
                     {w._description}

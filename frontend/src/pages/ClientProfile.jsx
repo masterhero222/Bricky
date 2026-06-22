@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
+import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 
 function formatBG(dateStr) {
@@ -24,6 +25,56 @@ function uniqNums(arr) {
     }
   });
   return out;
+}
+
+function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const scale = Math.min(1, maxSize / Math.max(img.width || 1, img.height || 1));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round((img.width || 1) * scale));
+      canvas.height = Math.max(1, Math.round((img.height || 1) * scale));
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Cannot read image"));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+function filesToPhotos(files) {
+  const images = Array.from(files || []).filter((file) => String(file.type || "").startsWith("image/"));
+  return Promise.all(
+    images.map(async (file) => ({
+      id: `${Date.now()}-${file.name}`,
+      name: file.name,
+      url: await imageFileToDataUrl(file),
+    }))
+  );
+}
+
+function photoUrl(photo) {
+  const raw =
+    typeof photo === "string"
+      ? photo
+      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
+
+  if (!raw) return "";
+  if (/^(data:|blob:|https?:\/\/)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${raw}`;
+  return raw;
 }
 
 function safeRatingValue(x) {
@@ -55,6 +106,7 @@ export default function ClientProfile() {
     address: "",
     category: "ВиК",
     description: "",
+    photos: [],
   });
 
   const [createError, setCreateError] = useState("");
@@ -189,6 +241,28 @@ export default function ClientProfile() {
     }
   }
 
+  async function handleRequestPhotos(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    try {
+      const photos = await filesToPhotos(files);
+      setNewReq((p) => ({ ...p, photos: [...(p.photos || []), ...photos] }));
+    } catch (err) {
+      console.error(err);
+      setCreateError("Не успях да прочета избраните снимки.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function removeRequestPhoto(photoId) {
+    setNewReq((p) => ({
+      ...p,
+      photos: (p.photos || []).filter((photo) => String(photo.id) !== String(photoId)),
+    }));
+  }
+
   async function createRequest() {
     setCreateError("");
     setCreateOk("");
@@ -200,9 +274,11 @@ export default function ClientProfile() {
         address: newReq.address,
         category: newReq.category,
         description: newReq.description,
+        photos: newReq.photos || [],
       });
 
       setCreateOk(`Заявката е създадена! (#${res.data?.id ?? "?"})`);
+      setNewReq((p) => ({ ...p, description: "", photos: [] }));
       setActiveTab("requests");
       await loadData();
     } catch (err) {
@@ -358,6 +434,19 @@ export default function ClientProfile() {
                           </h2>
                           <p className="text-gray-400 text-sm mt-1">Създадена: {formatBG(r.created_at)}</p>
                         </div>
+                      {Array.isArray(r.photos) && r.photos.length > 0 && (
+                        <div className="mt-4">
+                          <div className="text-sm font-bold text-gray-300 mb-2">Снимки към заявката</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {r.photos.map((photo) => (
+                              <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
+                                <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
 
                         <div className="text-right">
                           <div className="text-sm text-gray-300">
@@ -596,6 +685,27 @@ export default function ClientProfile() {
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full h-32"
                 placeholder="Опиши проблема..."
               />
+
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+                <label className="block font-bold mb-2">Снимки на проблема / мястото за ремонт</label>
+                <input type="file" accept="image/*" multiple onChange={handleRequestPhotos} className="block w-full text-sm" />
+                <p className="text-xs text-gray-400 mt-2">
+                  Тези снимки ще помогнат на майсторите да преценят ремонта и ще се пазят към историята на заявката.
+                </p>
+
+                {Array.isArray(newReq.photos) && newReq.photos.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                    {newReq.photos.map((photo) => (
+                      <div key={photo.id || photoUrl(photo)} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
+                        <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover" />
+                        <button type="button" onClick={() => removeRequestPhoto(photo.id)} className="absolute right-1 top-1 bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 rounded">
+                          Махни
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={createRequest}

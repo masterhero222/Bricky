@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateRequestDto {
   @IsNotEmpty()
@@ -18,10 +18,14 @@ export class CreateRequestDto {
   address?: string;
 
   @IsOptional()
-  @IsIn(['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки'])
+  @IsIn(['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки', 'Ремонт на покриви', 'Ремонт на бани', 'Основен ремонт', 'Електро инсталация', 'Пребоядисване', 'Освежителен ремонт'])
   category?: string;
 
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsArray()
+  photos?: any[];
 }

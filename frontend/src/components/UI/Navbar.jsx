@@ -1,4 +1,4 @@
-// src/components/UI/Navbar.jsx
+﻿// src/components/UI/Navbar.jsx
 import React, { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -19,7 +19,7 @@ export default function Navbar() {
 
         <nav className="hidden md:flex gap-8 text-gray-300 font-medium">
           <Link to="/">Начало</Link>
-          <Link to="/worker-preview">Майсторите</Link>
+          <Link to="/workers">Майсторите</Link>
           <Link to="/about">За нас</Link>
         </nav>
 
@@ -56,7 +56,7 @@ export default function Navbar() {
       {open && (
         <div className="md:hidden bg-black/90 px-6 py-4 flex flex-col gap-4 text-gray-200 border-t border-gray-800">
           <Link to="/" onClick={() => setOpen(false)}>Начало</Link>
-          <Link to="/worker-preview" onClick={() => setOpen(false)}>Майсторите</Link>
+          <Link to="/workers" onClick={() => setOpen(false)}>Майсторите</Link>
           <Link to="/about" onClick={() => setOpen(false)}>За нас</Link>
 
           {!role && (
