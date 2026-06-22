@@ -32,15 +32,6 @@ export class RequestEntity {
   @Column({ length: 255, nullable: true })
   address: string;
 
-  @Column({ type: 'float', nullable: true })
-  latitude: number | null;
-
-  @Column({ type: 'float', nullable: true })
-  longitude: number | null;
-
-  @Column({ length: 40, nullable: true })
-  locationSource: string | null;
-
   @Column({ length: 100, nullable: true })
   category: string;
 

@@ -95,6 +95,8 @@
 - DONE in dev/mock: workers can apply from the selected map request.
 - NEXT: add real address geocoding for manually typed client addresses.
 - NEXT: add production DB migration for request `latitude`, `longitude`, and `locationSource`.
+  - Current map branch is live-safe without these DB columns.
+  - Exact production coordinate persistence is deferred until the migration is added.
 - NEXT: decide map provider for production:
   - OpenStreetMap tiles;
   - Google Maps;

@@ -89,13 +89,13 @@ These are added in:
 
 - frontend request creation;
 - dev mock API;
-- backend DTO;
-- backend request entity;
-- backend request creation service.
+- backend DTO.
 
 Important production note:
 
-- production DB needs columns/migration for `latitude`, `longitude`, and `locationSource` before this is deployed against a real database with schema sync disabled.
+- the live-safe version intentionally does not add `latitude`, `longitude`, or `locationSource` columns to the TypeORM `RequestEntity` yet;
+- this lets the map branch deploy without a production DB migration;
+- real production persistence for exact coordinates still needs a later DB migration.
 
 ## Files Changed
 
@@ -133,7 +133,7 @@ Local test URL:
 
 - Add real geocoding for manually typed addresses.
 - Replace mock sample image paths with real uploaded request photos in production.
-- Add production DB migration for location columns.
+- Add production DB migration for location columns before exact production coordinate persistence.
 - Decide whether production should use:
   - OpenStreetMap tiles;
   - Google Maps;
