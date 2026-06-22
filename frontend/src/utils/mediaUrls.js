@@ -5,7 +5,17 @@ function joinUrl(base, path) {
 }
 
 export function getApiBase() {
-  return String(import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+  const configured = String(import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+
+  if (
+    typeof window !== "undefined" &&
+    window.location?.protocol === "https:" &&
+    /^http:\/\//i.test(configured)
+  ) {
+    return "/api";
+  }
+
+  return configured;
 }
 
 export function getAssetBase() {

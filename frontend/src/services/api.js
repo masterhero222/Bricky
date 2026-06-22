@@ -1,8 +1,9 @@
 ﻿// src/services/api.js
 import axios from "axios";
 import { isDevMockToken, mockRequest } from "./devMockApi";
+import { getApiBase } from "../utils/mediaUrls";
 
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = getApiBase();
 
 export function getToken() {
   return (
