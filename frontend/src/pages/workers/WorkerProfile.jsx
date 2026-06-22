@@ -4,6 +4,7 @@ import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
+import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 
 const PRICE_TABLE = {
   Баня: { material: 140 },
@@ -26,23 +27,11 @@ function getToken() {
 }
 
 function absUrl(url) {
-  if (!url) return "";
-  const raw = String(url);
-  const dataIndex = raw.indexOf("data:image/");
-  if (dataIndex > 0) return raw.slice(dataIndex);
-  if (/^(data:|blob:)/i.test(raw)) return raw;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${url}`;
-  return url;
+  return mediaUrl(url);
 }
 
 function photoUrl(photo) {
-  const raw =
-    typeof photo === "string"
-      ? photo
-      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
-
-  return absUrl(raw);
+  return photoMediaUrl(photo);
 }
 
 function requestPhotos(req) {
@@ -376,7 +365,7 @@ export default function WorkerProfile() {
     const fd = new FormData();
     fd.append("avatar", profile.avatar);
 
-    const res = await axios.post(`${import.meta.env.VITE_API_URL}/workers/me/avatar`, fd, {
+    const res = await axios.post(`${getApiBase()}/workers/me/avatar`, fd, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
@@ -529,7 +518,7 @@ export default function WorkerProfile() {
       const fd = new FormData();
       galleryFiles.forEach((f) => fd.append("images", f));
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/workers/me/gallery`, fd, {
+      await axios.post(`${getApiBase()}/workers/me/gallery`, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -629,7 +618,10 @@ export default function WorkerProfile() {
   const galleryAlbums = useMemo(() => {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
-        .map((photo) => ({ ...photo, url: photoUrl(photo) }))
+        .map((photo) => ({
+          ...(typeof photo === "object" && photo ? photo : {}),
+          url: photoUrl(photo),
+        }))
         .filter((photo) => !!photo.url);
 
     const completedAlbums = (Array.isArray(completedRequests) ? completedRequests : [])
@@ -1236,7 +1228,13 @@ export default function WorkerProfile() {
             <div className="mb-8">
               <h2 className="text-xl font-semibold">Профилна снимка</h2>
               <div className="flex items-center gap-6 mt-4">
-                <img src={avatarSrc} className="w-32 h-32 rounded-full border-4 border-red-500 object-cover" />
+                <img
+                  src={avatarSrc}
+                  className="w-32 h-32 rounded-full border-4 border-red-500 object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = "/media_files/Snejan.jpg";
+                  }}
+                />
                 <input type="file" accept="image/*" onChange={handleAvatarUpload} />
               </div>
             </div>
@@ -1384,10 +1382,26 @@ export default function WorkerProfile() {
 
                         <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
                           <div className="overflow-hidden rounded-lg bg-gray-900">
-                            <img src={album.cover.url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={album.cover.url}
+                              alt={album.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
                           </div>
                           <div className="relative overflow-hidden rounded-lg bg-gray-900">
-                            <img src={(album.photos[1] || album.cover).url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={(album.photos[1] || album.cover).url}
+                              alt={album.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
                             {album.photos.length > 2 && (
                               <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-lg font-extrabold">
                                 +{album.photos.length - 2}
@@ -1491,7 +1505,14 @@ export default function WorkerProfile() {
             </div>
 
             <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
-              <img src={activePhoto.url} alt={activePhoto.name || activeAlbum.title} className="max-h-[72vh] w-full object-contain" />
+              <img
+                src={activePhoto.url}
+                alt={activePhoto.name || activeAlbum.title}
+                className="max-h-[72vh] w-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
 
               {activeAlbum.photos.length > 1 && (
                 <>
@@ -1526,7 +1547,14 @@ export default function WorkerProfile() {
                         : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
                     }
                   >
-                    <img src={photo.url} alt={photo.name || activeAlbum.title} className="h-full w-full object-cover" />
+                    <img
+                      src={photo.url}
+                      alt={photo.name || activeAlbum.title}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
                   </button>
                 ))}
               </div>

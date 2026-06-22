@@ -1,31 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet } from "../../services/api";
-
-function joinUrl(base, path) {
-  const b = String(base || "").replace(/\/+$/, "");
-  const p = String(path || "").replace(/^\/+/, "");
-  return `${b}/${p}`;
-}
-
-function getApiBase() {
-  return String(import.meta.env.VITE_API_URL || "http://94.72.143.22:3000").replace(/\/+$/, "");
-}
-
-function getAssetBase() {
-  const explicit = import.meta.env.VITE_ASSET_BASE_URL;
-  if (explicit) return String(explicit).replace(/\/+$/, "");
-
-  const api = getApiBase();
-  return api.replace(/\/api$/i, "");
-}
-
-function absUrl(url) {
-  if (!url || typeof url !== "string") return "";
-  if (/^(data:|blob:)/i.test(url)) return url;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return joinUrl(getAssetBase(), url);
-}
+import { mediaUrl } from "../../utils/mediaUrls";
 
 export default function Workers() {
   const navigate = useNavigate();
@@ -66,7 +42,7 @@ export default function Workers() {
       const skill =
         Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
       const description = w.description || "Няма описание.";
-      const avatar = w.avatarUrl ? absUrl(w.avatarUrl) : "/media_files/Snejan.jpg";
+      const avatar = w.avatarUrl ? mediaUrl(w.avatarUrl) : "/media_files/Snejan.jpg";
       const completedJobs = Array.isArray(w.completedJobs) ? w.completedJobs : [];
       const jobTypes = Array.from(new Set(completedJobs.map((job) => job.category).filter(Boolean))).slice(0, 3);
 
@@ -120,7 +96,7 @@ export default function Workers() {
             {cards.map((w) => (
               <button
                 key={w._id}
-                onClick={() => navigate(`/worker-preview?userId=${w._id}`)}
+                onClick={() => navigate(`/workers/${w._id}`)}
                 className="text-left bg-white text-black rounded-2xl shadow-xl overflow-hidden hover:scale-[1.01] transition"
               >
                 <div className="bg-gradient-to-br from-gray-100 to-gray-200 px-5 pt-6 pb-5">

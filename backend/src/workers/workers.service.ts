@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
+import { RequestEntity } from '../requests/entities/request.entity';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -22,6 +23,9 @@ export class WorkersService {
 
     @InjectRepository(WorkerGalleryImage)
     private readonly galleryRepo: Repository<WorkerGalleryImage>,
+
+    @InjectRepository(RequestEntity)
+    private readonly requestRepo: Repository<RequestEntity>,
   ) {}
 
   /**
@@ -67,7 +71,8 @@ export class WorkersService {
   }
 
   async findByUserId(userId: number) {
-    return this.workerRepository.findOne({ where: { userId } });
+    const worker = await this.workerRepository.findOne({ where: { userId } });
+    return worker ? this.withGallerySummary(worker) : worker;
   }
 
   /**
@@ -85,7 +90,7 @@ export class WorkersService {
     if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
 
     if (!worker) throw new NotFoundException('Worker not found');
-    return worker;
+    return this.withGallerySummary(worker);
   }
 
   /**
@@ -121,9 +126,10 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    return this.workerRepository.find({
+    const workers = await this.workerRepository.find({
       where: { userId: In(clean) },
     });
+    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
   async findByIdsSmart(ids: number[]) {
@@ -135,9 +141,10 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    return this.workerRepository.find({
+    const workers = await this.workerRepository.find({
       where: [{ id: In(clean) }, { userId: In(clean) }],
     });
+    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
   async updateProfile(id: number, data: Partial<Worker>) {
@@ -151,7 +158,8 @@ export class WorkersService {
   }
 
   async getAll() {
-    return this.workerRepository.find();
+    const workers = await this.workerRepository.find();
+    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
   // =========================
@@ -161,10 +169,14 @@ export class WorkersService {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
-    return this.galleryRepo.find({
+    const rows = await this.galleryRepo.find({
       where: { userId: uid },
       order: { created_at: 'DESC' },
     });
+    return rows.map((row) => ({
+      ...row,
+      url: this.normalizeUploadUrl(row.url),
+    }));
   }
 
   async addGalleryImages(userId: number, urls: string[]) {
@@ -196,5 +208,58 @@ export class WorkersService {
 
     await this.galleryRepo.delete({ id });
     return { ok: true };
+  }
+
+  async getHistoryByUserId(userId: number) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    const rows = await this.requestRepo.find({
+      where: [{ assignedWorkerId: uid }, { completedByWorkerId: uid }],
+      relations: ['client'],
+      order: { completedAt: 'DESC', created_at: 'DESC' },
+    });
+
+    return rows.filter((request) => this.isCompletedRequest(request, uid));
+  }
+
+  private async withGallerySummary(worker: Worker) {
+    const userId = Number(worker?.userId);
+    if (!userId) return worker;
+
+    const [gallery, completedJobs] = await Promise.all([
+      this.getGalleryByUserId(userId).catch(() => []),
+      this.getHistoryByUserId(userId).catch(() => []),
+    ]);
+
+    return {
+      ...worker,
+      avatarUrl: this.normalizeUploadUrl(worker.avatarUrl),
+      gallery,
+      completedJobs,
+    };
+  }
+
+  private normalizeUploadUrl(value: any): string {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    if (raw.startsWith('/uploads/')) return raw;
+    if (raw.startsWith('uploads/')) return `/${raw}`;
+    if (raw.includes('/')) return raw.startsWith('/') ? raw : `/${raw}`;
+    if (/^worker_/i.test(raw)) return `/uploads/workers/${raw}`;
+    if (/^gallery_/i.test(raw)) return `/uploads/workers/gallery/${raw}`;
+    return raw;
+  }
+
+  private isCompletedRequest(request: RequestEntity, userId: number): boolean {
+    const status = String(request?.status || '').toLowerCase();
+    return (
+      Number(request?.completedByWorkerId) === Number(userId) ||
+      !!request?.completedAt ||
+      status.includes('зав') ||
+      status.includes('СЉСЂ') ||
+      status.includes('completed')
+    );
   }
 }

@@ -1,16 +1,9 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { PhoneCall, CheckCircle, XCircle, Star } from "lucide-react";
 import { apiGet, apiPost } from "../../services/api";
-
-function absUrl(url) {
-  if (!url) return "";
-  if (typeof url !== "string") return "";
-  if (/^(data:|blob:)/i.test(url)) return url;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${import.meta.env.VITE_API_URL}${url}`;
-}
+import { mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 
 function StarsRow({ value = 0 }) {
   const v = Number(value);
@@ -34,9 +27,10 @@ function StarsRow({ value = 0 }) {
 }
 
 export default function WorkerPreview() {
+  const params = useParams();
   const [sp] = useSearchParams();
   const requestId = Number(sp.get("requestId") || 0);
-  const userId = Number(sp.get("userId") || 0);
+  const userId = Number(params.id || params.userId || sp.get("userId") || 0);
 
   const [worker, setWorker] = useState(null);
   const [gallery, setGallery] = useState([]);
@@ -80,7 +74,7 @@ export default function WorkerPreview() {
         g
           .map((x) => ({
             ...x,
-            url: absUrl(x.url || x.imageUrl || x.path || ""),
+            url: photoMediaUrl(x),
           }))
           .filter((x) => !!x.url)
       );
@@ -130,7 +124,7 @@ export default function WorkerPreview() {
   }
 
   const avatarSrc = useMemo(() => {
-    const url = worker?.avatarUrl ? absUrl(worker.avatarUrl) : "";
+    const url = worker?.avatarUrl ? mediaUrl(worker.avatarUrl) : "";
     return url || "/media_files/Snejan.jpg";
   }, [worker]);
 
@@ -143,8 +137,8 @@ export default function WorkerPreview() {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
         .map((photo) => ({
-          ...photo,
-          url: absUrl(typeof photo === "string" ? photo : photo?.url || photo?.dataUrl || photo?.imageUrl || photo?.path || ""),
+          ...(typeof photo === "object" && photo ? photo : {}),
+          url: photoMediaUrl(photo),
         }))
         .filter((photo) => !!photo.url);
 
@@ -254,6 +248,9 @@ export default function WorkerPreview() {
             src={avatarSrc}
             className="w-40 h-40 rounded-full object-cover border-4 border-red-500"
             alt="avatar"
+            onError={(e) => {
+              e.currentTarget.src = "/media_files/Snejan.jpg";
+            }}
           />
 
           <h2 className="text-3xl font-extrabold mt-6">{worker.skills?.[0] || "Специалност"}</h2>
@@ -315,10 +312,26 @@ export default function WorkerPreview() {
 
                       <div className="grid grid-cols-2 gap-2 w-36 h-24 shrink-0">
                         <div className="overflow-hidden rounded-lg bg-gray-200">
-                          <img src={album.cover.url} alt={album.title} className="h-full w-full object-cover" loading="lazy" />
+                          <img
+                            src={album.cover.url}
+                            alt={album.title}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
                         </div>
                         <div className="relative overflow-hidden rounded-lg bg-gray-200">
-                          <img src={(album.photos[1] || album.cover).url} alt={album.title} className="h-full w-full object-cover" loading="lazy" />
+                          <img
+                            src={(album.photos[1] || album.cover).url}
+                            alt={album.title}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
                           {album.photos.length > 2 && (
                             <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-white font-extrabold">
                               +{album.photos.length - 2}
@@ -383,7 +396,14 @@ export default function WorkerPreview() {
             </div>
 
             <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
-              <img src={activePhoto.url} alt={activePhoto.name || activeAlbum.title} className="max-h-[72vh] w-full object-contain" />
+              <img
+                src={activePhoto.url}
+                alt={activePhoto.name || activeAlbum.title}
+                className="max-h-[72vh] w-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
 
               {activeAlbum.photos.length > 1 && (
                 <>
@@ -418,7 +438,14 @@ export default function WorkerPreview() {
                         : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
                     }
                   >
-                    <img src={photo.url} alt={photo.name || activeAlbum.title} className="h-full w-full object-cover" />
+                    <img
+                      src={photo.url}
+                      alt={photo.name || activeAlbum.title}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
                   </button>
                 ))}
               </div>

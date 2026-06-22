@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
+import { photoMediaUrl } from "../utils/mediaUrls";
 
 function formatBG(dateStr) {
   try {
@@ -66,15 +67,7 @@ function filesToPhotos(files) {
 }
 
 function photoUrl(photo) {
-  const raw =
-    typeof photo === "string"
-      ? photo
-      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
-
-  if (!raw) return "";
-  if (/^(data:|blob:|https?:\/\/)/i.test(raw)) return raw;
-  if (raw.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${raw}`;
-  return raw;
+  return photoMediaUrl(photo);
 }
 
 function safeRatingValue(x) {

@@ -144,11 +144,30 @@ export class WorkersController {
     return this.workersService.deleteGalleryImage(userId, imageId);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('me/history')
+  async myHistory(@Req() req: any) {
+    const userId = Number(req.user.id);
+    return this.workersService.getHistoryByUserId(userId);
+  }
+
+  @Get(':userId/gallery')
+  async publicGallery(@Param('userId') userId: string) {
+    const worker = await this.workersService.findOneSmart(Number(userId));
+    return this.workersService.getGalleryByUserId(Number(worker.userId));
+  }
+
+  @Get(':userId/history')
+  async publicHistory(@Param('userId') userId: string) {
+    const worker = await this.workersService.findOneSmart(Number(userId));
+    return this.workersService.getHistoryByUserId(Number(worker.userId));
+  }
+
   // IMPORTANT: here param is userId (from users table)
   @Get(':userId')
   async getByUserId(@Param('userId') userId: string) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
-    return this.workersService.findByUserId(uid);
+    return this.workersService.findOneSmart(uid);
   }
 }

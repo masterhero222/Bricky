@@ -24,7 +24,6 @@ import Workers from "./pages/workers/Workers";
 // REQUESTS
 import Requests from "./pages/Requests";
 
-import WorkerPage from "./pages/WorkerPage";
 import DevTestPanel from "./components/DevTestPanel";
 
 export default function App() {
@@ -74,8 +73,8 @@ export default function App() {
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
 
-            <Route path="/worker/:userId" element={<WorkerPage />} />
-            <Route path="/workers/:id" element={<WorkerPage />} />
+            <Route path="/worker/:userId" element={<WorkerPreview />} />
+            <Route path="/workers/:id" element={<WorkerPreview />} />
         </Route>
       </Routes>
     </Router>
