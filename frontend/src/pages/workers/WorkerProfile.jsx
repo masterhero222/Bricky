@@ -680,6 +680,7 @@ export default function WorkerProfile() {
     activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
       ? activeAlbum.photos[albumViewer?.photoIndex || 0]
       : null;
+  const canDeleteActivePhoto = activeAlbum?.type === "manual" && activePhoto?.id;
 
   function openAlbum(albumIndex, photoIndex = 0) {
     setAlbumViewer({ albumIndex, photoIndex });
@@ -697,6 +698,32 @@ export default function WorkerProfile() {
       const next = (viewer.photoIndex + delta + album.photos.length) % album.photos.length;
       return { ...viewer, photoIndex: next };
     });
+  }
+
+  async function deleteActiveGalleryPhoto() {
+    if (!canDeleteActivePhoto) return;
+    const imageId = activePhoto.id;
+    const ok = window.confirm("Да изтрия ли тази снимка от галерията?");
+    if (!ok) return;
+
+    const currentIndex = albumViewer?.photoIndex || 0;
+    const remaining = Math.max(0, (activeAlbum?.photos?.length || 1) - 1);
+
+    await deleteGalleryImage(imageId);
+
+    if (remaining === 0) {
+      closeAlbum();
+      return;
+    }
+
+    setAlbumViewer((viewer) =>
+      viewer
+        ? {
+            ...viewer,
+            photoIndex: Math.min(currentIndex, remaining - 1),
+          }
+        : viewer
+    );
   }
 
   const avatarSrc =
@@ -1499,9 +1526,25 @@ export default function WorkerProfile() {
                   {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
                 </div>
               </div>
-              <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
-                Затвори
-              </button>
+              <div className="flex items-center gap-2">
+                {canDeleteActivePhoto ? (
+                  <button
+                    type="button"
+                    onClick={deleteActiveGalleryPhoto}
+                    disabled={deletingId === activePhoto.id}
+                    className={
+                      deletingId === activePhoto.id
+                        ? "rounded-lg bg-red-950 px-4 py-2 font-bold text-red-200 cursor-not-allowed"
+                        : "rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 font-bold"
+                    }
+                  >
+                    {deletingId === activePhoto.id ? "Трия..." : "Изтрий снимката"}
+                  </button>
+                ) : null}
+                <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
+                  Затвори
+                </button>
+              </div>
             </div>
 
             <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
