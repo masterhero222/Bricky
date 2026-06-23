@@ -28,7 +28,7 @@ function uniqNums(arr) {
   return out;
 }
 
-function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
+function imageFileToDataUrl(file, maxSize = 520, quality = 0.58) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);

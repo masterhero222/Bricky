@@ -33,9 +33,12 @@ function extractResponseText(data: any): string {
 
   return '';
 }
+const MAX_REQUEST_PHOTO_URL_CHARS = 35_000;
+const MAX_REQUEST_PHOTOS_JSON_CHARS = 58_000;
+
 function normalizePhotos(arr: any): any[] {
   if (!Array.isArray(arr)) return [];
-  return arr
+  const normalized = arr
     .filter((photo) => photo && typeof photo.url === 'string' && photo.url)
     .map((photo, index) => ({
       id: photo.id || `${Date.now()}-${index}`,
@@ -43,6 +46,18 @@ function normalizePhotos(arr: any): any[] {
       url: photo.url,
       created_at: photo.created_at || new Date().toISOString(),
     }));
+
+  const safePhotos: any[] = [];
+  for (const photo of normalized) {
+    if (String(photo.url || '').length > MAX_REQUEST_PHOTO_URL_CHARS) continue;
+
+    const nextPhotos = [...safePhotos, photo];
+    if (JSON.stringify(nextPhotos).length > MAX_REQUEST_PHOTOS_JSON_CHARS) break;
+
+    safePhotos.push(photo);
+  }
+
+  return safePhotos;
 }
 
 function completionDurationDays(createdAt: any, completedAt: Date): number {
