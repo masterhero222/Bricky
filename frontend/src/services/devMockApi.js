@@ -317,7 +317,9 @@ function readDb() {
       }
       return db;
     }
-  } catch {}
+  } catch {
+    // Invalid or outdated local mock data is replaced with a clean seed below.
+  }
   const db = seedDb();
   writeDb(db);
   return db;
@@ -705,7 +707,11 @@ export async function mockRequest(method, url, data) {
       longitude: data.longitude ?? null,
       locationSource: data.locationSource || "manual",
       category: normalizeRepairCategoryLabel(data.category),
+      categoryKey: data.categoryKey || getRepairCategoryByLabel(data.category)?.key || "other",
       description: data.description || "",
+      estimateMin: Number.isFinite(Number(data.estimateMin)) ? Number(data.estimateMin) : null,
+      estimateMax: Number.isFinite(Number(data.estimateMax)) ? Number(data.estimateMax) : null,
+      estimateCurrency: data.estimateCurrency || null,
       status: "нова",
       photos: normalizePhotos(data.photos),
       beforePhotos: normalizePhotos(data.photos),

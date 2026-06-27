@@ -332,15 +332,25 @@
 
 ### Calculator Pricing Foundation - High Priority
 
-- CURRENT STATE / TECHNICAL DEBT:
-  - request wizard pricing is stored directly in `frontend/src/constants/repairCatalog.js` beside UI catalog data;
-  - each category has one `material` value and `laborMin/laborMax`, instead of activity-level labor and material ranges;
-  - estimates are displayed in BGN, while the approved direction is EUR;
-  - quantity parsing is approximate and does not model a real unit per selected activity;
-  - multiple selected activities do not receive a shared-visit discount;
-  - there is no `includeMaterials` mode, urgency, complexity, or material-quality multiplier;
-  - the worker profile contains a second independent hardcoded calculator, so the two calculators can drift;
-  - backend request estimate fields currently default to BGN and are not a complete versioned calculation snapshot.
+- DONE in mock v0.1: create `frontend/src/constants/repairPricingConfig.js` with activity-level EUR labor ranges for all 15 categories.
+- DONE in mock v0.1: add a shared calculation engine with:
+  - upward rounding to 5 EUR;
+  - category estimates before activity selection;
+  - activity-specific labor ranges;
+  - unit-aware size parsing;
+  - minimum visit prices;
+  - shared-visit labor discounts for eligible small tasks;
+  - bundle/include protection against double charging;
+  - urgency, complexity, location, and access multiplier support;
+  - inspection and electrical safety warnings.
+- DONE in mock v0.1: request wizard now reads the shared pricing config, displays EUR labor ranges, and saves `categoryKey` plus estimate min/max/currency in mock requests.
+- DONE in mock v0.1: materials are explicitly shown as pending research instead of using the old unverified category-level values.
+- REMAINING TECHNICAL DEBT:
+  - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
+  - the request snapshot still needs selected activity keys, pricing version, pricing mode, multipliers, and calculation notes;
+  - UI controls for urgency, complexity/access, and pricing mode are not implemented yet;
+  - material min/max ranges remain intentionally empty until material research is completed;
+  - production backend defaults and DB snapshot structure still need final EUR alignment after mock validation.
 - HIGH: complete pricing research for all 15 repair categories.
 - For every repair activity collect:
   - market price range and source period;
@@ -353,7 +363,7 @@
   - ВиК ремонти;
   - електро ремонти;
   - боядисване.
-- HIGH: create a central config before any DB pricing migration, preferably `frontend/src/constants/repairPricingConfig.js` or a shared TypeScript module.
+- DONE in mock v0.1: create a central config before any DB pricing migration at `frontend/src/constants/repairPricingConfig.js`.
 - Config requirements:
   - stable category and activity keys;
   - currency `EUR`;
@@ -362,10 +372,10 @@
   - `unitType` per activity;
   - notes and safety/disclaimer metadata;
   - formula/version identifier so the shape is ready for later DB migration.
-- HIGH: move both mock calculator experiences to the same pricing engine/config:
-  - request wizard estimate;
-  - worker profile calculator;
-  - remove duplicate pricing tables and direct pricing constants from React components.
+- IN PROGRESS: move both mock calculator experiences to the same pricing engine/config:
+  - DONE: request wizard estimate;
+  - NEXT: worker profile calculator;
+  - NEXT: remove the remaining duplicate pricing table and direct pricing constants from `WorkerProfile.jsx`.
 - HIGH: implement the calculator result model:
   - labor-only range;
   - materials range;

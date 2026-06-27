@@ -20,8 +20,8 @@ import { apiPost } from "../services/api";
 import {
   REPAIR_CATEGORY_FLOW,
   REPAIR_CATEGORY_OPTIONS,
-  estimateRepairPrice,
 } from "../constants/repairCatalog";
+import { calculateRepairEstimate } from "../utils/repairPriceCalculator";
 import { useAuthModal } from "../context/AuthModalContext";
 
 const SOFIA_DISTRICTS = [
@@ -76,13 +76,6 @@ const ICONS = {
   zap: Zap,
 };
 
-function quantityFromOption(option) {
-  const text = String(option || "");
-  const match = text.match(/(\d+)/);
-  if (!match) return 1;
-  return Number(match[1]) || 1;
-}
-
 function cx(...items) {
   return items.filter(Boolean).join(" ");
 }
@@ -122,7 +115,16 @@ export function RequestFlow({ embedded = false, onCreated }) {
     [form.categoryKey]
   );
   const flow = REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other;
-  const estimate = estimateRepairPrice(category.label, quantityFromOption(form.quantity));
+  const estimate = useMemo(
+    () => calculateRepairEstimate({
+      categoryKey: category.key,
+      selectedActivities: form.activities,
+      sizeOption: form.quantity,
+      pricingMode: "labor_only",
+      location: form.district === "София - Център" ? "sofia_center" : "sofia_regular",
+    }),
+    [category.key, form.activities, form.quantity, form.district]
+  );
 
   function setField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -205,6 +207,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
       `Тип ремонт: ${category.label}`,
       `Планирани дейности: ${form.activities.join(", ") || "не е избрано"}`,
       `Приблизителен размер: ${form.quantity || "не е посочено"}`,
+      `Ориентировъчен труд: ${estimate.laborMin}-${estimate.laborMax} ${estimate.currency}`,
+      `Версия на калкулатора: ${estimate.pricingVersion}`,
       `Цел: ${GOALS.find((item) => item.value === form.goal)?.label || form.goal}`,
       `Комуникация: ${CONTACT_PREFS.find((item) => item.value === form.contactPreference)?.label || form.contactPreference}`,
       form.description ? `Описание: ${form.description}` : "",
@@ -238,7 +242,11 @@ export function RequestFlow({ embedded = false, onCreated }) {
         phone: form.phone,
         address: [form.district, form.address].filter(Boolean).join(", "),
         category: category.label,
+        categoryKey: category.key,
         description: buildDescription(),
+        estimateMin: estimate.totalMin,
+        estimateMax: estimate.totalMax,
+        estimateCurrency: estimate.currency,
         photos: form.photos || [],
       });
       setStatus("Заявката е записана в mock средата.");
@@ -473,12 +481,23 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Локация" value={[form.district, form.address].filter(Boolean).join(", ")} />
             <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
             <div className="mt-6 rounded-xl bg-gray-900 p-4">
-              <p className="text-sm text-gray-400">Груб mock калкулатор</p>
+              <p className="text-sm text-gray-400">
+                {estimate.isCategoryEstimate ? "Груб ориентир за категорията" : `Ориентир ${estimate.pricingVersion}`}
+              </p>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span>Материали</span><b>{estimate.materials} лв</b></div>
-                <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} лв</b></div>
-                <div className="flex justify-between border-t border-gray-700 pt-2 text-green-300"><span>Общо</span><b>{estimate.totalMin}-{estimate.totalMax} лв</b></div>
+                <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} EUR</b></div>
+                <div className="flex justify-between text-gray-400"><span>Материали</span><b>предстои проучване</b></div>
+                <div className="flex justify-between border-t border-gray-700 pt-2 text-green-300"><span>Ориентир засега</span><b>{estimate.totalMin}-{estimate.totalMax} EUR</b></div>
               </div>
+              {estimate.warnings.length > 0 && (
+                <div className="mt-4 space-y-1 border-t border-gray-800 pt-3 text-xs text-amber-200">
+                  {estimate.warnings.slice(0, 3).map((warning) => <p key={warning}>{warning}</p>)}
+                </div>
+              )}
+              <p className="mt-4 text-xs leading-relaxed text-gray-400">
+                Цената е ориентировъчна и служи за сравнение на оферти. Крайната цена зависи от достъп,
+                сложност, материали, спешност и оглед от майстор.
+              </p>
             </div>
           </aside>
         </div>
