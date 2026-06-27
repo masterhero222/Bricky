@@ -1,3 +1,5 @@
+import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel } from "../constants/repairCatalog";
+
 const STORAGE_KEY = "bricky.dev.db";
 
 const CLIENTS = [
@@ -82,11 +84,46 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function repairCategoryByKey(key) {
+  return REPAIR_CATEGORY_OPTIONS.find((category) => category.key === key) || REPAIR_CATEGORY_OPTIONS[0];
+}
+
+function normalizeRepairCategoryLabel(label) {
+  return getRepairCategoryByLabel(label)?.label || repairCategoryByKey("other").label;
+}
+
+function guessRepairCategory(text) {
+  const lower = String(text || "").toLowerCase();
+
+  if (/(vik|plumb|water|leak|pipe|sink|boiler|сифон|теч|тръб|мивк|бойлер|смесител)/i.test(lower)) return repairCategoryByKey("vik");
+  if (/(electro|electric|power|cable|switch|lamp|fuse|ток|контакт|кабел|табло|ламп|ключ)/i.test(lower)) return repairCategoryByKey("electro");
+  if (/(install|installation|инсталац)/i.test(lower) && /(electro|electric|ток|електро|кабел)/i.test(lower)) return repairCategoryByKey("electro");
+  if (/(bathroom|bath|баня|бани|санитар)/i.test(lower)) return repairCategoryByKey("bathroom_renovation");
+  if (/(tile|tiles|ceramic|плочк|фаянс|теракот|гранитогрес)/i.test(lower)) return repairCategoryByKey("tiles");
+  if (/(roof|покрив|керемид|улук|хидроизолац)/i.test(lower)) return repairCategoryByKey("roof_waterproofing");
+  if (/(drywall|гипсокартон|окачен таван|преградна стена)/i.test(lower)) return repairCategoryByKey("drywall");
+  if (/(floor|ламинат|паркет|настилк|под)/i.test(lower)) return repairCategoryByKey("flooring");
+  if (/(masonry|зидар|мазилк|тухл|шпаклов)/i.test(lower)) return repairCategoryByKey("plaster");
+  if (/(window|door|дограма|врат|обков)/i.test(lower)) return repairCategoryByKey("windows_doors");
+  if (/(heating|cooling|климатик|радиатор|отоплен)/i.test(lower)) return repairCategoryByKey("heating_cooling");
+  if (/(demolition|кърт|извоз|демонтаж|отпад)/i.test(lower)) return repairCategoryByKey("demolition_cleanup");
+  if (/(major|основен|цялостен|до ключ)/i.test(lower)) return repairCategoryByKey("full_renovation");
+  if (/(мебел|шкаф|рафт|корниз|телевизор|кухн)/i.test(lower)) return repairCategoryByKey("furniture_mounting");
+  if (/(дреб|малък|малки|домаш)/i.test(lower)) return repairCategoryByKey("small_repairs");
+  if (/(repaint|пребоядис|paint|боя|боядис|стена|таван)/i.test(lower)) return repairCategoryByKey("painting");
+
+  return repairCategoryByKey("other");
+}
+
 function seedDb() {
   return {
-    mapSeedVersion: 2,
+    mapSeedVersion: 4,
     nextRequestId: 7,
     nextReviewId: 1,
+    repairCategories: REPAIR_CATEGORY_OPTIONS.map((category) => ({
+      ...category,
+      flow: REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other,
+    })),
     clients: CLIENTS,
     workers: WORKERS,
     reviews: [],
@@ -259,8 +296,21 @@ function readDb() {
         const migrated = {
           ...db,
           mapSeedVersion: seeded.mapSeedVersion,
+          repairCategories: seeded.repairCategories,
           requests: seeded.requests,
           nextRequestId: Math.max(Number(db.nextRequestId || 0), seeded.nextRequestId),
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 4 || !Array.isArray(db?.repairCategories)) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 4,
+          repairCategories: REPAIR_CATEGORY_OPTIONS.map((category) => ({
+            ...category,
+            flow: REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other,
+          })),
         };
         writeDb(migrated);
         return migrated;
@@ -525,15 +575,11 @@ function publicUser(user) {
 
 function draftRequest(body = {}) {
   const text = String(body.prompt || "").trim();
-  const lower = text.toLowerCase();
-  let category = "Шпакловка и боя";
-  if (/(voda|tech|mivka|sifon|truba|dush|boiler|vik|plumb|water|leak)/i.test(lower)) category = "ВиК";
-  if (/(tok|kontakt|lampa|kabel|tablo|electro|electric)/i.test(lower)) category = "Електро";
-  if (/(plochki|bania|terakot|fayans|tiles|bathroom)/i.test(lower)) category = "Плочки";
+  const category = guessRepairCategory(text);
 
   return {
-    category,
-    categoryKey: category === "ВиК" ? "vik" : category === "Електро" ? "electro" : category === "Плочки" ? "tiles" : "paint",
+    category: category.label,
+    categoryKey: category.key,
     description: [text || "Описание на ремонта", body.address ? `Адрес: ${body.address}` : ""].filter(Boolean).join("\n"),
     questions: ["Какъв е размерът на ремонта?", "Има ли спешност или теч?"],
     confidence: 0.7,
@@ -584,6 +630,7 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/client/me") return response(publicUser(user));
+  if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
   if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId)));
   if (method === "get" && path === "/workers") return response(db.workers.map(publicUser));
 
@@ -657,7 +704,7 @@ export async function mockRequest(method, url, data) {
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       locationSource: data.locationSource || "manual",
-      category: data.category || "ВиК",
+      category: normalizeRepairCategoryLabel(data.category),
       description: data.description || "",
       status: "нова",
       photos: normalizePhotos(data.photos),

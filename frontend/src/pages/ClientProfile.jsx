@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 import { photoMediaUrl } from "../utils/mediaUrls";
+import { RequestFlow } from "./Requests";
 
 function formatBG(dateStr) {
   try {
@@ -13,7 +14,7 @@ function formatBG(dateStr) {
   }
 }
 
-const CATEGORIES = ["ВиК", "Електро", "Шпакловка и боя", "Плочки"];
+const CATEGORIES = REPAIR_CATEGORIES;
 
 function uniqNums(arr) {
   const out = [];
@@ -97,7 +98,7 @@ export default function ClientProfile() {
     phone: "",
     email: "",
     address: "",
-    category: "ВиК",
+    category: "ВиК ремонти",
     description: "",
     photos: [],
     latitude: null,
@@ -675,111 +676,11 @@ export default function ClientProfile() {
         )}
 
         {activeTab === "create" && (
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8">Направи заявка</h1>
-
-            {createError && <div className="mb-4 text-red-400 font-bold">{createError}</div>}
-            {createOk && <div className="mb-4 text-green-400 font-bold">{createOk}</div>}
-
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  value={newReq.clientName}
-                  onChange={(e) => setNewReq((p) => ({ ...p, clientName: e.target.value }))}
-                  className="p-3 rounded bg-gray-900 border border-gray-700"
-                  placeholder="Име"
-                />
-                <input
-                  value={newReq.phone}
-                  onChange={(e) => setNewReq((p) => ({ ...p, phone: e.target.value }))}
-                  className="p-3 rounded bg-gray-900 border border-gray-700"
-                  placeholder="Телефон"
-                />
-              </div>
-
-              <input
-                value={newReq.email}
-                onChange={(e) => setNewReq((p) => ({ ...p, email: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-                placeholder="Имейл"
-              />
-
-              <input
-                value={newReq.address}
-                onChange={(e) => setNewReq((p) => ({ ...p, address: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-                placeholder="Адрес"
-              />
-
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div>
-                    <div className="font-bold">Локация за картата</div>
-                    <p className="text-sm text-gray-400 mt-1">{locationMessage}</p>
-                    {newReq.latitude && newReq.longitude && (
-                      <p className="text-xs text-cyan-300 mt-2">
-                        GPS: {newReq.latitude}, {newReq.longitude}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={requestCurrentLocation}
-                    disabled={locationStatus === "loading"}
-                    className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-700 px-4 py-3 rounded-lg font-bold"
-                  >
-                    {locationStatus === "loading" ? "Проверявам..." : "Използвай текуща локация"}
-                  </button>
-                </div>
-              </div>
-
-              <select
-                value={newReq.category}
-                onChange={(e) => setNewReq((p) => ({ ...p, category: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-
-              <textarea
-                value={newReq.description}
-                onChange={(e) => setNewReq((p) => ({ ...p, description: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full h-32"
-                placeholder="Опиши проблема..."
-              />
-
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-                <label className="block font-bold mb-2">Снимки на проблема / мястото за ремонт</label>
-                <input type="file" accept="image/*" multiple onChange={handleRequestPhotos} className="block w-full text-sm" />
-                <p className="text-xs text-gray-400 mt-2">
-                  Тези снимки ще помогнат на майсторите да преценят ремонта и ще се пазят към историята на заявката.
-                </p>
-
-                {Array.isArray(newReq.photos) && newReq.photos.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                    {newReq.photos.map((photo) => (
-                      <div key={photo.id || photoUrl(photo)} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
-                        <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover" />
-                        <button type="button" onClick={() => removeRequestPhoto(photo.id)} className="absolute right-1 top-1 bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 rounded">
-                          Махни
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={createRequest}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold"
-              >
-                Създай заявка
-              </button>
-            </div>
+          <div className="max-w-6xl mx-auto">
+            <RequestFlow embedded onCreated={() => {
+              setActiveTab("requests");
+              loadData();
+            }} />
           </div>
         )}
 

@@ -2,6 +2,28 @@
 
 ## Highest Priority
 
+- IN PROGRESS in this session: database/request model stabilization:
+  - backend repair catalog is being aligned with the 15 approved quick repair categories;
+  - request creation is being prepared to store `categoryKey`, coordinates, location source, and estimate fields;
+  - SQL migration draft added for request core fields before moving to separate request image/application tables;
+  - backend entity/service draft added for `request_applications` and `request_images`;
+  - SQL migration draft added for creating `request_applications` and `request_images` without deleting legacy JSON fields.
+- NEW BUSINESS PLAN DOC: review `docs/business-plan.md` before designing paid features.
+- NEW CALCULATOR PLAN REVIEWED: `Bricky Calculator Plan.docx` defines the calculator pricing foundation and the required order of work.
+- HIGH PRIORITY: stabilize the calculator in the mock flow before adding pricing tables or payment logic:
+  - finish market research for all 15 repair categories;
+  - move pricing out of React/catalog UI data into a central EUR config;
+  - calculate labor, materials, and total as min/max ranges;
+  - validate the formula and UX locally;
+  - only then draft and migrate the production pricing schema.
+- PRIORITY: Database reset and redesign:
+  - clean the production/test database down to the intentionally kept accounts only;
+  - delete tangled test profiles, requests, reviews, notifications, gallery rows, and related uploaded photos/files;
+  - preserve only the agreed client and worker accounts while testing the rebuilt flow;
+  - document how the current database works before changing it;
+  - identify which relations are weak, duplicated, or not scalable;
+  - redesign the data model so users, worker profiles, requests, applications, repair history, reviews, media/photos, and map locations have clear ownership and foreign-key logic;
+  - add new repair/job fields needed for real project testing before scaling the app further.
 - Production server is not stable yet:
   - opening a worker profile from `/workers` can break the page;
   - gallery thumbnails/photos are broken on `bricky.bg`;
@@ -44,6 +66,169 @@
 - Clean up the server repository state:
   - remove accidental embedded `Bricky` repo from the server git index if it is still present;
   - avoid committing server-only merge commits back to `main` unless intentionally syncing live changes.
+
+## Database Cleanup And Data Model
+
+- TOP PRIORITY: reset the database into a clean test state:
+  - keep only the agreed client account and worker account;
+  - delete all other user/client/worker profiles;
+  - delete all old requests, reviews, notifications, gallery records, and broken/unused request history;
+  - delete or archive orphaned uploaded photos from the server filesystem after the DB rows are removed;
+  - use `scripts/db-reset-keep-client-1008-worker-1011.sql` as the starting reset script;
+  - run a `mysqldump` backup before any destructive cleanup.
+- TOP PRIORITY: redesign the database logic if the current schema cannot scale cleanly:
+  - write a clear explanation of the old database logic and how the current code uses it;
+  - map every frontend/backend flow to the tables it reads and writes;
+  - replace spaghetti relations with explicit foreign keys and join tables;
+  - make the model support growth instead of patching more JSON/simple-array fields.
+- Add new repair/job fields for the request lifecycle:
+  - repair type/category key;
+  - repair subtype where needed;
+  - address text plus latitude/longitude;
+  - approximate price/estimate fields;
+  - before photos;
+  - after photos;
+  - completion duration;
+  - assigned worker/application status;
+  - moderation/approval state for public request/map visibility.
+- Review database audit doc: `docs/database-systems-audit.md`.
+- Decide the canonical worker identifier:
+  - choose whether public/profile/request flows use `users.id` or `worker.id`;
+  - stop mixing `users.id`, `worker.id`, and `worker.userId` in frontend routes and backend services;
+  - keep one stable id shape in `/workers`, `/workers/:id`, reviews, assignments, and map requests.
+- Replace `requests.appliedWorkers` simple-array with a real `request_applications` table:
+  - `requestId`;
+  - `workerUserId`;
+  - status;
+  - optional offer/message/price later;
+  - created/updated timestamps.
+- IN PROGRESS in code: new `request_applications` entity exists and request apply/assign/unassign now dual-writes during the transition.
+- Move request photos out of `requests.photos` JSON/data URLs into real upload storage:
+  - create `request_images` or shared `media_assets` table;
+  - store file URLs/paths, not base64 blobs;
+  - support `before`, `after`, and `general` image types;
+  - link photos to request and uploader.
+- IN PROGRESS in code: new `request_images` entity exists and request create/complete/feed reads now hydrate from it when rows exist.
+- Add production migration for map coordinates:
+  - `requests.latitude`;
+  - `requests.longitude`;
+  - `requests.locationSource`;
+  - add indexes if map/feed queries need them.
+- Convert request statuses from Bulgarian display strings to machine constants:
+  - `new`;
+  - `applied`;
+  - `assigned`;
+  - `in_progress`;
+  - `completed`;
+  - `canceled`;
+  - translate labels in frontend.
+- Convert repair categories from display strings to stable category keys:
+  - use keys for DB/API/calculator/map filters;
+  - show Bulgarian labels only in UI.
+- Add needed indexes:
+  - `requests.clientId`;
+  - `requests.assignedWorkerId`;
+  - `requests.completedByWorkerId`;
+  - `requests.status`;
+  - `requests.category`;
+  - `requests.created_at`;
+  - `reviews.workerUserId`;
+  - `reviews.clientUserId`;
+  - request application and image foreign keys.
+- Clean legacy worker auth fields:
+  - stop using `worker.password`;
+  - avoid duplicate `worker.email` auth logic;
+  - keep auth source of truth in `users`.
+- Add migrations instead of relying on TypeORM synchronize.
+- Before any production DB change:
+  - create `mysqldump` backup;
+  - write rollback SQL;
+  - test migration locally or on a staging copy.
+
+## Monetization, Credits, And Payments
+
+- IMPORTANT: do not integrate real payment provider before the core platform is stable.
+- Product direction:
+  - clients stay free in the early version;
+  - workers are the paying side;
+  - Bricky sells request access, applications, visibility, professional profile tools, portfolio/history, and reputation;
+  - Bricky should not take repair commission or act as escrow in the first monetization version.
+- Planned worker plans:
+  - Free;
+  - Basic;
+  - Standard;
+  - Pro.
+- Plan dimensions to support later:
+  - visibility level;
+  - monthly application allowance;
+  - gallery/media limits;
+  - completed jobs/portfolio visibility;
+  - worker ranking/priority;
+  - service area/category access;
+  - future analytics or verified badge.
+- Credits model:
+  - workers get limited free applications first;
+  - after free applications are used, applying to requests requires credits or a paid plan;
+  - credit cost depends on request size/value/category;
+  - exact pricing must stay configurable and should not be hardcoded.
+- Phase 1 before monetization:
+  - finish DB cleanup;
+  - stabilize user/worker identity logic;
+  - normalize request statuses and categories;
+  - finish `request_applications`;
+  - finish request image/media storage;
+  - stabilize request map;
+  - stabilize calculator.
+- Phase 2: credits without real payments:
+  - add `worker_credit_wallets`;
+  - add `worker_credit_transactions`;
+  - give test workers trial credits;
+  - spend credits when applying to a request;
+  - block application if no free applications, no plan allowance, and insufficient credits;
+  - show credit balance and applications left in worker dashboard;
+  - add admin/manual credit adjustment.
+- Phase 3: visibility levels:
+  - add `worker_plans`;
+  - attach visibility level to each worker;
+  - filter worker request feed and map by visibility level;
+  - hide/show request fields based on plan;
+  - add upgrade prompts when visibility is limited.
+- Phase 4: payment integration:
+  - add `payment_orders`;
+  - choose payment provider;
+  - implement credit purchases;
+  - implement plan subscription/activation;
+  - store payment history;
+  - handle failed, canceled, and refunded payments;
+  - add admin/payment logs.
+- Backend services to create later:
+  - `RequestApplicationsService`;
+  - `CreditsService`;
+  - `PlansService`;
+  - `PaymentsService`;
+  - `RequestVisibilityService`.
+- Future API endpoints:
+  - `GET /worker/billing/status`;
+  - `GET /worker/credits`;
+  - `POST /worker/credits/purchase`;
+  - `GET /worker/credits/transactions`;
+  - `GET /worker/plan`;
+  - `POST /worker/plan/subscribe`;
+  - `POST /worker/plan/cancel`;
+  - existing `POST /requests/:id/apply` must eventually use `RequestApplicationsService`.
+- Manual monetization MVP before real payments:
+  - worker pays manually outside the app;
+  - admin grants credits or plan manually;
+  - use this to test business logic before card/payment-provider integration.
+- Business rules to decide later:
+  - exact plan prices;
+  - exact free application count;
+  - exact monthly application limits;
+  - exact credit costs per category/value;
+  - exact visibility rules;
+  - exact ranking logic;
+  - exact payment provider;
+  - exact refund/admin override rules.
 
 ## Client Requests
 
@@ -114,21 +299,133 @@
 
 ## Categories And Calculator
 
-- Review and finalize category list:
-  - repair roofs;
-  - bathroom renovation;
-  - full renovation;
-  - electrical installation;
-  - repainting;
-  - light refresh renovation;
-  - plus existing categories.
-- Research approximate material and labor prices.
-- Replace rough hardcoded estimates with a clearer pricing model:
-  - per square meter;
-  - per electrical/plumbing point;
-  - fixed base fee;
-  - difficulty multiplier;
-  - optional material quality level.
+- DONE in code: replace the small hardcoded repair list with a central repair catalog used by request forms and price presets.
+- DONE in mock: store repair categories in the dev/mock localStorage DB as `repairCategories`.
+- DONE in mock: expose `GET /repair-categories` through the mock API layer.
+- DONE in mock: `/requests` now uses a multi-step request wizard:
+  - quick repair links;
+  - category-specific activities;
+  - approximate size/quantity;
+  - district/address logistics;
+  - customer goal;
+  - Bricky communication preference;
+  - final review and mock submit.
+- DONE as SQL seed draft: add `scripts/db-repair-categories-seed.sql` for a future `repair_categories` table.
+- IMPORTANT: category work is mock-first for now; do not run the SQL seed on production until the DB cleanup/migration plan is approved.
+- DONE in mock/catalog: normalize the quick repair links to 15 stable category keys:
+  - `vik`;
+  - `electro`;
+  - `painting`;
+  - `plaster`;
+  - `tiles`;
+  - `bathroom_renovation`;
+  - `drywall`;
+  - `flooring`;
+  - `heating_cooling`;
+  - `windows_doors`;
+  - `furniture_mounting`;
+  - `roof_waterproofing`;
+  - `demolition_cleanup`;
+  - `full_renovation`;
+  - `small_repairs`.
+- Wire production backend to read repair categories from the database instead of static constants after the DB cleanup/migration.
+
+### Calculator Pricing Foundation - High Priority
+
+- CURRENT STATE / TECHNICAL DEBT:
+  - request wizard pricing is stored directly in `frontend/src/constants/repairCatalog.js` beside UI catalog data;
+  - each category has one `material` value and `laborMin/laborMax`, instead of activity-level labor and material ranges;
+  - estimates are displayed in BGN, while the approved direction is EUR;
+  - quantity parsing is approximate and does not model a real unit per selected activity;
+  - multiple selected activities do not receive a shared-visit discount;
+  - there is no `includeMaterials` mode, urgency, complexity, or material-quality multiplier;
+  - the worker profile contains a second independent hardcoded calculator, so the two calculators can drift;
+  - backend request estimate fields currently default to BGN and are not a complete versioned calculation snapshot.
+- HIGH: complete pricing research for all 15 repair categories.
+- For every repair activity collect:
+  - market price range and source period;
+  - average reference price;
+  - recommended Bricky labor min/max;
+  - recommended Bricky materials min/max;
+  - unit type;
+  - source note, assumptions, and conditions.
+- Start with the research already initiated for:
+  - ВиК ремонти;
+  - електро ремонти;
+  - боядисване.
+- HIGH: create a central config before any DB pricing migration, preferably `frontend/src/constants/repairPricingConfig.js` or a shared TypeScript module.
+- Config requirements:
+  - stable category and activity keys;
+  - currency `EUR`;
+  - `laborMin` / `laborMax`;
+  - `materialMin` / `materialMax`;
+  - `unitType` per activity;
+  - notes and safety/disclaimer metadata;
+  - formula/version identifier so the shape is ready for later DB migration.
+- HIGH: move both mock calculator experiences to the same pricing engine/config:
+  - request wizard estimate;
+  - worker profile calculator;
+  - remove duplicate pricing tables and direct pricing constants from React components.
+- HIGH: implement the calculator result model:
+  - labor-only range;
+  - materials range;
+  - total labor plus materials range;
+  - optional `includeMaterials` mode;
+  - round every displayed boundary upward to the nearest 5 EUR.
+- HIGH: implement calculation multipliers:
+  - size/quantity;
+  - urgency;
+  - complexity/access;
+  - material quality.
+- HIGH: define category-specific units instead of one universal quantity:
+  - `m2` for painting, plaster, tiles, flooring, drywall, and roofing;
+  - point/item/linear meter for electrical and plumbing;
+  - `m2` or `m3` for demolition;
+  - item/hour/complexity for furniture and installation work.
+- HIGH: support multiple selected activities:
+  - first activity labor at 100%;
+  - each additional activity labor initially at a configurable 60-75%;
+  - materials remain at 100%;
+  - validate this rule with market research before treating it as final.
+- HIGH: add calculator disclaimers:
+  - general estimate disclaimer explaining inspection, access, complexity, urgency, and material dependency;
+  - electrical safety/inspection warning for panels, short circuits, defective circuits, and old installations;
+  - plumbing warning for hidden leaks, demolition, difficult access, and pipe replacement.
+- HIGH: add focused tests for:
+  - one activity with and without materials;
+  - multiple activities and shared-visit discount;
+  - every supported unit type;
+  - multiplier combinations;
+  - upward EUR rounding;
+  - missing/unknown pricing rules;
+  - min/max totals never becoming inverted or negative.
+
+### Materials Research - Medium-High Priority
+
+- Research representative material prices covering approximately the last two years.
+- Group materials by repair category and define the correct unit for each group.
+- Record low/average/high values, currency, source period, and source note.
+- Prepare a `material_price_index` draft only; do not write it to production DB yet.
+
+### Pricing Database Integration - Later
+
+- DO NOT create pricing migrations until the config-based calculator and mock UX are validated.
+- Future schema candidates:
+  - `repair_categories`;
+  - `repair_activities`;
+  - `repair_pricing_rules`;
+  - `material_price_index`;
+  - `calculator_versions`;
+  - optional `request_calculations` snapshot table.
+- Request creation must preserve a historical calculation snapshot containing:
+  - pricing version and currency;
+  - category/activity keys;
+  - size, urgency, complexity, material quality, and include-materials choices;
+  - labor, material, and total min/max values;
+  - calculation note/disclaimer.
+- Never make old requests read only the current live pricing rule; historical estimates must not change when pricing is updated.
+- Add pricing administration only after the DB model, request flow, map, and mock calculator are stable.
+- Keep payment/credits implementation behind calculator stabilization; do not build billing decisions on an unvalidated estimate model.
 
 ## Cleanup
 

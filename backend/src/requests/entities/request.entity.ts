@@ -35,8 +35,29 @@ export class RequestEntity {
   @Column({ length: 100, nullable: true })
   category: string;
 
+  @Column({ length: 80, nullable: true })
+  categoryKey: string | null;
+
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  latitude: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  longitude: string | null;
+
+  @Column({ length: 50, nullable: true })
+  locationSource: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  estimateMin: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  estimateMax: string | null;
+
+  @Column({ length: 30, nullable: true })
+  estimateCurrency: string | null;
 
   @Column({ type: 'simple-json', nullable: true })
   photos: any[] | null;
