@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../services/api";
 import { photoMediaUrl } from "../utils/mediaUrls";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 
 const TILE_SIZE = 256;
 const SOFIA_CENTER = { lat: 42.6977, lng: 23.3219 };
@@ -436,8 +437,17 @@ export default function RepairMap() {
 
                 <div className="rounded-lg bg-gray-950 border border-gray-800 p-4">
                   <p className="text-gray-400 text-xs uppercase">Описание</p>
-                  <p className="mt-1 whitespace-pre-wrap">{activeRequest.description || "Няма описание."}</p>
+                  <p className="mt-1 whitespace-pre-wrap">
+                    {cleanRequestDescription(activeRequest.description) || "Няма описание."}
+                  </p>
                 </div>
+
+                {formatRequestExpectedRange(activeRequest) && (
+                  <div className="rounded-lg border border-green-400/30 bg-green-400/10 p-4">
+                    <p className="text-xs uppercase text-green-300">Ориентировъчна цена</p>
+                    <p className="mt-1 text-xl font-black">{formatRequestExpectedRange(activeRequest)}</p>
+                  </div>
+                )}
 
                 {activePhotos.length > 0 && (
                   <div className="rounded-lg bg-gray-950 border border-gray-800 p-4">

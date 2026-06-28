@@ -7,6 +7,7 @@ import {
   calculateRepairEstimate,
   MAX_EXACT_AREA_M2,
 } from "../src/utils/repairPriceCalculator.js";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../src/utils/requestPresentation.js";
 
 const rules = new Map(MATERIAL_QUANTITY_RULES.map((rule) => [rule.key, rule]));
 const materials = new Set(MATERIAL_PRICE_INDEX.map((item) => item.key));
@@ -130,5 +131,21 @@ assert.deepEqual(
   [240, 415, 100, 790]
 );
 assert.equal(wideRange.displayMode, "expected_range");
+
+const oldDescription = [
+  "Тип ремонт: Плочки",
+  "Ориентировъчен труд: 420-660 EUR",
+  "Най-вероятен ориентир: 520-880 EUR",
+  "Възможен технически диапазон: 520-880 EUR",
+  "Описание: Смяна на плочки в кухнята",
+].join("\n");
+assert.equal(
+  cleanRequestDescription(oldDescription),
+  "Тип ремонт: Плочки\nОписание: Смяна на плочки в кухнята"
+);
+assert.equal(
+  formatRequestExpectedRange({ estimateMin: 520, estimateMax: 880, estimateCurrency: "EUR" }),
+  "520-880 EUR"
+);
 
 console.log(`Pricing config verified: ${rules.size} activities, ${materials.size} material items.`);

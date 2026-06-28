@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 import { photoMediaUrl } from "../utils/mediaUrls";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 import { RequestFlow } from "./Requests";
 
 function formatBG(dateStr) {
@@ -516,9 +517,14 @@ export default function ClientProfile() {
                         <p className="text-gray-300">
                           <strong>Адрес:</strong> {r.address || "—"}
                         </p>
-                        <p className="text-gray-300">
-                          <strong>Описание:</strong> {r.description || "—"}
+                        <p className="whitespace-pre-line text-gray-300">
+                          <strong>Описание:</strong> {cleanRequestDescription(r.description) || "—"}
                         </p>
+                        {formatRequestExpectedRange(r) && (
+                          <p className="text-gray-300">
+                            <strong>Ориентировъчна цена:</strong> {formatRequestExpectedRange(r)}
+                          </p>
+                        )}
                       </div>
 
                       {/* ✅ REVIEW SECTION */}
