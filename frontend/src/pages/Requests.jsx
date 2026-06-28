@@ -56,6 +56,12 @@ const CONTACT_PREFS = [
   { value: "bricky", label: "Искам комуникацията да остане само през Bricky" },
 ];
 
+const PRICING_MODES = [
+  { value: "labor_only", label: "Само труд", description: "Материалите не участват в ориентира." },
+  { value: "labor_plus_consumables", label: "Труд + базови консумативи", description: "Препоръчителен mock режим за сравнение." },
+  { value: "labor_plus_materials_estimate", label: "Труд + ориентировъчни материали", description: "По-широк диапазон; основните продукти често не са включени." },
+];
+
 const STEPS = ["Ремонт", "Дейности", "Размер", "Локация", "Цел", "Контакт", "Преглед"];
 
 const ICONS = {
@@ -95,6 +101,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
     categoryKey: "bathroom_renovation",
     activities: [],
     quantity: "",
+    pricingMode: "labor_plus_consumables",
     district: "София - Център",
     address: "",
     goal: "compare",
@@ -120,10 +127,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
       categoryKey: category.key,
       selectedActivities: form.activities,
       sizeOption: form.quantity,
-      pricingMode: "labor_only",
+      pricingMode: form.pricingMode,
       location: form.district === "София - Център" ? "sofia_center" : "sofia_regular",
     }),
-    [category.key, form.activities, form.quantity, form.district]
+    [category.key, form.activities, form.quantity, form.pricingMode, form.district]
   );
 
   function setField(field, value) {
@@ -207,7 +214,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
       `Тип ремонт: ${category.label}`,
       `Планирани дейности: ${form.activities.join(", ") || "не е избрано"}`,
       `Приблизителен размер: ${form.quantity || "не е посочено"}`,
+      `Ценови режим: ${PRICING_MODES.find((item) => item.value === form.pricingMode)?.label || form.pricingMode}`,
       `Ориентировъчен труд: ${estimate.laborMin}-${estimate.laborMax} ${estimate.currency}`,
+      `Ориентировъчни материали: ${estimate.materialMin}-${estimate.materialMax} ${estimate.currency}`,
+      `Общ ориентир: ${estimate.totalMin}-${estimate.totalMax} ${estimate.currency}`,
       `Версия на калкулатора: ${estimate.pricingVersion}`,
       `Цел: ${GOALS.find((item) => item.value === form.goal)?.label || form.goal}`,
       `Комуникация: ${CONTACT_PREFS.find((item) => item.value === form.contactPreference)?.label || form.contactPreference}`,
@@ -236,7 +246,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
     try {
       setSubmitting(true);
       setStatus("");
-      await apiPost("/requests", {
+      const requestPayload = {
         clientName: form.clientName,
         email: form.email || "client@bricky.mock",
         phone: form.phone,
@@ -248,7 +258,33 @@ export function RequestFlow({ embedded = false, onCreated }) {
         estimateMax: estimate.totalMax,
         estimateCurrency: estimate.currency,
         photos: form.photos || [],
-      });
+      };
+
+      if (String(localStorage.getItem("token") || "").startsWith("local-dev-token")) {
+        requestPayload.pricingSnapshot = {
+          pricingVersion: estimate.pricingVersion,
+          materialPricingVersion: estimate.materialPricingVersion,
+          materialPriceIndexVersion: estimate.materialPriceIndexVersion,
+          pricingMode: form.pricingMode,
+          selectedCategoryKey: category.key,
+          selectedActivityKeys: estimate.calculatedActivities,
+          sizeKey: form.quantity,
+          laborMin: estimate.laborMin,
+          laborMax: estimate.laborMax,
+          materialMin: estimate.materialMin,
+          materialMax: estimate.materialMax,
+          totalMin: estimate.totalMin,
+          totalMax: estimate.totalMax,
+          currency: estimate.currency,
+          materialConfidence: estimate.materialConfidence,
+          includedMaterialKeys: estimate.includedMaterialKeys,
+          excludedMaterialKeys: estimate.excludedMaterialKeys,
+          warnings: estimate.warnings,
+          notes: estimate.notes,
+        };
+      }
+
+      await apiPost("/requests", requestPayload);
       setStatus("Заявката е записана в mock средата.");
       onCreated?.();
       setStep(0);
@@ -333,6 +369,21 @@ export function RequestFlow({ embedded = false, onCreated }) {
                       <span className="font-semibold">{activity}</span>
                     </label>
                   ))}
+                </div>
+                <div className="mt-8 border-t border-gray-700 pt-6">
+                  <h3 className="text-lg font-black">Какво да включва ориентирът?</h3>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                    {PRICING_MODES.map((mode) => (
+                      <RadioCard
+                        key={mode.value}
+                        selected={form.pricingMode === mode.value}
+                        onClick={() => setField("pricingMode", mode.value)}
+                      >
+                        <span className="block font-bold">{mode.label}</span>
+                        <span className="mt-1 block text-sm font-normal text-gray-400">{mode.description}</span>
+                      </RadioCard>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -478,6 +529,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Тип" value={category.label} />
             <SummaryLine label="Дейности" value={form.activities.length ? form.activities.join(", ") : "не са избрани"} />
             <SummaryLine label="Размер" value={form.quantity || "не е избран"} />
+            <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === form.pricingMode)?.label} />
             <SummaryLine label="Локация" value={[form.district, form.address].filter(Boolean).join(", ")} />
             <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
             <div className="mt-6 rounded-xl bg-gray-900 p-4">
@@ -486,13 +538,29 @@ export function RequestFlow({ embedded = false, onCreated }) {
               </p>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} EUR</b></div>
-                <div className="flex justify-between text-gray-400"><span>Материали</span><b>предстои проучване</b></div>
-                <div className="flex justify-between border-t border-gray-700 pt-2 text-green-300"><span>Ориентир засега</span><b>{estimate.totalMin}-{estimate.totalMax} EUR</b></div>
+                <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{form.pricingMode === "labor_only" ? "не са включени" : estimate.materialPricingPending ? "няма надежден диапазон" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
+                <div className="flex justify-between border-t border-gray-700 pt-2 text-green-300"><span>Общо</span><b>{estimate.totalMin}-{estimate.totalMax} EUR</b></div>
               </div>
+              {estimate.materialConfidence && form.pricingMode !== "labor_only" && (
+                <p className="mt-3 text-xs font-bold uppercase tracking-wide text-cyan-300">
+                  Материален ориентир: {estimate.materialConfidence === "high" ? "висока увереност" : estimate.materialConfidence === "medium" ? "средна увереност" : "необходим е оглед"}
+                </p>
+              )}
               {estimate.warnings.length > 0 && (
                 <div className="mt-4 space-y-1 border-t border-gray-800 pt-3 text-xs text-amber-200">
                   {estimate.warnings.slice(0, 3).map((warning) => <p key={warning}>{warning}</p>)}
                 </div>
+              )}
+              {estimate.notes.length > 0 && (
+                <div className="mt-3 space-y-1 text-xs text-gray-400">
+                  {estimate.notes.slice(0, 3).map((note) => <p key={note}>{note}</p>)}
+                </div>
+              )}
+              {estimate.includedMaterials?.length > 0 && form.pricingMode !== "labor_only" && (
+                <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                  Включени ориентировъчно: {estimate.includedMaterials.slice(0, 6).join(", ")}
+                  {estimate.includedMaterials.length > 6 ? " и други" : ""}.
+                </p>
               )}
               <p className="mt-4 text-xs leading-relaxed text-gray-400">
                 Цената е ориентировъчна и служи за сравнение на оферти. Крайната цена зависи от достъп,

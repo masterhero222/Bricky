@@ -344,25 +344,21 @@
   - urgency, complexity, location, and access multiplier support;
   - inspection and electrical safety warnings.
 - DONE in mock v0.1: request wizard now reads the shared pricing config, displays EUR labor ranges, and saves `categoryKey` plus estimate min/max/currency in mock requests.
-- DONE in mock v0.1: materials are explicitly shown as pending research instead of using the old unverified category-level values.
+- DONE in mock v0.1: add `materialPriceIndex.js` with 174 indexed material and consumable items in EUR.
+- DONE in mock v0.1: add 97 activity-specific material quantity rules covering all 15 repair categories.
+- DONE in mock v0.1: implement three estimate modes: labor only, labor plus basic consumables, and labor plus approximate materials.
+- DONE in mock v0.1: calculate labor, materials, and total as separate min/max ranges, rounded upward to 5 EUR.
+- DONE in mock v0.1: expose material confidence (`high`, `medium`, `inspection_required`) and inspection warnings in the request wizard.
+- DONE in mock v0.1: protect bundled activities from double charging and exclude expensive finish products unless the selected rule explicitly includes them.
+- DONE in mock v0.1: save a complete versioned pricing snapshot in mock requests without changing the production API contract.
+- DONE in mock v0.1: add `npm run test:pricing` coverage for all 97 rules, referenced material keys, range integrity, bundles, inspection cases, and representative estimate modes.
 - REMAINING TECHNICAL DEBT:
   - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
-  - the request snapshot still needs selected activity keys, pricing version, pricing mode, multipliers, and calculation notes;
-  - UI controls for urgency, complexity/access, and pricing mode are not implemented yet;
-  - material min/max ranges remain intentionally empty until material research is completed;
+  - mock snapshots are complete, but production still needs a supported DTO and persistent historical calculation snapshot;
+  - pricing mode is implemented; urgency, complexity/access, material quality, and customer-supplied-material controls still need UI fields;
+  - quantity formulas and ranges must be validated with 3-5 active workers before they are treated as production prices;
   - production backend defaults and DB snapshot structure still need final EUR alignment after mock validation.
-- HIGH: complete pricing research for all 15 repair categories.
-- For every repair activity collect:
-  - market price range and source period;
-  - average reference price;
-  - recommended Bricky labor min/max;
-  - recommended Bricky materials min/max;
-  - unit type;
-  - source note, assumptions, and conditions.
-- Start with the research already initiated for:
-  - ВиК ремонти;
-  - електро ремонти;
-  - боядисване.
+- HIGH: validate the current labor and material ranges for all 15 categories with real quotes and worker feedback; record source period, assumptions, and conditions for every correction.
 - DONE in mock v0.1: create a central config before any DB pricing migration at `frontend/src/constants/repairPricingConfig.js`.
 - Config requirements:
   - stable category and activity keys;
@@ -376,12 +372,7 @@
   - DONE: request wizard estimate;
   - NEXT: worker profile calculator;
   - NEXT: remove the remaining duplicate pricing table and direct pricing constants from `WorkerProfile.jsx`.
-- HIGH: implement the calculator result model:
-  - labor-only range;
-  - materials range;
-  - total labor plus materials range;
-  - optional `includeMaterials` mode;
-  - round every displayed boundary upward to the nearest 5 EUR.
+- DONE in mock v0.1: implement the calculator result model with labor, material, and total ranges for all three pricing modes.
 - HIGH: implement calculation multipliers:
   - size/quantity;
   - urgency;
@@ -412,10 +403,9 @@
 
 ### Materials Research - Medium-High Priority
 
-- Research representative material prices covering approximately the last two years.
-- Group materials by repair category and define the correct unit for each group.
-- Record low/average/high values, currency, source period, and source note.
-- Prepare a `material_price_index` draft only; do not write it to production DB yet.
+- DONE in mock v0.1: prepare a config-based Material Price Index with category grouping, units, EUR ranges, and source-period metadata; do not write it to production DB yet.
+- NEXT: validate representative prices and package assumptions with current supplier prices and worker feedback.
+- NEXT: decide how frequently the index is reviewed and versioned without changing historical request estimates.
 
 ### Pricing Database Integration - Later
 

@@ -712,6 +712,7 @@ export async function mockRequest(method, url, data) {
       estimateMin: Number.isFinite(Number(data.estimateMin)) ? Number(data.estimateMin) : null,
       estimateMax: Number.isFinite(Number(data.estimateMax)) ? Number(data.estimateMax) : null,
       estimateCurrency: data.estimateCurrency || null,
+      pricingSnapshot: data.pricingSnapshot || null,
       status: "нова",
       photos: normalizePhotos(data.photos),
       beforePhotos: normalizePhotos(data.photos),

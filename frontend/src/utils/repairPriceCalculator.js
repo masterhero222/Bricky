@@ -3,11 +3,20 @@ import {
   getPricingActivity,
   getPricingCategory,
 } from "../constants/repairPricingConfig.js";
+import {
+  MATERIAL_QUANTITY_RULES_VERSION,
+  getMaterialQuantityRule,
+} from "../constants/materialQuantityRules.js";
+import {
+  MATERIAL_PRICE_INDEX_VERSION,
+  getMaterialPriceItems,
+} from "../constants/materialPriceIndex.js";
 
 const URGENCY_MULTIPLIERS = { normal: 1, urgent: 1.2, emergency: 1.5 };
 const COMPLEXITY_MULTIPLIERS = { simple: 0.9, normal: 1, complex: 1.25, very_complex: 1.5 };
 const LOCATION_MULTIPLIERS = { default: 1, sofia_center: 1.1, sofia_regular: 1, outside_sofia: 1 };
 const ACCESS_MULTIPLIERS = { normal: 1, difficult: 1.15, very_difficult: 1.3 };
+const MATERIAL_QUALITY_MULTIPLIERS = { budget: 0.8, standard: 1, premium: 1.35 };
 
 const SCALABLE_UNITS = new Set(["item", "m2", "linear_meter", "room"]);
 
@@ -64,6 +73,43 @@ function laborDiscount(activity, sharedVisitIndex) {
   return 0.6;
 }
 
+function materialScale(rule, activity, scope) {
+  const shouldScale =
+    rule.scaleWithScope ||
+    ["area_formula", "linear_formula", "item_formula"].includes(rule.mode) ||
+    (rule.mode === "fixed_kit" && activity.unitType === "item") ||
+    (rule.categoryKey === "small_repairs" && rule.mode === "fixed_kit");
+
+  if (!shouldScale) return { min: 1, max: 1 };
+  const standard = Math.max(1, Number(rule.standardQuantity) || 1);
+  return {
+    min: Math.max(1, scope.min / standard),
+    max: Math.max(1, scope.max / standard),
+  };
+}
+
+function materialRangeForMode(rule, pricingMode) {
+  if (pricingMode === "labor_only") return { min: 0, max: 0, available: true };
+  if (pricingMode === "labor_plus_consumables") {
+    return {
+      min: rule.consumablesMin,
+      max: rule.consumablesMax,
+      available: rule.consumablesMin != null && rule.consumablesMax != null,
+    };
+  }
+  return {
+    min: rule.materialsEstimateMin,
+    max: rule.materialsEstimateMax,
+    available: rule.materialsEstimateMin != null && rule.materialsEstimateMax != null,
+  };
+}
+
+function combinedConfidence(confidences) {
+  if (confidences.includes("inspection_required")) return "inspection_required";
+  if (confidences.includes("medium")) return "medium";
+  return confidences.length ? "high" : null;
+}
+
 export function calculateRepairEstimate({
   categoryKey,
   selectedActivities = [],
@@ -73,6 +119,7 @@ export function calculateRepairEstimate({
   complexity = "normal",
   location = "default",
   access = "normal",
+  materialQuality = "standard",
 } = {}) {
   const category = getPricingCategory(categoryKey);
   const warnings = [];
@@ -82,6 +129,8 @@ export function calculateRepairEstimate({
     return {
       currency: REPAIR_PRICING_CONFIG.currency,
       pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
+      materialPricingVersion: MATERIAL_QUANTITY_RULES_VERSION,
+      materialPriceIndexVersion: MATERIAL_PRICE_INDEX_VERSION,
       pricingMode,
       laborMin: 0,
       laborMax: 0,
@@ -93,6 +142,9 @@ export function calculateRepairEstimate({
       notes,
       isCategoryEstimate: false,
       materialPricingPending: true,
+      materialConfidence: null,
+      includedMaterialKeys: [],
+      excludedMaterialKeys: [],
       calculatedActivities: [],
     };
   }
@@ -106,6 +158,8 @@ export function calculateRepairEstimate({
     return {
       currency: REPAIR_PRICING_CONFIG.currency,
       pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
+      materialPricingVersion: MATERIAL_QUANTITY_RULES_VERSION,
+      materialPriceIndexVersion: MATERIAL_PRICE_INDEX_VERSION,
       pricingMode,
       laborMin: roundUpToFive(category.defaultEstimate.laborMin),
       laborMax: roundUpToFive(category.defaultEstimate.laborMax),
@@ -117,6 +171,9 @@ export function calculateRepairEstimate({
       notes: ["Това е груб ориентир за категорията, а не изчислена оферта."],
       isCategoryEstimate: true,
       materialPricingPending: true,
+      materialConfidence: null,
+      includedMaterialKeys: [],
+      excludedMaterialKeys: [],
       calculatedActivities: [],
     };
   }
@@ -162,10 +219,48 @@ export function calculateRepairEstimate({
 
   let materialMin = 0;
   let materialMax = 0;
-  const includeMaterials = pricingMode !== "labor_only";
-  if (includeMaterials) {
-    warnings.push("Цените за материали още се проучват и не са включени в този ориентир.");
+  let materialPricingPending = false;
+  const materialConfidences = [];
+  const includedMaterialKeys = new Set();
+  const excludedMaterialKeys = new Set();
+  const materialNotes = [];
+
+  if (pricingMode !== "labor_only") {
+    for (const item of activities) {
+      const rule = getMaterialQuantityRule(categoryKey, item.key);
+      if (!rule) {
+        materialPricingPending = true;
+        warnings.push(`${item.label}: липсва правило за материалите.`);
+        continue;
+      }
+
+      const range = materialRangeForMode(rule, pricingMode);
+      if (!range.available) {
+        materialPricingPending = true;
+        warnings.push(`${item.label}: няма надежден диапазон за избрания материален режим.`);
+        continue;
+      }
+
+      const scale = materialScale(rule, item, scope);
+      materialMin += Number(range.min) * scale.min;
+      materialMax += Number(range.max) * scale.max;
+      materialConfidences.push(rule.confidence);
+      rule.includedMaterialKeys.forEach((key) => includedMaterialKeys.add(key));
+      rule.excludedMaterialKeys.forEach((key) => excludedMaterialKeys.add(key));
+
+      if (rule.uiNote) materialNotes.push(rule.uiNote);
+      if (rule.confidence === "inspection_required") {
+        warnings.push(`${item.label}: материалите се уточняват след оглед.`);
+      }
+      if (pricingMode === "labor_plus_materials_estimate" && !rule.materialIncludesProduct && rule.excludedMaterialKeys.length) {
+        materialNotes.push(`${item.label}: скъпият основен продукт не е включен автоматично.`);
+      }
+    }
   }
+
+  const materialMultiplier = multiplier(MATERIAL_QUALITY_MULTIPLIERS, materialQuality);
+  materialMin *= materialMultiplier;
+  materialMax *= materialMultiplier;
 
   laborMin = roundUpToFive(laborMin);
   laborMax = roundUpToFive(laborMax);
@@ -175,6 +270,8 @@ export function calculateRepairEstimate({
   return {
     currency: REPAIR_PRICING_CONFIG.currency,
     pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
+    materialPricingVersion: MATERIAL_QUANTITY_RULES_VERSION,
+    materialPriceIndexVersion: MATERIAL_PRICE_INDEX_VERSION,
     pricingMode,
     laborMin,
     laborMax,
@@ -183,9 +280,13 @@ export function calculateRepairEstimate({
     totalMin: roundUpToFive(laborMin + materialMin),
     totalMax: roundUpToFive(laborMax + materialMax),
     warnings: [...new Set(warnings)],
-    notes,
+    notes: [...new Set([...notes, ...materialNotes])],
     isCategoryEstimate: false,
-    materialPricingPending: true,
+    materialPricingPending,
+    materialConfidence: combinedConfidence(materialConfidences),
+    includedMaterialKeys: [...includedMaterialKeys],
+    includedMaterials: getMaterialPriceItems([...includedMaterialKeys]).map((item) => item.label),
+    excludedMaterialKeys: [...excludedMaterialKeys],
     calculatedActivities: activities.map((item) => item.key),
   };
 }
