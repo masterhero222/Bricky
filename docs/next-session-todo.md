@@ -352,6 +352,12 @@
 - DONE in mock v0.1: protect bundled activities from double charging and exclude expensive finish products unless the selected rule explicitly includes them.
 - DONE in mock v0.1: save a complete versioned pricing snapshot in mock requests without changing the production API contract.
 - DONE in mock v0.1: add `npm run test:pricing` coverage for all 97 rules, referenced material keys, range integrity, bundles, inspection cases, and representative estimate modes.
+- DONE in mock v0.1: add an exact client-entered area field (sq.m) to every repair category while keeping quick size choices available.
+- DONE in mock v0.1: use exact area directly for area-based activities, convert it conservatively for room-based work, and keep it as context without multiplying item/point activities.
+- DONE in mock v0.1: cap calculator area input at 2000 sq.m and require an individual estimate above that limit.
+- DONE in mock v0.1: implement the Expected Range UX model with `expectedMin/Max`, `possibleMin/Max`, `confidence`, `displayMode`, and category-specific variation reasons.
+- DONE in mock v0.1: show the expected range as the primary client price and retain a wide technical possible range only as secondary information.
+- DONE in mock v0.1: store exact area and the complete expected/possible range model in the mock pricing snapshot; do not migrate this structure to production DB yet.
 - REMAINING TECHNICAL DEBT:
   - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
   - mock snapshots are complete, but production still needs a supported DTO and persistent historical calculation snapshot;

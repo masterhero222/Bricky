@@ -21,7 +21,7 @@ import {
   REPAIR_CATEGORY_FLOW,
   REPAIR_CATEGORY_OPTIONS,
 } from "../constants/repairCatalog";
-import { calculateRepairEstimate } from "../utils/repairPriceCalculator";
+import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
 import { useAuthModal } from "../context/AuthModalContext";
 
 const SOFIA_DISTRICTS = [
@@ -62,6 +62,13 @@ const PRICING_MODES = [
   { value: "labor_plus_materials_estimate", label: "Труд + ориентировъчни материали", description: "По-широк диапазон; основните продукти често не са включени." },
 ];
 
+const CONFIDENCE_LABELS = {
+  high: "Висока увереност",
+  medium: "Средна увереност",
+  low: "Ниска увереност",
+  inspection_required: "Нужен е оглед",
+};
+
 const STEPS = ["Ремонт", "Дейности", "Размер", "Локация", "Цел", "Контакт", "Преглед"];
 
 const ICONS = {
@@ -101,6 +108,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
     categoryKey: "bathroom_renovation",
     activities: [],
     quantity: "",
+    exactAreaM2: "",
     pricingMode: "labor_plus_consumables",
     district: "София - Център",
     address: "",
@@ -127,10 +135,11 @@ export function RequestFlow({ embedded = false, onCreated }) {
       categoryKey: category.key,
       selectedActivities: form.activities,
       sizeOption: form.quantity,
+      exactAreaM2: form.exactAreaM2,
       pricingMode: form.pricingMode,
       location: form.district === "София - Център" ? "sofia_center" : "sofia_regular",
     }),
-    [category.key, form.activities, form.quantity, form.pricingMode, form.district]
+    [category.key, form.activities, form.quantity, form.exactAreaM2, form.pricingMode, form.district]
   );
 
   function setField(field, value) {
@@ -167,6 +176,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
       categoryKey: key,
       activities: [],
       quantity: nextFlow.quantityOptions?.[0] || "",
+      exactAreaM2: "",
     }));
     setStep(1);
   }
@@ -183,7 +193,11 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
   function canContinue() {
     if (step === 1) return form.activities.length > 0;
-    if (step === 2) return Boolean(form.quantity);
+    if (step === 2) {
+      const area = Number(String(form.exactAreaM2).replace(",", "."));
+      const areaIsValid = Number.isFinite(area) && area > 0 && area <= MAX_EXACT_AREA_M2;
+      return Boolean(form.quantity) || areaIsValid;
+    }
     if (step === 3) return Boolean(form.district);
     if (step === 5) return Boolean(form.phone.trim());
     return true;
@@ -214,10 +228,12 @@ export function RequestFlow({ embedded = false, onCreated }) {
       `Тип ремонт: ${category.label}`,
       `Планирани дейности: ${form.activities.join(", ") || "не е избрано"}`,
       `Приблизителен размер: ${form.quantity || "не е посочено"}`,
+      form.exactAreaM2 ? `Точна площ, въведена от клиента: ${form.exactAreaM2} кв.м` : "",
       `Ценови режим: ${PRICING_MODES.find((item) => item.value === form.pricingMode)?.label || form.pricingMode}`,
       `Ориентировъчен труд: ${estimate.laborMin}-${estimate.laborMax} ${estimate.currency}`,
       `Ориентировъчни материали: ${estimate.materialMin}-${estimate.materialMax} ${estimate.currency}`,
-      `Общ ориентир: ${estimate.totalMin}-${estimate.totalMax} ${estimate.currency}`,
+      `Най-вероятен ориентир: ${estimate.expectedMin}-${estimate.expectedMax} ${estimate.currency}`,
+      `Възможен технически диапазон: ${estimate.possibleMin}-${estimate.possibleMax} ${estimate.currency}`,
       `Версия на калкулатора: ${estimate.pricingVersion}`,
       `Цел: ${GOALS.find((item) => item.value === form.goal)?.label || form.goal}`,
       `Комуникация: ${CONTACT_PREFS.find((item) => item.value === form.contactPreference)?.label || form.contactPreference}`,
@@ -254,8 +270,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
         category: category.label,
         categoryKey: category.key,
         description: buildDescription(),
-        estimateMin: estimate.totalMin,
-        estimateMax: estimate.totalMax,
+        estimateMin: estimate.expectedMin,
+        estimateMax: estimate.expectedMax,
         estimateCurrency: estimate.currency,
         photos: form.photos || [],
       };
@@ -269,12 +285,20 @@ export function RequestFlow({ embedded = false, onCreated }) {
           selectedCategoryKey: category.key,
           selectedActivityKeys: estimate.calculatedActivities,
           sizeKey: form.quantity,
+          exactAreaM2: estimate.exactAreaM2,
           laborMin: estimate.laborMin,
           laborMax: estimate.laborMax,
           materialMin: estimate.materialMin,
           materialMax: estimate.materialMax,
           totalMin: estimate.totalMin,
           totalMax: estimate.totalMax,
+          expectedMin: estimate.expectedMin,
+          expectedMax: estimate.expectedMax,
+          possibleMin: estimate.possibleMin,
+          possibleMax: estimate.possibleMax,
+          confidence: estimate.confidence,
+          displayMode: estimate.displayMode,
+          variationReason: estimate.variationReason,
           currency: estimate.currency,
           materialConfidence: estimate.materialConfidence,
           includedMaterialKeys: estimate.includedMaterialKeys,
@@ -292,6 +316,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
         ...prev,
         activities: [],
         quantity: "",
+        exactAreaM2: "",
         address: "",
         description: "",
         photos: [],
@@ -405,6 +430,33 @@ export function RequestFlow({ embedded = false, onCreated }) {
                       {option}
                     </button>
                   ))}
+                </div>
+                <div className="mt-6 rounded-xl border border-cyan-400/40 bg-gray-900 p-4">
+                  <label htmlFor="exact-area-m2" className="block text-sm font-black text-cyan-200">
+                    Колко квадратни метра трябва да се ремонтират?
+                  </label>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Въведи точна или приблизителна площ, ако я знаеш. При дейности по площ тя прави изчислението по-точно.
+                  </p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <input
+                      id="exact-area-m2"
+                      type="number"
+                      min="0.1"
+                      max={MAX_EXACT_AREA_M2}
+                      step="0.1"
+                      value={form.exactAreaM2}
+                      onChange={(e) => setField("exactAreaM2", e.target.value)}
+                      placeholder="Напр. 24"
+                      className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-950 p-3"
+                    />
+                    <span className="shrink-0 font-bold">кв.м</span>
+                  </div>
+                  {Number(form.exactAreaM2) > MAX_EXACT_AREA_M2 && (
+                    <p className="mt-2 text-sm font-semibold text-red-300">
+                      За площ над {MAX_EXACT_AREA_M2} кв.м е нужна индивидуална оценка.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -529,6 +581,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Тип" value={category.label} />
             <SummaryLine label="Дейности" value={form.activities.length ? form.activities.join(", ") : "не са избрани"} />
             <SummaryLine label="Размер" value={form.quantity || "не е избран"} />
+            <SummaryLine label="Площ от клиента" value={form.exactAreaM2 ? `${form.exactAreaM2} кв.м` : "не е въведена"} />
             <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === form.pricingMode)?.label} />
             <SummaryLine label="Локация" value={[form.district, form.address].filter(Boolean).join(", ")} />
             <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
@@ -536,10 +589,29 @@ export function RequestFlow({ embedded = false, onCreated }) {
               <p className="text-sm text-gray-400">
                 {estimate.isCategoryEstimate ? "Груб ориентир за категорията" : `Ориентир ${estimate.pricingVersion}`}
               </p>
+              <div className="mt-3 rounded-lg border border-green-400/30 bg-green-400/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-green-300">
+                  {estimate.displayMode === "inspection_required" ? "Ориентир за труда преди оглед" : "Най-вероятно"}
+                </p>
+                <p className="mt-1 text-2xl font-black text-white">
+                  {estimate.expectedMin}-{estimate.expectedMax} EUR
+                </p>
+              </div>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} EUR</b></div>
                 <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{form.pricingMode === "labor_only" ? "не са включени" : estimate.materialPricingPending ? "няма надежден диапазон" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
-                <div className="flex justify-between border-t border-gray-700 pt-2 text-green-300"><span>Общо</span><b>{estimate.totalMin}-{estimate.totalMax} EUR</b></div>
+                {(estimate.possibleMin !== estimate.expectedMin || estimate.possibleMax !== estimate.expectedMax) && (
+                  <div className="flex justify-between border-t border-gray-700 pt-2 text-gray-400">
+                    <span>Възможен диапазон</span>
+                    <b className="text-right">{estimate.possibleMin}-{estimate.possibleMax} EUR</b>
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wide text-cyan-300">
+                Увереност: {CONFIDENCE_LABELS[estimate.confidence] || CONFIDENCE_LABELS.medium}
+              </p>
+              <div className="mt-3 rounded-lg bg-gray-950 p-3 text-xs leading-relaxed text-gray-300">
+                <b className="text-white">Защо варира:</b> {estimate.variationReason}
               </div>
               {estimate.materialConfidence && form.pricingMode !== "labor_only" && (
                 <p className="mt-3 text-xs font-bold uppercase tracking-wide text-cyan-300">
@@ -563,8 +635,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                 </p>
               )}
               <p className="mt-4 text-xs leading-relaxed text-gray-400">
-                Цената е ориентировъчна и служи за сравнение на оферти. Крайната цена зависи от достъп,
-                сложност, материали, спешност и оглед от майстор.
+                Качи снимки и подробно описание за по-точна оферта. Крайната цена се потвърждава от майстор след снимки или оглед.
               </p>
             </div>
           </aside>

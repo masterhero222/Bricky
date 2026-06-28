@@ -17,8 +17,28 @@ const COMPLEXITY_MULTIPLIERS = { simple: 0.9, normal: 1, complex: 1.25, very_com
 const LOCATION_MULTIPLIERS = { default: 1, sofia_center: 1.1, sofia_regular: 1, outside_sofia: 1 };
 const ACCESS_MULTIPLIERS = { normal: 1, difficult: 1.15, very_difficult: 1.3 };
 const MATERIAL_QUALITY_MULTIPLIERS = { budget: 0.8, standard: 1, premium: 1.35 };
+export const MAX_EXACT_AREA_M2 = 2000;
 
 const SCALABLE_UNITS = new Set(["item", "m2", "linear_meter", "room"]);
+const STANDARD_REPAIR_AREA_PER_ROOM_M2 = 20;
+
+const CATEGORY_VARIATION_REASONS = {
+  vik: "Цената зависи от мястото на проблема, достъпа до тръбите, нужните части и дали има къртене.",
+  electro: "Цената зависи от броя точки, състоянието на инсталацията, таблото и дали има скрит дефект.",
+  painting: "Цената зависи от площта, броя слоеве, състоянието на стените и качеството на боята.",
+  plaster: "Цената зависи от състоянието и кривините на стените, пукнатините, броя слоеве и нуждата от мрежа или грунд.",
+  tiles: "Цената зависи от площта, основата, размера и рязането на плочките и нуждата от хидроизолация.",
+  bathroom_renovation: "Цената зависи от състоянието на банята, ВиК точките, плочките, хидроизолацията, санитарията и къртенето.",
+  drywall: "Цената зависи от площта, конструкцията, броя нива, изолацията и допълнителните детайли.",
+  flooring: "Цената зависи от площта, вида настилка, основата, замазката, первазите и преходните лайсни.",
+  heating_cooling: "Цената зависи от мощността, тръбния път, достъпа, етажа, частите и вида ремонт или монтаж.",
+  windows_doors: "Цената зависи от вида врата или дограма, отвора, обкова, монтажа и нуждата от корекции.",
+  furniture_mounting: "Цената зависи от размера, стената, крепежите, сложността и броя монтажи.",
+  roof_waterproofing: "Цената зависи от вида покрив, мястото на теча, достъпа, наклона и скритите щети.",
+  demolition_cleanup: "Цената зависи от отпадъка, етажа, асансьора, достъпа за бус и нуждата от контейнер.",
+  full_renovation: "Цената зависи от обхвата, състоянието, материалите, помещенията, инсталациите и довършителните работи.",
+  small_repairs: "Цената зависи от броя задачи, нужните части, достъпа и спешността.",
+};
 
 export function roundUpToFive(value) {
   const safe = Math.max(0, Number(value) || 0);
@@ -55,6 +75,58 @@ export function parseScopeOption(sizeOption) {
   return { min: 1, max: 1, uncertain: true };
 }
 
+export function normalizeExactAreaM2(value) {
+  const parsed = Number(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.min(parsed, MAX_EXACT_AREA_M2);
+}
+
+export function isRangeTooWide(min, max) {
+  return Number(max) / Math.max(Number(min) || 0, 1) > 2.5;
+}
+
+export function buildDisplayEstimate(rawEstimate, { categoryKey, confidence = "medium" } = {}) {
+  const possibleMin = roundUpToFive(rawEstimate.totalMin);
+  const possibleMax = roundUpToFive(Math.max(rawEstimate.totalMax, possibleMin));
+  const variationReason = CATEGORY_VARIATION_REASONS[categoryKey] ||
+    "Цената зависи от състоянието, достъпа, материалите и сложността.";
+
+  if (confidence === "inspection_required") {
+    return {
+      displayMode: "inspection_required",
+      expectedMin: roundUpToFive(rawEstimate.laborMin),
+      expectedMax: roundUpToFive(Math.max(rawEstimate.laborMax, rawEstimate.laborMin)),
+      possibleMin,
+      possibleMax,
+      confidence,
+      variationReason,
+    };
+  }
+
+  if (isRangeTooWide(possibleMin, possibleMax)) {
+    const spread = possibleMax - possibleMin;
+    return {
+      displayMode: "expected_range",
+      expectedMin: roundUpToFive(possibleMin + spread * 0.2),
+      expectedMax: roundUpToFive(possibleMin + spread * 0.45),
+      possibleMin,
+      possibleMax,
+      confidence,
+      variationReason,
+    };
+  }
+
+  return {
+    displayMode: "expected_range",
+    expectedMin: possibleMin,
+    expectedMax: possibleMax,
+    possibleMin,
+    possibleMax,
+    confidence,
+    variationReason,
+  };
+}
+
 function multiplier(table, key) {
   return table[key] || 1;
 }
@@ -73,7 +145,7 @@ function laborDiscount(activity, sharedVisitIndex) {
   return 0.6;
 }
 
-function materialScale(rule, activity, scope) {
+function materialScale(rule, activity, scope, areaScope) {
   const shouldScale =
     rule.scaleWithScope ||
     ["area_formula", "linear_formula", "item_formula"].includes(rule.mode) ||
@@ -81,10 +153,11 @@ function materialScale(rule, activity, scope) {
     (rule.categoryKey === "small_repairs" && rule.mode === "fixed_kit");
 
   if (!shouldScale) return { min: 1, max: 1 };
+  const selectedScope = rule.mode === "area_formula" || activity.unitType === "m2" ? areaScope : scope;
   const standard = Math.max(1, Number(rule.standardQuantity) || 1);
   return {
-    min: Math.max(1, scope.min / standard),
-    max: Math.max(1, scope.max / standard),
+    min: Math.max(1, selectedScope.min / standard),
+    max: Math.max(1, selectedScope.max / standard),
   };
 }
 
@@ -106,6 +179,7 @@ function materialRangeForMode(rule, pricingMode) {
 
 function combinedConfidence(confidences) {
   if (confidences.includes("inspection_required")) return "inspection_required";
+  if (confidences.includes("low")) return "low";
   if (confidences.includes("medium")) return "medium";
   return confidences.length ? "high" : null;
 }
@@ -114,6 +188,7 @@ export function calculateRepairEstimate({
   categoryKey,
   selectedActivities = [],
   sizeOption = "",
+  exactAreaM2 = null,
   pricingMode = "labor_only",
   urgency = "normal",
   complexity = "normal",
@@ -138,6 +213,13 @@ export function calculateRepairEstimate({
       materialMax: 0,
       totalMin: 0,
       totalMax: 0,
+      expectedMin: 0,
+      expectedMax: 0,
+      possibleMin: 0,
+      possibleMax: 0,
+      confidence: "low",
+      displayMode: "expected_range",
+      variationReason: "Липсва достатъчно информация за надежден ориентир.",
       warnings: ["Няма ценова конфигурация за избраната категория."],
       notes,
       isCategoryEstimate: false,
@@ -155,18 +237,24 @@ export function calculateRepairEstimate({
 
   if (!resolved.length) {
     warnings.push("Избери поне една дейност за по-точен ориентир.");
+    const totalMin = roundUpToFive(category.defaultEstimate.laborMin);
+    const totalMax = roundUpToFive(category.defaultEstimate.laborMax);
     return {
       currency: REPAIR_PRICING_CONFIG.currency,
       pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
       materialPricingVersion: MATERIAL_QUANTITY_RULES_VERSION,
       materialPriceIndexVersion: MATERIAL_PRICE_INDEX_VERSION,
       pricingMode,
-      laborMin: roundUpToFive(category.defaultEstimate.laborMin),
-      laborMax: roundUpToFive(category.defaultEstimate.laborMax),
+      laborMin: totalMin,
+      laborMax: totalMax,
       materialMin: 0,
       materialMax: 0,
-      totalMin: roundUpToFive(category.defaultEstimate.laborMin),
-      totalMax: roundUpToFive(category.defaultEstimate.laborMax),
+      totalMin,
+      totalMax,
+      ...buildDisplayEstimate(
+        { laborMin: totalMin, laborMax: totalMax, totalMin, totalMax },
+        { categoryKey, confidence: "low" }
+      ),
       warnings,
       notes: ["Това е груб ориентир за категорията, а не изчислена оферта."],
       isCategoryEstimate: true,
@@ -184,7 +272,13 @@ export function calculateRepairEstimate({
   }
 
   const scope = parseScopeOption(sizeOption);
-  if (scope.uncertain) warnings.push("Размерът е приблизителен и разширява ценовия диапазон.");
+  const normalizedAreaM2 = normalizeExactAreaM2(exactAreaM2);
+  const areaScope = normalizedAreaM2
+    ? { min: normalizedAreaM2, max: normalizedAreaM2, uncertain: false }
+    : scope;
+  if (scope.uncertain && !normalizedAreaM2) {
+    warnings.push("Размерът е приблизителен и разширява ценовия диапазон.");
+  }
 
   let laborMin = 0;
   let laborMax = 0;
@@ -192,8 +286,16 @@ export function calculateRepairEstimate({
   let minimumVisitPrice = 0;
 
   for (const item of activities) {
-    const scaleMin = SCALABLE_UNITS.has(item.unitType) ? scope.min : 1;
-    const scaleMax = SCALABLE_UNITS.has(item.unitType) ? scope.max : 1;
+    const laborScope = item.unitType === "m2"
+      ? areaScope
+      : item.unitType === "room" && normalizedAreaM2
+        ? {
+            min: Math.max(0.5, normalizedAreaM2 / STANDARD_REPAIR_AREA_PER_ROOM_M2),
+            max: Math.max(0.5, normalizedAreaM2 / STANDARD_REPAIR_AREA_PER_ROOM_M2),
+          }
+        : scope;
+    const scaleMin = SCALABLE_UNITS.has(item.unitType) ? laborScope.min : 1;
+    const scaleMax = SCALABLE_UNITS.has(item.unitType) ? laborScope.max : 1;
     const discount = laborDiscount(item, sharedVisitIndex);
 
     laborMin += item.laborMin * scaleMin * discount;
@@ -241,7 +343,7 @@ export function calculateRepairEstimate({
         continue;
       }
 
-      const scale = materialScale(rule, item, scope);
+      const scale = materialScale(rule, item, scope, areaScope);
       materialMin += Number(range.min) * scale.min;
       materialMax += Number(range.max) * scale.max;
       materialConfidences.push(rule.confidence);
@@ -267,6 +369,16 @@ export function calculateRepairEstimate({
   materialMin = roundUpToFive(materialMin);
   materialMax = roundUpToFive(materialMax);
 
+  const confidence = activities.some((item) => item.requiresInspection) || materialConfidences.includes("inspection_required")
+    ? "inspection_required"
+    : scope.uncertain && !normalizedAreaM2
+      ? "medium"
+      : combinedConfidence(materialConfidences) || "high";
+  const totals = {
+    totalMin: roundUpToFive(laborMin + materialMin),
+    totalMax: roundUpToFive(laborMax + materialMax),
+  };
+
   return {
     currency: REPAIR_PRICING_CONFIG.currency,
     pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
@@ -277,8 +389,9 @@ export function calculateRepairEstimate({
     laborMax,
     materialMin,
     materialMax,
-    totalMin: roundUpToFive(laborMin + materialMin),
-    totalMax: roundUpToFive(laborMax + materialMax),
+    ...totals,
+    ...buildDisplayEstimate({ laborMin, laborMax, ...totals }, { categoryKey, confidence }),
+    exactAreaM2: normalizedAreaM2,
     warnings: [...new Set(warnings)],
     notes: [...new Set([...notes, ...materialNotes])],
     isCategoryEstimate: false,

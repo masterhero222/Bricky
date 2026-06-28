@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { MATERIAL_PRICE_INDEX } from "../src/constants/materialPriceIndex.js";
 import { MATERIAL_QUANTITY_RULES } from "../src/constants/materialQuantityRules.js";
 import { REPAIR_PRICING_CONFIG } from "../src/constants/repairPricingConfig.js";
-import { calculateRepairEstimate } from "../src/utils/repairPriceCalculator.js";
+import {
+  buildDisplayEstimate,
+  calculateRepairEstimate,
+  MAX_EXACT_AREA_M2,
+} from "../src/utils/repairPriceCalculator.js";
 
 const rules = new Map(MATERIAL_QUANTITY_RULES.map((rule) => [rule.key, rule]));
 const materials = new Set(MATERIAL_PRICE_INDEX.map((item) => item.key));
@@ -79,5 +83,52 @@ const laminateEstimate = calculateRepairEstimate({
   pricingMode: "labor_plus_materials_estimate",
 });
 assert.deepEqual([laminateEstimate.materialMin, laminateEstimate.materialMax], [200, 550]);
+
+const exactPlasterArea = calculateRepairEstimate({
+  categoryKey: "plaster",
+  selectedActivities: ["Фина шпакловка"],
+  sizeOption: "до 20 кв.м",
+  exactAreaM2: 24,
+  pricingMode: "labor_only",
+});
+assert.equal(exactPlasterArea.exactAreaM2, 24);
+assert.deepEqual([exactPlasterArea.laborMin, exactPlasterArea.laborMax], [170, 240]);
+
+const itemWithAreaContext = calculateRepairEstimate({
+  categoryKey: "electro",
+  selectedActivities: ["Контакти"],
+  sizeOption: "1 точка",
+  exactAreaM2: 500,
+  pricingMode: "labor_only",
+});
+const itemWithoutAreaContext = calculateRepairEstimate({
+  categoryKey: "electro",
+  selectedActivities: ["Контакти"],
+  sizeOption: "1 точка",
+  pricingMode: "labor_only",
+});
+assert.deepEqual(
+  [itemWithAreaContext.laborMin, itemWithAreaContext.laborMax],
+  [itemWithoutAreaContext.laborMin, itemWithoutAreaContext.laborMax],
+  "Area must not multiply item-based activities"
+);
+
+const cappedArea = calculateRepairEstimate({
+  categoryKey: "plaster",
+  selectedActivities: ["Фина шпакловка"],
+  exactAreaM2: MAX_EXACT_AREA_M2 + 500,
+  pricingMode: "labor_only",
+});
+assert.equal(cappedArea.exactAreaM2, MAX_EXACT_AREA_M2);
+
+const wideRange = buildDisplayEstimate(
+  { laborMin: 100, laborMax: 790, totalMin: 100, totalMax: 790 },
+  { categoryKey: "vik", confidence: "medium" }
+);
+assert.deepEqual(
+  [wideRange.expectedMin, wideRange.expectedMax, wideRange.possibleMin, wideRange.possibleMax],
+  [240, 415, 100, 790]
+);
+assert.equal(wideRange.displayMode, "expected_range");
 
 console.log(`Pricing config verified: ${rules.size} activities, ${materials.size} material items.`);
