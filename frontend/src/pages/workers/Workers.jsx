@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowRight, BadgeCheck, MapPin, UserPlus } from "lucide-react";
 import { apiGet } from "../../services/api";
 import { mediaUrl } from "../../utils/mediaUrls";
 
@@ -62,15 +63,19 @@ export default function Workers() {
   }, [workers]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white pt-24 pb-16 px-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <h1 className="text-3xl font-extrabold">Майстори</h1>
+    <div className="min-h-screen pb-20 pt-20 text-white">
+      <div className="bricky-container">
+        <div className="mb-12 flex flex-col justify-between gap-7 md:flex-row md:items-end">
+          <div>
+            <h1 className="bricky-page-title">Майстори</h1>
+            <p className="bricky-page-subtitle">Доверени специалисти за вашия дом.</p>
+          </div>
 
           <button
             onClick={() => navigate("/auth/register?role=worker")}
-            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl font-bold"
+            className="bricky-button-primary self-start md:self-auto"
           >
+            <UserPlus size={21} />
             Стани майстор
           </button>
         </div>
@@ -80,28 +85,27 @@ export default function Workers() {
         )}
 
         {!loading && error && (
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 text-center text-red-300">
+          <div className="bricky-card rounded-[20px] p-7 text-center text-red-300">
             {error}
           </div>
         )}
 
         {!loading && !error && cards.length === 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 text-center text-gray-300">
+          <div className="bricky-card rounded-[20px] p-9 text-center text-slate-300">
             Няма регистрирани майстори.
           </div>
         )}
 
         {!loading && !error && cards.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {cards.map((w) => (
               <button
                 key={w._id}
                 onClick={() => navigate(`/workers/${w._id}`)}
-                className="text-left bg-white text-black rounded-2xl shadow-xl overflow-hidden hover:scale-[1.01] transition"
+                className="group bricky-card min-h-[390px] rounded-[20px] p-7 text-left transition duration-200 hover:-translate-y-1 hover:border-slate-300/30 hover:bg-[#16263e]/95"
               >
-                <div className="bg-gradient-to-br from-gray-100 to-gray-200 px-5 pt-6 pb-5">
-                  <div className="flex items-center gap-4">
-                    <div className="h-24 w-24 shrink-0 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-300">
+                <div className="flex items-center gap-5">
+                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-[3px] border-white/90 bg-slate-700 shadow-xl shadow-black/30">
                       <img
                         src={w._avatar}
                         alt={w._name}
@@ -112,41 +116,39 @@ export default function Workers() {
                       />
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="text-lg font-extrabold leading-tight">{w._name}</div>
-                      <div className="text-sm text-gray-600 mt-1">{w._skill}</div>
-                      <div className="mt-3 inline-flex rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-bold">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xl font-extrabold leading-tight text-slate-50">{w._name}</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-400">{w._skill}</div>
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-400/10 px-3 py-1.5 text-xs font-bold text-green-300">
+                        <BadgeCheck size={16} />
                         {w._completedCount} обекта през Bricky
                       </div>
                     </div>
-                  </div>
                 </div>
 
-                <div className="p-5">
+                <div className="my-7 h-px bg-slate-400/15" />
 
-                  <div className="mt-4 text-sm text-gray-700 space-y-1">
-                    <div><b>Град:</b> {w._city}</div>
-                    <div><b>Профилна снимка:</b> {w.avatarUrl ? "качена" : "очаква се"}</div>
-                  </div>
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <MapPin size={18} className="text-slate-400" /> {w._city}
+                </div>
 
                   {w._jobTypes.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {w._jobTypes.map((type) => (
-                        <span key={type} className="rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-bold">
+                        <span key={type} className="bricky-chip">
                           {type}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  <div className="mt-4 text-sm text-gray-600 line-clamp-3">
+                  <div className="mt-5 line-clamp-3 min-h-[42px] text-sm leading-6 text-slate-400">
                     {w._description}
                   </div>
 
-                  <div className="mt-4 text-sm text-blue-600 font-bold">
-                    Виж профил →
+                  <div className="mt-6 flex items-center gap-2 text-sm font-bold text-green-300 transition group-hover:gap-3 group-hover:text-green-200">
+                    Виж профил <ArrowRight size={18} />
                   </div>
-                </div>
               </button>
             ))}
           </div>
