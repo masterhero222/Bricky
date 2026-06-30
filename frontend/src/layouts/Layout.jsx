@@ -6,10 +6,10 @@ import DevTestPanel from "../components/DevTestPanel";
 
 export default function Layout() {
   return (
-    <div className="relative min-h-screen bg-gray-950 text-white">
+    <div className="relative min-h-screen text-white">
       <Navbar />
 
-      <main className="pt-16">
+      <main className="pt-[78px]">
         <Outlet />
         <DevTestPanel />
       </main>
