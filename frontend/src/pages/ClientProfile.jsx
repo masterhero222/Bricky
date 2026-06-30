@@ -4,6 +4,16 @@ import { apiGet, apiPost } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 import { photoMediaUrl } from "../utils/mediaUrls";
+import {
+  CalendarDays,
+  FileText,
+  MapPin,
+  Plus,
+  RefreshCw,
+  Users,
+} from "lucide-react";
+import RequestInfoRow from "../components/requests/RequestInfoRow";
+import RequestPhotoCarousel from "../components/requests/RequestPhotoCarousel";
 
 function formatBG(dateStr) {
   try {
@@ -402,9 +412,9 @@ export default function ClientProfile() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
-      <aside className="w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
-        <nav className="flex flex-col gap-4 px-6 text-sm">
+    <div className="flex min-h-[calc(100vh-78px)] text-white">
+      <aside className="fixed bottom-0 top-[78px] z-30 hidden w-64 border-r border-slate-400/15 bg-[#0d1728]/92 pt-12 backdrop-blur-xl lg:block">
+        <nav className="flex flex-col gap-2 px-5 text-sm">
           {[
             ["requests", "Моите заявки"],
             ["create", "Направи заявка"],
@@ -414,7 +424,7 @@ export default function ClientProfile() {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={activeTab === key ? "text-red-400 font-bold" : "hover:text-red-300"}
+              className={`rounded-xl px-4 py-3 text-left font-bold transition ${activeTab === key ? "border border-green-400/20 bg-green-400/10 text-green-300" : "text-slate-300 hover:bg-slate-400/10 hover:text-white"}`}
             >
               {label}
             </button>
@@ -426,25 +436,30 @@ export default function ClientProfile() {
         </nav>
       </aside>
 
-      <main className="flex-1 ml-64 pt-24 px-10 pb-20">
+      <main className="min-w-0 flex-1 px-4 pb-20 pt-12 sm:px-7 lg:ml-64 lg:px-10">
+        <div className="mb-8 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
+          {[["requests", "Моите заявки"], ["create", "Направи заявка"], ["profile", "Профил"], ["settings", "Настройки"]].map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`shrink-0 rounded-xl px-4 py-3 text-sm font-bold ${activeTab === key ? "bg-green-500/15 text-green-300" : "bg-slate-800/70 text-slate-300"}`}>{label}</button>
+          ))}
+        </div>
         {activeTab === "requests" && (
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-8">
-              <h1 className="text-3xl font-bold">Моите заявки</h1>
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+              <h1 className="text-3xl font-extrabold sm:text-4xl">Моите заявки</h1>
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => setActiveTab("create")}
-                  className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold"
+                  className="bricky-button-primary"
                 >
-                  Направи заявка
+                  <Plus size={20} /> Направи заявка
                 </button>
 
                 <button
                   onClick={loadData}
-                  className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
+                  className="bricky-button-secondary"
                 >
-                  Обнови
+                  <RefreshCw size={19} /> Обнови
                 </button>
               </div>
             </div>
@@ -470,54 +485,37 @@ export default function ClientProfile() {
                   const saving = !!reviewSaving[r.id];
 
                   return (
-                    <div key={r.id} className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h2 className="text-xl font-bold">
-                            #{r.id} • {r.category}
-                          </h2>
-                          <p className="text-gray-400 text-sm mt-1">Създадена: {formatBG(r.created_at)}</p>
-                        </div>
-                      {Array.isArray(r.photos) && r.photos.length > 0 && (
-                        <div className="mt-4">
-                          <div className="text-sm font-bold text-gray-300 mb-2">Снимки към заявката</div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {r.photos.map((photo) => (
-                              <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                                <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover" />
-                              </a>
-                            ))}
+                    <div key={r.id} className="bricky-card overflow-hidden rounded-[20px] p-5 sm:p-8">
+                      <div className="flex flex-col justify-between gap-6 border-b border-slate-400/15 pb-7 md:flex-row md:items-start">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <span className="grid h-14 min-w-16 place-items-center rounded-2xl border border-blue-400/20 bg-blue-500/15 px-4 text-xl font-extrabold text-blue-100">#{r.id}</span>
+                          <div className="min-w-0">
+                            <h2 className="text-xl font-extrabold leading-tight text-slate-50 sm:text-2xl">{r.category}</h2>
+                            <p className="mt-2 flex items-center gap-2 text-sm text-slate-400"><CalendarDays size={17} /> Създадена: {formatBG(r.created_at)}</p>
                           </div>
                         </div>
-                      )}
 
-
-                        <div className="text-right">
-                          <div className="text-sm text-gray-300">
-                            Статус:
-                            <span className="ml-2 text-red-400 font-bold">{r.status}</span>
+                        <div className="md:text-right">
+                          <div className="flex items-center gap-3 md:justify-end">
+                            <span className="text-sm text-slate-400">Статус:</span>
+                            <span className={`inline-flex min-h-9 items-center rounded-xl border px-4 text-sm font-extrabold ${isCompleted ? "border-green-400/20 bg-green-400/10 text-green-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300"}`}>{r.status}</span>
                           </div>
-
-                          {assignedUserId ? (
-                            <div className="mt-2 text-sm">
-                              <span className="text-gray-300">Избран майстор:</span>{" "}
-                              <span className="text-green-400 font-bold">
-                                {workersMap[assignedUserId]?.fullName || `userId ${assignedUserId}`}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="mt-2 text-sm text-gray-400">Няма избран майстор</div>
-                          )}
+                          <div className="mt-3 text-sm text-slate-400">
+                            {assignedUserId ? <><span>Избран майстор: </span><span className="font-bold text-green-300">{workersMap[assignedUserId]?.fullName || `userId ${assignedUserId}`}</span></> : "Няма избран майстор"}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="mt-4 space-y-2">
-                        <p className="text-gray-300">
-                          <strong>Адрес:</strong> {r.address || "—"}
-                        </p>
-                        <p className="text-gray-300">
-                          <strong>Описание:</strong> {r.description || "—"}
-                        </p>
+                      <div className="grid gap-8 py-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)]">
+                        <div className="space-y-4 xl:border-r xl:border-slate-400/15 xl:pr-8">
+                          <RequestInfoRow icon={<MapPin size={19} />} label="Адрес:" value={r.address || "—"} />
+                          <RequestInfoRow icon={<FileText size={19} />} label="Описание:" value={<span className="whitespace-pre-line">{r.description || "—"}</span>} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="mb-4 flex items-center gap-2 font-extrabold text-slate-100"><FileText size={19} className="text-slate-400" /> Снимки към заявката</div>
+                          <RequestPhotoCarousel photos={r.photos || []} getUrl={photoUrl} />
+                        </div>
                       </div>
 
                       {/* ✅ REVIEW SECTION */}
@@ -591,11 +589,11 @@ export default function ClientProfile() {
                         </div>
                       )}
 
-                      <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-4">
-                        <h3 className="font-bold text-lg">Кандидати ({appliedList.length})</h3>
+                      <div className="mt-2 rounded-2xl border border-slate-400/15 bg-slate-950/25 p-5 sm:p-6">
+                        <h3 className="flex items-center gap-3 text-lg font-bold"><span className="grid h-10 w-10 place-items-center rounded-xl border border-blue-400/20 bg-blue-500/15 text-blue-300"><Users size={20} /></span>Кандидати ({appliedList.length})</h3>
 
                         {appliedList.length === 0 ? (
-                          <p className="text-gray-400 mt-2">Още няма кандидатствали майстори.</p>
+                          <p className="ml-[52px] mt-1 text-slate-400">Още няма кандидатствали майстори.</p>
                         ) : (
                           <div className="mt-3 grid md:grid-cols-2 gap-3">
                             {appliedList.map((workerUserId, idx) => {
@@ -606,7 +604,7 @@ export default function ClientProfile() {
                               return (
                                 <div
                                   key={`${r.id}-${workerUserId}-${idx}`}
-                                  className="bg-gray-800 border border-gray-700 rounded-xl p-4"
+                                  className="rounded-xl border border-slate-400/15 bg-slate-800/50 p-4"
                                 >
                                   <div className="font-bold">
                                     {w?.fullName ? w.fullName : `Майстор (userId=${workerUserId})`}
@@ -784,21 +782,39 @@ export default function ClientProfile() {
         )}
 
         {activeTab === "profile" && (
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8">Моят профил</h1>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-gray-300">
-              Ако `/client/me` е 404, този таб е placeholder. Заявките и създаването работят и без него.
+          <div className="mx-auto max-w-4xl">
+            <h1 className="mb-8 text-3xl font-extrabold">Моят профил</h1>
+            <div className="bricky-card grid gap-5 rounded-[20px] p-6 md:grid-cols-2 md:p-8">
+              <ProfileField label="Име" value={client.name || newReq.clientName || "Не е добавено"} />
+              <ProfileField label="Телефон" value={client.phone || newReq.phone || "Не е добавен"} />
+              <ProfileField label="Имейл" value={client.email || newReq.email || "Не е добавен"} />
+              <ProfileField label="Основен адрес" value={client.address || newReq.address || "Не е добавен"} />
             </div>
           </div>
         )}
 
         {activeTab === "settings" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Настройки</h1>
-            <p className="text-gray-400">(placeholder)</p>
+          <div className="mx-auto max-w-4xl">
+            <h1 className="mb-3 text-3xl font-extrabold">Настройки</h1>
+            <p className="mb-8 text-slate-400">Управлявай профила, адресите, известията и сигурността си.</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SettingsCard title="Профил" text="Име, телефон и имейл за връзка." />
+              <SettingsCard title="Адреси" text="Запазени адреси и бележки за достъп." />
+              <SettingsCard title="Известия" text="Оферти, съобщения и промени по заявките." />
+              <SettingsCard title="Предпочитания за контакт" text="Чат, имейл и удобно време за връзка." />
+              <SettingsCard title="Сигурност" text="Парола и управление на активните устройства." />
+            </div>
           </div>
         )}
       </main>
     </div>
   );
+}
+
+function ProfileField({ label, value }) {
+  return <div className="rounded-xl border border-slate-400/15 bg-slate-950/25 p-5"><div className="text-xs font-bold uppercase text-slate-500">{label}</div><div className="mt-2 font-semibold text-slate-100">{value}</div></div>;
+}
+
+function SettingsCard({ title, text }) {
+  return <button type="button" className="bricky-card rounded-2xl p-6 text-left transition hover:-translate-y-0.5 hover:border-slate-300/30"><div className="text-lg font-extrabold text-slate-100">{title}</div><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></button>;
 }
