@@ -21,6 +21,7 @@ import {
   REPAIR_CATEGORY_FLOW,
   REPAIR_CATEGORY_OPTIONS,
 } from "../constants/repairCatalog";
+import { getPricingActivity } from "../constants/repairPricingConfig";
 import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
 import { useAuthModal } from "../context/AuthModalContext";
 
@@ -58,9 +59,32 @@ const CONTACT_PREFS = [
 
 const PRICING_MODES = [
   { value: "labor_only", label: "Само труд", description: "Материалите не участват в ориентира." },
-  { value: "labor_plus_consumables", label: "Труд + базови консумативи", description: "Препоръчителен mock режим за сравнение." },
-  { value: "labor_plus_materials_estimate", label: "Труд + ориентировъчни материали", description: "По-широк диапазон; основните продукти често не са включени." },
+  { value: "labor_plus_materials", label: "Труд + материали", description: "Включва ориентировъчните материали за избраните дейности." },
 ];
+
+const PRICING_BEHAVIOR_COPY = {
+  locked_labor_only: "Ориентирът включва само труд. Материали не са включени.",
+  locked_labor_plus_materials: "Ориентирът включва труд и приблизителни материали.",
+  inspection_required: "Материалите и частите се уточняват след снимки или оглед.",
+};
+
+const QUANTITY_PROMPTS = {
+  vik: "Колко точки или отделни задачи има?",
+  electro: "Колко електрически точки има?",
+  painting: "Каква площ трябва да се боядиса?",
+  plaster: "Каква площ трябва да се шпаклова или измазва?",
+  tiles: "Каква площ трябва да се облицова?",
+  bathroom_renovation: "Каква е площта на банята?",
+  drywall: "Каква площ трябва да се изгради?",
+  flooring: "Каква площ е подовата настилка?",
+  heating_cooling: "Колко уреда или отоплителни точки има?",
+  windows_doors: "Колко врати или прозорци има?",
+  furniture_mounting: "Колко мебели или монтажни задачи има?",
+  roof_waterproofing: "Каква площ или дължина е засегната?",
+  demolition_cleanup: "Какво количество трябва да се изкърти или извози?",
+  full_renovation: "Каква е площта на имота?",
+  small_repairs: "Колко отделни задачи има?",
+};
 
 const CONFIDENCE_LABELS = {
   high: "Висока увереност",
@@ -109,7 +133,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
     activities: [],
     quantity: "",
     exactAreaM2: "",
-    pricingMode: "labor_plus_consumables",
+    pricingMode: "labor_plus_materials",
     district: "София - Център",
     address: "",
     goal: "compare",
@@ -130,6 +154,12 @@ export function RequestFlow({ embedded = false, onCreated }) {
     [form.categoryKey]
   );
   const flow = REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other;
+  const selectedPricingActivities = useMemo(
+    () => form.activities.map((item) => getPricingActivity(category.key, item)).filter(Boolean),
+    [category.key, form.activities]
+  );
+  const asksForArea = selectedPricingActivities.some((item) => item.areaBased);
+  const quantityPrompt = QUANTITY_PROMPTS[category.key] || "Какъв е приблизителният обхват?";
   const estimate = useMemo(
     () => calculateRepairEstimate({
       categoryKey: category.key,
@@ -275,9 +305,11 @@ export function RequestFlow({ embedded = false, onCreated }) {
           pricingVersion: estimate.pricingVersion,
           materialPricingVersion: estimate.materialPricingVersion,
           materialPriceIndexVersion: estimate.materialPriceIndexVersion,
-          pricingMode: form.pricingMode,
+          pricingMode: estimate.pricingMode,
+          pricingModeBehavior: estimate.pricingModeBehavior,
           selectedCategoryKey: category.key,
           selectedActivityKeys: estimate.calculatedActivities,
+          selectedActivityLabels: estimate.selectedActivityLabels,
           sizeKey: form.quantity,
           exactAreaM2: estimate.exactAreaM2,
           laborMin: estimate.laborMin,
@@ -292,6 +324,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
           possibleMax: estimate.possibleMax,
           confidence: estimate.confidence,
           displayMode: estimate.displayMode,
+          rangeTooWide: estimate.rangeTooWide,
+          showPossibleRange: estimate.showPossibleRange,
           variationReason: estimate.variationReason,
           currency: estimate.currency,
           materialConfidence: estimate.materialConfidence,
@@ -389,27 +423,37 @@ export function RequestFlow({ embedded = false, onCreated }) {
                     </label>
                   ))}
                 </div>
-                <div className="mt-8 border-t border-gray-700 pt-6">
-                  <h3 className="text-lg font-black">Какво да включва ориентирът?</h3>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                    {PRICING_MODES.map((mode) => (
-                      <RadioCard
-                        key={mode.value}
-                        selected={form.pricingMode === mode.value}
-                        onClick={() => setField("pricingMode", mode.value)}
-                      >
-                        <span className="block font-bold">{mode.label}</span>
-                        <span className="mt-1 block text-sm font-normal text-gray-400">{mode.description}</span>
-                      </RadioCard>
-                    ))}
+                {form.activities.length > 0 && (
+                  <div className="mt-8 border-t border-gray-700 pt-6">
+                    {estimate.pricingModeBehavior === "user_selectable" ? (
+                      <>
+                        <h3 className="text-lg font-black">Какво да включва ориентирът?</h3>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          {PRICING_MODES.map((mode) => (
+                            <RadioCard
+                              key={mode.value}
+                              selected={estimate.pricingMode === mode.value}
+                              onClick={() => setField("pricingMode", mode.value)}
+                            >
+                              <span className="block font-bold">{mode.label}</span>
+                              <span className="mt-1 block text-sm font-normal text-gray-400">{mode.description}</span>
+                            </RadioCard>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm text-cyan-50">
+                        {PRICING_BEHAVIOR_COPY[estimate.pricingModeBehavior]}
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             )}
 
             {step === 2 && (
               <div>
-                <StepTitle category={category} title="Приблизителен размер" step={step} onGoToStep={goToStep} />
+                <StepTitle category={category} title={quantityPrompt} step={step} onGoToStep={goToStep} />
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   {flow.quantityOptions.map((option) => (
                     <button
@@ -425,6 +469,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                     </button>
                   ))}
                 </div>
+                {asksForArea && (
                 <div className="mt-6 rounded-xl border border-cyan-400/40 bg-gray-900 p-4">
                   <label htmlFor="exact-area-m2" className="block text-sm font-black text-cyan-200">
                     Колко квадратни метра трябва да се ремонтират?
@@ -452,6 +497,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                     </p>
                   )}
                 </div>
+                )}
               </div>
             )}
 
@@ -576,7 +622,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Дейности" value={form.activities.length ? form.activities.join(", ") : "не са избрани"} />
             <SummaryLine label="Размер" value={form.quantity || "не е избран"} />
             <SummaryLine label="Площ от клиента" value={form.exactAreaM2 ? `${form.exactAreaM2} кв.м` : "не е въведена"} />
-            <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === form.pricingMode)?.label} />
+            <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === estimate.pricingMode)?.label} />
             <SummaryLine label="Локация" value={[form.district, form.address].filter(Boolean).join(", ")} />
             <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
             <div className="mt-6 rounded-xl bg-gray-900 p-4">
@@ -585,7 +631,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
               </p>
               <div className="mt-3 rounded-lg border border-green-400/30 bg-green-400/10 p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-green-300">
-                  {estimate.displayMode === "inspection_required" ? "Ориентир за труда преди оглед" : "Най-вероятно"}
+                  {estimate.primaryLabel || "Най-вероятно"}
                 </p>
                 <p className="mt-1 text-2xl font-black text-white">
                   {estimate.expectedMin}-{estimate.expectedMax} EUR
@@ -593,10 +639,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
               </div>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} EUR</b></div>
-                <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{form.pricingMode === "labor_only" ? "не са включени" : estimate.materialPricingPending ? "няма надежден диапазон" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
-                {(estimate.possibleMin !== estimate.expectedMin || estimate.possibleMax !== estimate.expectedMax) && (
+                <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{estimate.pricingModeBehavior === "inspection_required" ? "по оглед" : estimate.pricingMode === "labor_only" ? "не са включени" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
+                {estimate.showPossibleRange && (
                   <div className="flex justify-between border-t border-gray-700 pt-2 text-gray-400">
-                    <span>Възможен диапазон</span>
+                    <span>{estimate.secondaryLabel || "Възможен диапазон"}</span>
                     <b className="text-right">{estimate.possibleMin}-{estimate.possibleMax} EUR</b>
                   </div>
                 )}
@@ -607,9 +653,9 @@ export function RequestFlow({ embedded = false, onCreated }) {
               <div className="mt-3 rounded-lg bg-gray-950 p-3 text-xs leading-relaxed text-gray-300">
                 <b className="text-white">Защо варира:</b> {estimate.variationReason}
               </div>
-              {estimate.materialConfidence && form.pricingMode !== "labor_only" && (
-                <p className="mt-3 text-xs font-bold uppercase tracking-wide text-cyan-300">
-                  Материален ориентир: {estimate.materialConfidence === "high" ? "висока увереност" : estimate.materialConfidence === "medium" ? "средна увереност" : "необходим е оглед"}
+              {estimate.materialConfidence && (estimate.pricingMode !== "labor_only" || estimate.pricingModeBehavior === "inspection_required") && (
+                <p className="mt-3 text-xs font-semibold text-cyan-300">
+                  Увереност за материалите: {estimate.materialConfidence === "high" ? "висока" : estimate.materialConfidence === "medium" ? "средна" : estimate.materialConfidence === "low" ? "ниска" : "нужен е оглед"}
                 </p>
               )}
               {estimate.warnings.length > 0 && (
@@ -622,7 +668,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                   {estimate.notes.slice(0, 3).map((note) => <p key={note}>{note}</p>)}
                 </div>
               )}
-              {estimate.includedMaterials?.length > 0 && form.pricingMode !== "labor_only" && (
+              {estimate.includedMaterials?.length > 0 && estimate.pricingMode === "labor_plus_materials" && (
                 <p className="mt-3 text-xs leading-relaxed text-gray-400">
                   Включени ориентировъчно: {estimate.includedMaterials.slice(0, 6).join(", ")}
                   {estimate.includedMaterials.length > 6 ? " и други" : ""}.

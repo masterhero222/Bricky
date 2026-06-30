@@ -14,9 +14,54 @@ const activity = (key, label, unitType, laborMin, laborMax, options = {}) => ({
   ...options,
 });
 
+const LOCKED_LABOR_ONLY = new Set([
+  "electro.diagnostics",
+  "heating_cooling.maintenance",
+  "windows_doors.adjustment",
+  "small_repairs.adjustments",
+]);
+
+const LOCKED_LABOR_PLUS_MATERIALS = new Set([
+  "vik.siphon",
+  "vik.cistern",
+  "electro.sockets",
+  "electro.switches",
+  "electro.fuses",
+  "furniture_mounting.shelves",
+  "furniture_mounting.curtain_rods",
+  "small_repairs.small_installations",
+  "small_repairs.hanging_installation",
+]);
+
+const AREA_BASED_ACTIVITIES = new Set([
+  "painting.room",
+  "painting.rental_refresh",
+  "painting.after_renovation",
+  "painting.ceiling",
+  "bathroom_renovation.bathroom_tiles",
+  "bathroom_renovation.waterproofing",
+  "roof_waterproofing.tiles",
+  "roof_waterproofing.terrace",
+  "roof_waterproofing.waterproofing",
+  "full_renovation.floors",
+]);
+
+const INSPECTION_REQUIRED_ACTIVITIES = new Set([
+  "vik.leak_repair",
+  "demolition_cleanup.demolition",
+]);
+
+function getPricingModeBehavior(categoryKey, item) {
+  const compoundKey = `${categoryKey}.${item.key}`;
+  if (item.requiresInspection || INSPECTION_REQUIRED_ACTIVITIES.has(compoundKey)) return "inspection_required";
+  if (LOCKED_LABOR_ONLY.has(compoundKey)) return "locked_labor_only";
+  if (LOCKED_LABOR_PLUS_MATERIALS.has(compoundKey)) return "locked_labor_plus_materials";
+  return "user_selectable";
+}
+
 export const REPAIR_PRICING_CONFIG = {
   currency: "EUR",
-  pricingVersion: "2026-v0.1",
+  pricingVersion: "2026-v0.2",
   rounding: "ceil_to_5",
   materialPricingStatus: "research_pending",
   sourceNote: "Initial owner-supplied market research; validate with 3-5 active workers before production use.",
@@ -225,6 +270,29 @@ export const REPAIR_PRICING_CONFIG = {
     },
   },
 };
+
+for (const [categoryKey, category] of Object.entries(REPAIR_PRICING_CONFIG.categories)) {
+  category.activities = category.activities.map((item) => {
+    const pricingModeBehavior = getPricingModeBehavior(categoryKey, item);
+    return {
+      ...item,
+      pricingModeBehavior,
+      defaultPricingMode:
+        pricingModeBehavior === "user_selectable" || pricingModeBehavior === "locked_labor_plus_materials"
+          ? "labor_plus_materials"
+          : "labor_only",
+      materialConfidence: item.requiresInspection ? "inspection_required" : "medium",
+      materialNote: item.requiresInspection
+        ? "Материалите и частите се уточняват след снимки или оглед."
+        : "Материалите са ориентировъчни и зависят от избрания продукт и реалния обхват.",
+      areaBased: item.unitType === "m2" || AREA_BASED_ACTIVITIES.has(`${categoryKey}.${item.key}`),
+      standardAreaM2:
+        categoryKey === "painting" && ["room", "rental_refresh", "after_renovation", "ceiling"].includes(item.key)
+          ? 20
+          : 1,
+    };
+  });
+}
 
 export function getPricingCategory(categoryKey) {
   return REPAIR_PRICING_CONFIG.categories[categoryKey] || null;

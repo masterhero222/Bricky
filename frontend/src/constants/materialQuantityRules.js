@@ -3,8 +3,8 @@ const rule = (
   activityKey,
   mode,
   confidence,
-  consumablesMin,
-  consumablesMax,
+  materialMin,
+  materialMax,
   options = {}
 ) => ({
   key: `${categoryKey}.${activityKey}`,
@@ -12,10 +12,8 @@ const rule = (
   activityKey,
   mode,
   confidence,
-  consumablesMin,
-  consumablesMax,
-  materialsEstimateMin: consumablesMin,
-  materialsEstimateMax: consumablesMax,
+  materialMin,
+  materialMax,
   standardQuantity: 1,
   scaleWithScope: ["area_formula", "linear_formula", "item_formula"].includes(mode),
   includedMaterialKeys: [],
@@ -26,7 +24,7 @@ const rule = (
   ...options,
 });
 
-export const MATERIAL_QUANTITY_RULES_VERSION = "2026-v0.1";
+export const MATERIAL_QUANTITY_RULES_VERSION = "2026-v0.2";
 
 export const MATERIAL_QUANTITY_RULES = [
   // ВиК
@@ -190,9 +188,7 @@ export const MATERIAL_QUANTITY_RULES = [
     includedMaterialKeys: ["bathroom_renovation.adhesive", "bathroom_renovation.grout", "bathroom_renovation.primer"],
     excludedMaterialKeys: ["main_product.tiles"],
   }),
-  rule("bathroom_renovation", "sanitary", "package_formula", "medium", null, null, {
-    materialsEstimateMin: 150,
-    materialsEstimateMax: 700,
+  rule("bathroom_renovation", "sanitary", "package_formula", "medium", 150, 700, {
     materialIncludesProduct: true,
     excludedMaterialKeys: ["main_product.premium_sanitary"],
     uiNote: "Оборудването се включва само в режим с ориентировъчни материали.",
@@ -229,31 +225,23 @@ export const MATERIAL_QUANTITY_RULES = [
   }),
 
   // Подови настилки
-  rule("flooring", "laminate", "area_formula", "high", null, null, {
+  rule("flooring", "laminate", "area_formula", "high", 200, 550, {
     standardQuantity: 15,
-    materialsEstimateMin: 200,
-    materialsEstimateMax: 550,
     materialIncludesProduct: true,
     includedMaterialKeys: ["flooring.laminate", "flooring.underlay", "flooring.skirting", "flooring.trim"],
   }),
-  rule("flooring", "parquet", "area_formula", "medium", null, null, {
+  rule("flooring", "parquet", "area_formula", "medium", 450, 1500, {
     standardQuantity: 15,
-    materialsEstimateMin: 450,
-    materialsEstimateMax: 1500,
     materialIncludesProduct: true,
     includedMaterialKeys: ["flooring.parquet", "flooring.parquet_adhesive", "flooring.skirting"],
   }),
-  rule("flooring", "vinyl", "area_formula", "high", null, null, {
+  rule("flooring", "vinyl", "area_formula", "high", 300, 900, {
     standardQuantity: 15,
-    materialsEstimateMin: 300,
-    materialsEstimateMax: 900,
     materialIncludesProduct: true,
     includedMaterialKeys: ["flooring.vinyl", "flooring.spc", "flooring.underlay", "flooring.skirting"],
   }),
-  rule("flooring", "skirting", "linear_formula", "high", null, null, {
+  rule("flooring", "skirting", "linear_formula", "high", 60, 180, {
     standardQuantity: 15,
-    materialsEstimateMin: 60,
-    materialsEstimateMax: 180,
     materialIncludesProduct: true,
     includedMaterialKeys: ["flooring.skirting", "flooring.trim"],
   }),
@@ -339,10 +327,8 @@ export const MATERIAL_QUANTITY_RULES = [
     standardQuantity: 20,
     includedMaterialKeys: ["roof_waterproofing.gutters", "roof_waterproofing.downpipes", "common.fasteners"],
   }),
-  rule("roof_waterproofing", "tiles", "area_formula", "medium", null, null, {
+  rule("roof_waterproofing", "tiles", "area_formula", "medium", 150, 500, {
     standardQuantity: 20,
-    materialsEstimateMin: 150,
-    materialsEstimateMax: 500,
     materialIncludesProduct: true,
     includedMaterialKeys: ["roof_waterproofing.roof_tiles", "roof_waterproofing.ridge_tiles", "roof_waterproofing.roof_membrane", "roof_waterproofing.battens"],
   }),
@@ -377,36 +363,28 @@ export const MATERIAL_QUANTITY_RULES = [
   }),
 
   // Цялостен ремонт
-  rule("full_renovation", "apartment_turnkey", "package_formula", "inspection_required", null, null, {
+  rule("full_renovation", "apartment_turnkey", "package_formula", "inspection_required", 4500, 9000, {
     standardQuantity: 40,
     scaleWithScope: true,
-    materialsEstimateMin: 4500,
-    materialsEstimateMax: 9000,
     materialIncludesProduct: true,
     uiNote: "Материалите са широк проектен ориентир и изискват оглед.",
   }),
-  rule("full_renovation", "house_turnkey", "package_formula", "inspection_required", null, null, {
+  rule("full_renovation", "house_turnkey", "package_formula", "inspection_required", 5500, 12000, {
     standardQuantity: 40,
     scaleWithScope: true,
-    materialsEstimateMin: 5500,
-    materialsEstimateMax: 12000,
     materialIncludesProduct: true,
   }),
-  rule("full_renovation", "finishing", "package_formula", "inspection_required", null, null, {
+  rule("full_renovation", "finishing", "package_formula", "inspection_required", 2500, 6000, {
     standardQuantity: 40,
     scaleWithScope: true,
-    materialsEstimateMin: 2500,
-    materialsEstimateMax: 6000,
     materialIncludesProduct: true,
   }),
   rule("full_renovation", "crew_management", "package_formula", "medium", 0, 300),
   rule("full_renovation", "electrical", "package_formula", "medium", 500, 1500),
   rule("full_renovation", "plumbing", "package_formula", "medium", 500, 1800),
   rule("full_renovation", "bathroom", "package_formula", "medium", 900, 1800),
-  rule("full_renovation", "floors", "area_formula", "medium", null, null, {
+  rule("full_renovation", "floors", "area_formula", "medium", 1000, 4000, {
     standardQuantity: 40,
-    materialsEstimateMin: 1000,
-    materialsEstimateMax: 4000,
     materialIncludesProduct: true,
   }),
 

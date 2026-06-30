@@ -18,9 +18,9 @@ const LOCATION_MULTIPLIERS = { default: 1, sofia_center: 1.1, sofia_regular: 1, 
 const ACCESS_MULTIPLIERS = { normal: 1, difficult: 1.15, very_difficult: 1.3 };
 const MATERIAL_QUALITY_MULTIPLIERS = { budget: 0.8, standard: 1, premium: 1.35 };
 export const MAX_EXACT_AREA_M2 = 2000;
+export const VALID_PRICING_MODES = new Set(["labor_only", "labor_plus_materials"]);
 
 const SCALABLE_UNITS = new Set(["item", "m2", "linear_meter", "room"]);
-const STANDARD_REPAIR_AREA_PER_ROOM_M2 = 20;
 
 const CATEGORY_VARIATION_REASONS = {
   vik: "Цената зависи от мястото на проблема, достъпа до тръбите, нужните части и дали има къртене.",
@@ -85,6 +85,15 @@ export function isRangeTooWide(min, max) {
   return Number(max) / Math.max(Number(min) || 0, 1) > 2.5;
 }
 
+export function clampExpectedRange(expectedMin, expectedMax) {
+  const safeMin = roundUpToFive(expectedMin);
+  const safeMax = roundUpToFive(Math.max(expectedMax, safeMin));
+  return {
+    expectedMin: safeMin,
+    expectedMax: Math.min(safeMax, roundUpToFive(safeMin * 2.5)),
+  };
+}
+
 export function buildDisplayEstimate(rawEstimate, { categoryKey, confidence = "medium" } = {}) {
   const possibleMin = roundUpToFive(rawEstimate.totalMin);
   const possibleMax = roundUpToFive(Math.max(rawEstimate.totalMax, possibleMin));
@@ -92,38 +101,60 @@ export function buildDisplayEstimate(rawEstimate, { categoryKey, confidence = "m
     "Цената зависи от състоянието, достъпа, материалите и сложността.";
 
   if (confidence === "inspection_required") {
+    const expected = clampExpectedRange(rawEstimate.laborMin, rawEstimate.laborMax);
     return {
       displayMode: "inspection_required",
-      expectedMin: roundUpToFive(rawEstimate.laborMin),
-      expectedMax: roundUpToFive(Math.max(rawEstimate.laborMax, rawEstimate.laborMin)),
+      ...expected,
       possibleMin,
       possibleMax,
       confidence,
       variationReason,
+      primaryLabel: "Ориентир за труда преди оглед",
+      secondaryLabel: "Възможен диапазон",
+      showPossibleRange: true,
+      rangeTooWide: isRangeTooWide(possibleMin, possibleMax),
+      needsPhotos: true,
+      needsInspection: true,
     };
   }
 
-  if (isRangeTooWide(possibleMin, possibleMax)) {
+  const rangeTooWide = isRangeTooWide(possibleMin, possibleMax);
+  if (rangeTooWide) {
     const spread = possibleMax - possibleMin;
+    const expected = clampExpectedRange(
+      possibleMin + spread * 0.2,
+      possibleMin + spread * 0.45
+    );
     return {
       displayMode: "expected_range",
-      expectedMin: roundUpToFive(possibleMin + spread * 0.2),
-      expectedMax: roundUpToFive(possibleMin + spread * 0.45),
+      ...expected,
       possibleMin,
       possibleMax,
       confidence,
       variationReason,
+      primaryLabel: "Най-вероятно",
+      secondaryLabel: "Възможен диапазон",
+      showPossibleRange: true,
+      rangeTooWide: true,
+      needsPhotos: true,
+      needsInspection: false,
     };
   }
 
+  const expected = clampExpectedRange(possibleMin, possibleMax);
   return {
     displayMode: "expected_range",
-    expectedMin: possibleMin,
-    expectedMax: possibleMax,
+    ...expected,
     possibleMin,
     possibleMax,
     confidence,
     variationReason,
+    primaryLabel: "Най-вероятно",
+    secondaryLabel: "Възможен диапазон",
+    showPossibleRange: false,
+    rangeTooWide: false,
+    needsPhotos: confidence === "low",
+    needsInspection: false,
   };
 }
 
@@ -163,18 +194,28 @@ function materialScale(rule, activity, scope, areaScope) {
 
 function materialRangeForMode(rule, pricingMode) {
   if (pricingMode === "labor_only") return { min: 0, max: 0, available: true };
-  if (pricingMode === "labor_plus_consumables") {
-    return {
-      min: rule.consumablesMin,
-      max: rule.consumablesMax,
-      available: rule.consumablesMin != null && rule.consumablesMax != null,
-    };
-  }
   return {
-    min: rule.materialsEstimateMin,
-    max: rule.materialsEstimateMax,
-    available: rule.materialsEstimateMin != null && rule.materialsEstimateMax != null,
+    min: rule.materialMin,
+    max: rule.materialMax,
+    available: Number.isFinite(rule.materialMin) && Number.isFinite(rule.materialMax),
   };
+}
+
+export function resolvePricingModeBehavior(activities) {
+  const behaviors = new Set(activities.map((item) => item.pricingModeBehavior));
+  if (behaviors.has("inspection_required")) return "inspection_required";
+  if (behaviors.has("user_selectable") || behaviors.size > 1) return "user_selectable";
+  if (behaviors.has("locked_labor_plus_materials")) return "locked_labor_plus_materials";
+  return "locked_labor_only";
+}
+
+function resolvePricingMode(behavior, requestedMode, activities) {
+  if (behavior === "locked_labor_plus_materials") return "labor_plus_materials";
+  if (behavior === "locked_labor_only" || behavior === "inspection_required") return "labor_only";
+  if (VALID_PRICING_MODES.has(requestedMode)) return requestedMode;
+  return activities.some((item) => item.defaultPricingMode === "labor_plus_materials")
+    ? "labor_plus_materials"
+    : "labor_only";
 }
 
 function combinedConfidence(confidences) {
@@ -189,7 +230,7 @@ export function calculateRepairEstimate({
   selectedActivities = [],
   sizeOption = "",
   exactAreaM2 = null,
-  pricingMode = "labor_only",
+  pricingMode = "labor_plus_materials",
   urgency = "normal",
   complexity = "normal",
   location = "default",
@@ -270,6 +311,8 @@ export function calculateRepairEstimate({
   if (activities.length < resolved.length) {
     notes.push("Включените в пакетната услуга дейности не са начислени повторно.");
   }
+  const pricingModeBehavior = resolvePricingModeBehavior(activities);
+  const effectivePricingMode = resolvePricingMode(pricingModeBehavior, pricingMode, activities);
 
   const scope = parseScopeOption(sizeOption);
   const normalizedAreaM2 = normalizeExactAreaM2(exactAreaM2);
@@ -290,8 +333,8 @@ export function calculateRepairEstimate({
       ? areaScope
       : item.unitType === "room" && normalizedAreaM2
         ? {
-            min: Math.max(0.5, normalizedAreaM2 / STANDARD_REPAIR_AREA_PER_ROOM_M2),
-            max: Math.max(0.5, normalizedAreaM2 / STANDARD_REPAIR_AREA_PER_ROOM_M2),
+            min: Math.max(0.5, normalizedAreaM2 / Math.max(1, item.standardAreaM2 || 20)),
+            max: Math.max(0.5, normalizedAreaM2 / Math.max(1, item.standardAreaM2 || 20)),
           }
         : scope;
     const scaleMin = SCALABLE_UNITS.has(item.unitType) ? laborScope.min : 1;
@@ -327,7 +370,7 @@ export function calculateRepairEstimate({
   const excludedMaterialKeys = new Set();
   const materialNotes = [];
 
-  if (pricingMode !== "labor_only") {
+  if (effectivePricingMode !== "labor_only" || pricingModeBehavior === "inspection_required") {
     for (const item of activities) {
       const rule = getMaterialQuantityRule(categoryKey, item.key);
       if (!rule) {
@@ -336,7 +379,7 @@ export function calculateRepairEstimate({
         continue;
       }
 
-      const range = materialRangeForMode(rule, pricingMode);
+      const range = materialRangeForMode(rule, "labor_plus_materials");
       if (!range.available) {
         materialPricingPending = true;
         warnings.push(`${item.label}: няма надежден диапазон за избрания материален режим.`);
@@ -354,7 +397,7 @@ export function calculateRepairEstimate({
       if (rule.confidence === "inspection_required") {
         warnings.push(`${item.label}: материалите се уточняват след оглед.`);
       }
-      if (pricingMode === "labor_plus_materials_estimate" && !rule.materialIncludesProduct && rule.excludedMaterialKeys.length) {
+      if (!rule.materialIncludesProduct && rule.excludedMaterialKeys.length) {
         materialNotes.push(`${item.label}: скъпият основен продукт не е включен автоматично.`);
       }
     }
@@ -384,7 +427,8 @@ export function calculateRepairEstimate({
     pricingVersion: REPAIR_PRICING_CONFIG.pricingVersion,
     materialPricingVersion: MATERIAL_QUANTITY_RULES_VERSION,
     materialPriceIndexVersion: MATERIAL_PRICE_INDEX_VERSION,
-    pricingMode,
+    pricingMode: effectivePricingMode,
+    pricingModeBehavior,
     laborMin,
     laborMax,
     materialMin,
@@ -401,5 +445,6 @@ export function calculateRepairEstimate({
     includedMaterials: getMaterialPriceItems([...includedMaterialKeys]).map((item) => item.label),
     excludedMaterialKeys: [...excludedMaterialKeys],
     calculatedActivities: activities.map((item) => item.key),
+    selectedActivityLabels: activities.map((item) => item.label),
   };
 }

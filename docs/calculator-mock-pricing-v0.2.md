@@ -1,4 +1,4 @@
-# Bricky Mock Calculator and Expected Range UX v0.1
+# Bricky Mock Calculator and Expected Range UX v0.2
 
 Last updated: 2026-06-30
 
@@ -12,10 +12,15 @@ This document describes the calculator currently implemented in the Bricky mock 
 - 174 indexed material and consumable items.
 - Currency: EUR.
 - Every displayed range boundary is rounded upward to the nearest 5 EUR.
-- Three calculation modes:
+- Two client-facing calculation modes:
   - `labor_only`;
-  - `labor_plus_consumables`;
-  - `labor_plus_materials_estimate`.
+  - `labor_plus_materials`.
+- The former consumables/material-estimate split has been removed from the mock flow.
+- Every activity has a pricing-mode behavior:
+  - `user_selectable`;
+  - `locked_labor_only`;
+  - `locked_labor_plus_materials`;
+  - `inspection_required`.
 - Separate labor, material, and total min/max ranges.
 - Bundle protection prevents included activities from being charged twice.
 - Material confidence values:
@@ -37,7 +42,7 @@ This document describes the calculator currently implemented in the Bricky mock 
 
 ## Exact Area Input
 
-Every repair category asks the client how many square meters need work. The quick size choices remain available and the exact area is an additional input.
+The request wizard uses category-specific quantity questions such as area, points, items, tasks, or logistics volume. Exact square meters are requested only when at least one selected activity is area-based.
 
 Rules:
 
@@ -46,7 +51,7 @@ Rules:
 - Area-based activities use exact area directly.
 - Room-based activities convert exact area conservatively using a 20 sq.m standard repair-area equivalent per room.
 - Item, point, and other non-area activities do not multiply their labor by the property area.
-- Area can still be retained as request context for non-area work.
+- Area can still be retained as request context, but it must not scale item, point, task, package, or inspection-only labor.
 - When exact area is available, the generic approximate-size warning is removed.
 
 The normalized value is returned as `exactAreaM2` and is saved in the mock pricing snapshot.
@@ -65,7 +70,13 @@ The display model contains:
   possibleMax,
   confidence,
   displayMode,
-  variationReason
+  variationReason,
+  primaryLabel,
+  secondaryLabel,
+  showPossibleRange,
+  rangeTooWide,
+  needsPhotos,
+  needsInspection
 }
 ```
 
@@ -84,7 +95,7 @@ expectedMin = roundUpToFive(possibleMin + spread * 0.20)
 expectedMax = roundUpToFive(possibleMin + spread * 0.45)
 ```
 
-The UI shows `Най-вероятно` as the primary range. `Възможен диапазон` is shown with lower visual weight. The technical possible range remains stored for honesty and future review.
+The UI shows `Най-вероятно` as the primary range. Its ratio is clamped to at most 2.5. `Възможен диапазон` is shown with lower visual weight only when useful. The technical possible range remains stored for honesty and future review.
 
 For `inspection_required`, the UI explains that an inspection is needed and treats the labor range as the pre-inspection expected reference.
 
@@ -116,9 +127,11 @@ The mock request snapshot currently preserves:
 - labor, material, total, expected, and possible min/max ranges;
 - pricing, material-rule, and material-index versions;
 - selected category and activity keys;
+- selected activity labels for presentation/history;
 - quick size key and normalized `exactAreaM2`;
-- pricing mode and currency;
+- effective pricing mode, pricing-mode behavior, and currency;
 - confidence and display mode;
+- `rangeTooWide` and `showPossibleRange` display flags;
 - category variation reason;
 - included/excluded material keys;
 - warnings and calculation notes.
@@ -140,7 +153,12 @@ The pricing test verifies:
 - every referenced material key exists in the 174-item index;
 - all ranges are complete, ordered, and nonnegative;
 - bundle protection and inspection behavior;
-- all three pricing modes;
+- only the two v0.2 pricing modes are accepted;
+- every activity has a valid behavior and default mode;
+- inspection and locked behaviors override invalid client choices;
+- all material rules use non-null `materialMin/materialMax`;
+- `logistics_formula` is an accepted quantity mode;
+- labels normalize to stable activity keys;
 - exact area scaling for area work;
 - area does not multiply item-based work;
 - the 2000 sq.m cap;
@@ -163,3 +181,4 @@ The pricing test verifies:
 - `0c9e2b0` - material quantity pricing foundation.
 - `4fc739c` - exact area and expected/possible range UX.
 - `ec9a382` - separate estimates from request descriptions.
+- `f5a39a4` - clean pre-v0.2 mock calculator baseline.

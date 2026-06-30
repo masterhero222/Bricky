@@ -346,13 +346,13 @@
 - DONE in mock v0.1: request wizard now reads the shared pricing config, displays EUR labor ranges, and saves `categoryKey` plus estimate min/max/currency in mock requests.
 - DONE in mock v0.1: add `materialPriceIndex.js` with 174 indexed material and consumable items in EUR.
 - DONE in mock v0.1: add 97 activity-specific material quantity rules covering all 15 repair categories.
-- DONE in mock v0.1: implement three estimate modes: labor only, labor plus basic consumables, and labor plus approximate materials.
+- SUPERSEDED v0.1: the former three-mode estimate was replaced by the two-mode v0.2 model below.
 - DONE in mock v0.1: calculate labor, materials, and total as separate min/max ranges, rounded upward to 5 EUR.
 - DONE in mock v0.1: expose material confidence (`high`, `medium`, `inspection_required`) and inspection warnings in the request wizard.
 - DONE in mock v0.1: protect bundled activities from double charging and exclude expensive finish products unless the selected rule explicitly includes them.
 - DONE in mock v0.1: save a complete versioned pricing snapshot in mock requests without changing the production API contract.
 - DONE in mock v0.1: add `npm run test:pricing` coverage for all 97 rules, referenced material keys, range integrity, bundles, inspection cases, and representative estimate modes.
-- DONE in mock v0.1: add an exact client-entered area field (sq.m) to every repair category while keeping quick size choices available.
+- SUPERSEDED v0.1: the former universal square-meter prompt was replaced by category/activity-specific quantity questions in v0.2.
 - DONE in mock v0.1: use exact area directly for area-based activities, convert it conservatively for room-based work, and keep it as context without multiplying item/point activities.
 - DONE in mock v0.1: cap calculator area input at 2000 sq.m and require an individual estimate above that limit.
 - DONE in mock v0.1: implement the Expected Range UX model with `expectedMin/Max`, `possibleMin/Max`, `confidence`, `displayMode`, and category-specific variation reasons.
@@ -361,7 +361,15 @@
 - DONE in mock v0.1: stop writing calculator prices and calculator-version metadata into the free-form repair description.
 - DONE in mock v0.1: show the structured expected estimate separately in client requests, worker requests/history, and the repair map.
 - DONE in mock v0.1: hide legacy embedded calculator lines when old mock request descriptions are rendered without rewriting stored localStorage records.
-- Documentation: `docs/calculator-mock-pricing-v0.1.md` describes the current engine, area rules, range UX, snapshot, verification, and remaining work.
+- Documentation: `docs/calculator-mock-pricing-v0.2.md` describes the current engine, area rules, range UX, snapshot, verification, and remaining work.
+- DONE in mock v0.2: replace the three-mode calculator with only `labor_only` and `labor_plus_materials`.
+- DONE in mock v0.2: add `pricingModeBehavior` and `defaultPricingMode` to all 97 activities and hide the selector for locked/inspection activities.
+- DONE in mock v0.2: rename material-rule ranges to non-null `materialMin/materialMax` and formally support `logistics_formula`.
+- DONE in mock v0.2: normalize Bulgarian activity labels to stable keys and save both keys and labels in request snapshots.
+- DONE in mock v0.2: use category-specific quantity questions and show exact square-meter input only for area-based activities.
+- DONE in mock v0.2: clamp the primary expected-range ratio to 2.5 while retaining wider possible ranges internally.
+- DONE in mock v0.2: add display flags (`rangeTooWide`, `showPossibleRange`, `needsPhotos`, `needsInspection`) and cleaner confidence copy.
+- DONE in mock v0.2: mark the legacy category-level estimator as deprecated; active request flow uses the shared activity engine.
 - REMAINING TECHNICAL DEBT:
   - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
   - mock snapshots are complete, but production still needs a supported DTO and persistent historical calculation snapshot;
@@ -382,7 +390,7 @@
   - DONE: request wizard estimate;
   - NEXT: worker profile calculator;
   - NEXT: remove the remaining duplicate pricing table and direct pricing constants from `WorkerProfile.jsx`.
-- DONE in mock v0.1: implement the calculator result model with labor, material, and total ranges for all three pricing modes.
+- DONE in mock v0.2: calculator result model exposes labor, material, expected, possible, and total ranges for the two current pricing modes.
 - HIGH: implement calculation multipliers:
   - size/quantity;
   - urgency;

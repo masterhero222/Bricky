@@ -1,3 +1,5 @@
+// Pricing fields in this UI catalog are legacy compatibility metadata only.
+// DEPRECATED: Do not use them for calculator estimates. Use repairPriceCalculator.js.
 export const REPAIR_CATEGORY_OPTIONS = [
   {
     key: "vik",
@@ -246,6 +248,7 @@ export const REPAIR_CATEGORY_FLOW = {
 
 export const REPAIR_CATEGORIES = REPAIR_CATEGORY_OPTIONS.map((category) => category.label);
 
+// DEPRECATED: Do not use for calculator. Use repairPriceCalculator.js instead.
 export const REPAIR_PRICE_PRESETS = REPAIR_CATEGORY_OPTIONS.reduce((acc, category) => {
   acc[category.label] = {
     unit: category.unit,
@@ -264,6 +267,7 @@ export function getRepairCategoryByLabel(label) {
   return REPAIR_CATEGORY_OPTIONS.find((category) => category.label === label) || null;
 }
 
+// DEPRECATED: Do not use for calculator. Kept temporarily for compatibility only.
 export function estimateRepairPrice(category, quantity) {
   const preset = REPAIR_PRICE_PRESETS[category];
   const qty = Number(quantity) || 0;
