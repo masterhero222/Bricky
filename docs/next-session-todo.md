@@ -448,6 +448,9 @@
 
 ## Cleanup
 
+- DONE in mock v0.2: request browser geolocation permission when the client reaches the location step; store GPS coordinates when allowed and fall back to one exact-address field when denied or unavailable.
+- DONE in mock v0.2: remove the Sofia district dropdown so the client address is not classified under an incorrect neighborhood.
+
 - Stabilize `DevTestPanel` and mock localStorage DB.
 - Add a reset/seed explanation in docs or UI.
 - Audit all changed pages for direct `axios` calls.

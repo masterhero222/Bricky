@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bath,
   Brush,
@@ -24,26 +24,6 @@ import {
 import { getPricingActivity } from "../constants/repairPricingConfig";
 import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
 import { useAuthModal } from "../context/AuthModalContext";
-
-const SOFIA_DISTRICTS = [
-  "София - Център",
-  "Лозенец",
-  "Младост",
-  "Дружба",
-  "Люлин",
-  "Надежда",
-  "Овча купел",
-  "Красна поляна",
-  "Банишора",
-  "Изток",
-  "Изгрев",
-  "Студентски град",
-  "Манастирски ливади",
-  "Кръстова вада",
-  "Драгалевци",
-  "Бояна",
-  "Друг район",
-];
 
 const GOALS = [
   { value: "consult", label: "Искам да се консултирам със специалист" },
@@ -121,6 +101,9 @@ export function RequestFlow({ embedded = false, onCreated }) {
   const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [locationStatus, setLocationStatus] = useState("idle");
+  const [locationMessage, setLocationMessage] = useState("Позволи текуща локация или въведи точния адрес ръчно.");
+  const locationAskedRef = useRef(false);
 
   const [form, setForm] = useState({
     categoryKey: "bathroom_renovation",
@@ -128,8 +111,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
     quantity: "",
     exactAreaM2: "",
     pricingMode: "labor_plus_materials",
-    district: "София - Център",
     address: "",
+    latitude: null,
+    longitude: null,
+    locationSource: "manual",
     goal: "compare",
     contactPreference: "offers",
     clientName: localStorage.getItem("userName") || "",
@@ -161,14 +146,51 @@ export function RequestFlow({ embedded = false, onCreated }) {
       sizeOption: form.quantity,
       exactAreaM2: form.exactAreaM2,
       pricingMode: form.pricingMode,
-      location: form.district === "София - Център" ? "sofia_center" : "sofia_regular",
+      location: "sofia_regular",
     }),
-    [category.key, form.activities, form.quantity, form.exactAreaM2, form.pricingMode, form.district]
+    [category.key, form.activities, form.quantity, form.exactAreaM2, form.pricingMode]
   );
 
   function setField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  const requestCurrentLocation = useCallback(() => {
+    setStatus("");
+
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      setLocationMessage("Браузърът не поддържа автоматична локация. Въведи точния адрес ръчно.");
+      setForm((prev) => ({ ...prev, latitude: null, longitude: null, locationSource: "manual" }));
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationMessage("Браузърът очаква разрешение за достъп до текущата локация...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        setForm((prev) => ({ ...prev, latitude, longitude, locationSource: "gps" }));
+        setLocationStatus("granted");
+        setLocationMessage("Текущата локация е добавена към заявката.");
+      },
+      (err) => {
+        console.warn("Geolocation denied/unavailable:", err);
+        setForm((prev) => ({ ...prev, latitude: null, longitude: null, locationSource: "manual" }));
+        setLocationStatus("denied");
+        setLocationMessage("Локацията е отказана или недостъпна. Въведи точния адрес ръчно.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (step !== 3 || locationAskedRef.current) return;
+    locationAskedRef.current = true;
+    requestCurrentLocation();
+  }, [requestCurrentLocation, step]);
 
   async function handlePhotos(e) {
     const files = Array.from(e.target.files || []);
@@ -222,7 +244,9 @@ export function RequestFlow({ embedded = false, onCreated }) {
       const areaIsValid = Number.isFinite(area) && area > 0 && area <= MAX_EXACT_AREA_M2;
       return Boolean(form.quantity) || areaIsValid;
     }
-    if (step === 3) return Boolean(form.district);
+    if (step === 3) {
+      return Boolean(form.address.trim()) || (Number.isFinite(form.latitude) && Number.isFinite(form.longitude));
+    }
     if (step === 5) return Boolean(form.phone.trim());
     return true;
   }
@@ -284,7 +308,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
         clientName: form.clientName,
         email: form.email || "client@bricky.mock",
         phone: form.phone,
-        address: [form.district, form.address].filter(Boolean).join(", "),
+        address: form.address.trim(),
+        latitude: form.latitude,
+        longitude: form.longitude,
+        locationSource: form.locationSource,
         category: category.label,
         categoryKey: category.key,
         description: buildDescription(),
@@ -334,12 +361,18 @@ export function RequestFlow({ embedded = false, onCreated }) {
       setStatus("Заявката е записана в mock средата.");
       onCreated?.();
       setStep(0);
+      locationAskedRef.current = false;
+      setLocationStatus("idle");
+      setLocationMessage("Позволи текуща локация или въведи точния адрес ръчно.");
       setForm((prev) => ({
         ...prev,
         activities: [],
         quantity: "",
         exactAreaM2: "",
         address: "",
+        latitude: null,
+        longitude: null,
+        locationSource: "manual",
         description: "",
         photos: [],
       }));
@@ -491,21 +524,34 @@ export function RequestFlow({ embedded = false, onCreated }) {
               <div>
                 <StepTitle category={category} title="Къде се намира обектът?" step={step} onGoToStep={goToStep} />
                 <div className="mt-6 space-y-4">
-                  <select
-                    value={form.district}
-                    onChange={(e) => setField("district", e.target.value)}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3"
-                  >
-                    {SOFIA_DISTRICTS.map((district) => (
-                      <option key={district} value={district}>{district}</option>
-                    ))}
-                  </select>
-                  <input
-                    value={form.address}
-                    onChange={(e) => setField("address", e.target.value)}
-                    placeholder="Улица/блок/вход, ако искаш да го уточниш"
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3"
-                  />
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold">Използвай текущата локация</p>
+                        <p className="mt-1 text-sm text-gray-300">Браузърът ще поиска разрешение и ще добави координатите към заявката.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={requestCurrentLocation}
+                        disabled={locationStatus === "loading"}
+                        className="rounded-lg bg-cyan-600 px-4 py-3 font-bold hover:bg-cyan-500 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {locationStatus === "loading" ? "Изчакване..." : locationStatus === "granted" ? "Обнови локацията" : "Разреши локация"}
+                      </button>
+                    </div>
+                    <p className={cx("mt-3 text-sm", locationStatus === "granted" ? "text-green-300" : locationStatus === "denied" ? "text-amber-300" : "text-cyan-100")}>
+                      {locationMessage}
+                    </p>
+                  </div>
+                  <label className="block">
+                    <span className="mb-2 block font-bold">Или въведи точен адрес</span>
+                    <input
+                      value={form.address}
+                      onChange={(e) => setField("address", e.target.value)}
+                      placeholder="Напр. София, ул. Козяк 12, вход Б"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3"
+                    />
+                  </label>
                 </div>
               </div>
             )}
@@ -609,7 +655,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Размер" value={form.quantity || "не е избран"} />
             <SummaryLine label="Площ от клиента" value={form.exactAreaM2 ? `${form.exactAreaM2} кв.м` : "не е въведена"} />
             <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === estimate.pricingMode)?.label} />
-            <SummaryLine label="Локация" value={[form.district, form.address].filter(Boolean).join(", ")} />
+            <SummaryLine label="Локация" value={form.address.trim() || (form.locationSource === "gps" ? "Текуща локация от браузъра" : "не е посочена")} />
             <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
             <div className="mt-6 rounded-xl bg-gray-900 p-4">
               <p className="text-sm text-gray-400">
