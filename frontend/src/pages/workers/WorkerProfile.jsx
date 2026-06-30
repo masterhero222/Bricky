@@ -5,6 +5,7 @@ import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 
 const PRICE_TABLE = {
   Баня: { material: 140 },
@@ -1064,7 +1065,14 @@ export default function WorkerProfile() {
                         </p>
                       </div>
 
-                      <p className="text-gray-400 mt-3">{req.description || "Няма описание."}</p>
+                      <p className="mt-3 whitespace-pre-line text-gray-400">
+                        {cleanRequestDescription(req.description) || "Няма описание."}
+                      </p>
+                      {formatRequestExpectedRange(req) && (
+                        <p className="mt-3 text-sm font-bold text-green-300">
+                          Ориентировъчна цена: {formatRequestExpectedRange(req)}
+                        </p>
+                      )}
 
                       <p className="text-gray-500 text-sm mt-3">Създадена: {formatBG(req.created_at)}</p>
 
@@ -1197,7 +1205,14 @@ export default function WorkerProfile() {
                         <div><h2 className="text-xl font-bold">#{job.requestId || job.id} • {job.category || "Ремонт"}</h2><p className="text-gray-400 text-sm mt-1">{job.address || "—"}</p></div>
                         <div className="text-right text-sm"><div className="text-green-400 font-bold">Завършена</div><div className="text-gray-400 mt-1">Време: {duration} дни</div></div>
                       </div>
-                      <p className="text-gray-300 mt-3">{job.description || "Няма описание."}</p>
+                      <p className="mt-3 whitespace-pre-line text-gray-300">
+                        {cleanRequestDescription(job.description) || "Няма описание."}
+                      </p>
+                      {formatRequestExpectedRange(job) && (
+                        <p className="mt-3 text-sm font-bold text-green-300">
+                          Ориентировъчна цена: {formatRequestExpectedRange(job)}
+                        </p>
+                      )}
                       <div className="grid md:grid-cols-2 gap-4 mt-5">
                         <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
                         <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>

@@ -8,3 +8,7 @@ coverage/
 # Nest / build junk
 backend/backend@*
 backend/nest
+
+# Accidental terminal capture files
+frontend/path
+Bricky__backup_*/frontend/path
