@@ -58,15 +58,9 @@ const CONTACT_PREFS = [
 ];
 
 const PRICING_MODES = [
-  { value: "labor_only", label: "Само труд", description: "Материалите не участват в ориентира." },
+  { value: "labor_only", label: "Труд", description: "Материалите не са включени в ориентира." },
   { value: "labor_plus_materials", label: "Труд + материали", description: "Включва ориентировъчните материали за избраните дейности." },
 ];
-
-const PRICING_BEHAVIOR_COPY = {
-  locked_labor_only: "Ориентирът включва само труд. Материали не са включени.",
-  locked_labor_plus_materials: "Ориентирът включва труд и приблизителни материали.",
-  inspection_required: "Материалите и частите се уточняват след снимки или оглед.",
-};
 
 const QUANTITY_PROMPTS = {
   vik: "Колко точки или отделни задачи има?",
@@ -425,27 +419,19 @@ export function RequestFlow({ embedded = false, onCreated }) {
                 </div>
                 {form.activities.length > 0 && (
                   <div className="mt-8 border-t border-gray-700 pt-6">
-                    {estimate.pricingModeBehavior === "user_selectable" ? (
-                      <>
-                        <h3 className="text-lg font-black">Какво да включва ориентирът?</h3>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          {PRICING_MODES.map((mode) => (
-                            <RadioCard
-                              key={mode.value}
-                              selected={estimate.pricingMode === mode.value}
-                              onClick={() => setField("pricingMode", mode.value)}
-                            >
-                              <span className="block font-bold">{mode.label}</span>
-                              <span className="mt-1 block text-sm font-normal text-gray-400">{mode.description}</span>
-                            </RadioCard>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-                        {PRICING_BEHAVIOR_COPY[estimate.pricingModeBehavior]}
-                      </div>
-                    )}
+                    <h3 className="text-lg font-black">Какво да включва ориентирът?</h3>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {PRICING_MODES.map((mode) => (
+                        <RadioCard
+                          key={mode.value}
+                          selected={estimate.pricingMode === mode.value}
+                          onClick={() => setField("pricingMode", mode.value)}
+                        >
+                          <span className="block font-bold">{mode.label}</span>
+                          <span className="mt-1 block text-sm font-normal text-gray-400">{mode.description}</span>
+                        </RadioCard>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -639,7 +625,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
               </div>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Труд</span><b>{estimate.laborMin}-{estimate.laborMax} EUR</b></div>
-                <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{estimate.pricingModeBehavior === "inspection_required" ? "по оглед" : estimate.pricingMode === "labor_only" ? "не са включени" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
+                <div className="flex justify-between gap-4"><span>Материали</span><b className="text-right">{estimate.pricingMode === "labor_only" ? "не са включени" : estimate.pricingModeBehavior === "inspection_required" ? "по оглед" : `${estimate.materialMin}-${estimate.materialMax} EUR`}</b></div>
                 {estimate.showPossibleRange && (
                   <div className="flex justify-between border-t border-gray-700 pt-2 text-gray-400">
                     <span>{estimate.secondaryLabel || "Възможен диапазон"}</span>
@@ -653,7 +639,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
               <div className="mt-3 rounded-lg bg-gray-950 p-3 text-xs leading-relaxed text-gray-300">
                 <b className="text-white">Защо варира:</b> {estimate.variationReason}
               </div>
-              {estimate.materialConfidence && (estimate.pricingMode !== "labor_only" || estimate.pricingModeBehavior === "inspection_required") && (
+              {estimate.materialConfidence && estimate.pricingMode !== "labor_only" && (
                 <p className="mt-3 text-xs font-semibold text-cyan-300">
                   Увереност за материалите: {estimate.materialConfidence === "high" ? "висока" : estimate.materialConfidence === "medium" ? "средна" : estimate.materialConfidence === "low" ? "ниска" : "нужен е оглед"}
                 </p>

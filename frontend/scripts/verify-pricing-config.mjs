@@ -75,7 +75,7 @@ const bathroom = calculateRepairEstimate({
 });
 assert.equal(bathroom.calculatedActivities.length, 1, "Bathroom bundle must not double count included activities");
 assert.equal(bathroom.pricingModeBehavior, "inspection_required");
-assert.equal(bathroom.pricingMode, "labor_only");
+assert.equal(bathroom.pricingMode, "labor_plus_materials");
 assert.deepEqual([bathroom.materialMin, bathroom.materialMax], [900, 1800]);
 
 const leak = calculateRepairEstimate({
@@ -86,7 +86,7 @@ const leak = calculateRepairEstimate({
 });
 assert.equal(leak.materialConfidence, "inspection_required");
 assert.equal(leak.pricingModeBehavior, "inspection_required");
-assert.equal(leak.pricingMode, "labor_only");
+assert.equal(leak.pricingMode, "labor_plus_materials");
 assert.equal(leak.needsInspection, true);
 
 const laminateLaborOnly = calculateRepairEstimate({
@@ -113,7 +113,16 @@ const lockedMaterials = calculateRepairEstimate({
   pricingMode: "labor_only",
 });
 assert.equal(lockedMaterials.pricingModeBehavior, "locked_labor_plus_materials");
-assert.equal(lockedMaterials.pricingMode, "labor_plus_materials");
+assert.equal(lockedMaterials.pricingMode, "labor_only");
+assert.deepEqual([lockedMaterials.materialMin, lockedMaterials.materialMax], [0, 0]);
+
+const selectableMaterials = calculateRepairEstimate({
+  categoryKey: "vik",
+  selectedActivities: ["Сифон"],
+  sizeOption: "1 точка",
+  pricingMode: "labor_plus_materials",
+});
+assert.ok(selectableMaterials.totalMax > lockedMaterials.totalMax, "Materials mode must change the total range");
 
 const lockedLabor = calculateRepairEstimate({
   categoryKey: "electro",
@@ -122,7 +131,8 @@ const lockedLabor = calculateRepairEstimate({
   pricingMode: "labor_plus_materials",
 });
 assert.equal(lockedLabor.pricingModeBehavior, "locked_labor_only");
-assert.equal(lockedLabor.pricingMode, "labor_only");
+assert.equal(lockedLabor.pricingMode, "labor_plus_materials");
+assert.ok(lockedLabor.materialMax > 0, "Labor + materials must produce a material range");
 
 const exactPlasterArea = calculateRepairEstimate({
   categoryKey: "plaster",

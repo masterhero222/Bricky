@@ -9,18 +9,20 @@ This document describes the calculator currently implemented in the Bricky mock 
 ## Current Capabilities
 
 - 15 repair categories and 97 activity-level pricing rules.
-- 174 indexed material and consumable items.
+- 174 indexed material items.
 - Currency: EUR.
 - Every displayed range boundary is rounded upward to the nearest 5 EUR.
 - Two client-facing calculation modes:
   - `labor_only`;
   - `labor_plus_materials`.
 - The former consumables/material-estimate split has been removed from the mock flow.
-- Every activity has a pricing-mode behavior:
+- Every activity retains pricing-mode behavior metadata for warnings and confidence:
   - `user_selectable`;
   - `locked_labor_only`;
   - `locked_labor_plus_materials`;
   - `inspection_required`.
+- The client always sees and can choose exactly two modes: `Труд` or `Труд + материали`.
+- Pricing-mode behavior metadata no longer overrides a valid client choice.
 - Separate labor, material, and total min/max ranges.
 - Bundle protection prevents included activities from being charged twice.
 - Material confidence values:
@@ -33,7 +35,7 @@ This document describes the calculator currently implemented in the Bricky mock 
 ## Main Files
 
 - `frontend/src/constants/repairPricingConfig.js`: labor pricing by stable category/activity key.
-- `frontend/src/constants/materialPriceIndex.js`: material and consumable price index.
+- `frontend/src/constants/materialPriceIndex.js`: material price index.
 - `frontend/src/constants/materialQuantityRules.js`: activity-specific quantity and inclusion rules.
 - `frontend/src/utils/repairPriceCalculator.js`: shared calculation and display-range engine.
 - `frontend/src/pages/Requests.jsx`: client request wizard and calculator UI.
@@ -155,7 +157,7 @@ The pricing test verifies:
 - bundle protection and inspection behavior;
 - only the two v0.2 pricing modes are accepted;
 - every activity has a valid behavior and default mode;
-- inspection and locked behaviors override invalid client choices;
+- every valid client pricing-mode choice is respected, including activities with warning/inspection metadata;
 - all material rules use non-null `materialMin/materialMax`;
 - `logistics_formula` is an accepted quantity mode;
 - labels normalize to stable activity keys;

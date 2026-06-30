@@ -363,7 +363,8 @@
 - DONE in mock v0.1: hide legacy embedded calculator lines when old mock request descriptions are rendered without rewriting stored localStorage records.
 - Documentation: `docs/calculator-mock-pricing-v0.2.md` describes the current engine, area rules, range UX, snapshot, verification, and remaining work.
 - DONE in mock v0.2: replace the three-mode calculator with only `labor_only` and `labor_plus_materials`.
-- DONE in mock v0.2: add `pricingModeBehavior` and `defaultPricingMode` to all 97 activities and hide the selector for locked/inspection activities.
+- DONE in mock v0.2: add `pricingModeBehavior` and `defaultPricingMode` metadata to all 97 activities.
+- DONE in mock v0.2: show exactly `Труд` and `Труд + материали` for every selected activity and always respect the client's choice; remove hidden mode locking that produced identical comparisons.
 - DONE in mock v0.2: rename material-rule ranges to non-null `materialMin/materialMax` and formally support `logistics_formula`.
 - DONE in mock v0.2: normalize Bulgarian activity labels to stable keys and save both keys and labels in request snapshots.
 - DONE in mock v0.2: use category-specific quantity questions and show exact square-meter input only for area-based activities.

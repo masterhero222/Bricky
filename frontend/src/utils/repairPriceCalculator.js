@@ -209,9 +209,7 @@ export function resolvePricingModeBehavior(activities) {
   return "locked_labor_only";
 }
 
-function resolvePricingMode(behavior, requestedMode, activities) {
-  if (behavior === "locked_labor_plus_materials") return "labor_plus_materials";
-  if (behavior === "locked_labor_only" || behavior === "inspection_required") return "labor_only";
+function resolvePricingMode(requestedMode, activities) {
   if (VALID_PRICING_MODES.has(requestedMode)) return requestedMode;
   return activities.some((item) => item.defaultPricingMode === "labor_plus_materials")
     ? "labor_plus_materials"
@@ -312,7 +310,7 @@ export function calculateRepairEstimate({
     notes.push("Включените в пакетната услуга дейности не са начислени повторно.");
   }
   const pricingModeBehavior = resolvePricingModeBehavior(activities);
-  const effectivePricingMode = resolvePricingMode(pricingModeBehavior, pricingMode, activities);
+  const effectivePricingMode = resolvePricingMode(pricingMode, activities);
 
   const scope = parseScopeOption(sizeOption);
   const normalizedAreaM2 = normalizeExactAreaM2(exactAreaM2);
@@ -370,7 +368,7 @@ export function calculateRepairEstimate({
   const excludedMaterialKeys = new Set();
   const materialNotes = [];
 
-  if (effectivePricingMode !== "labor_only" || pricingModeBehavior === "inspection_required") {
+  if (effectivePricingMode !== "labor_only") {
     for (const item of activities) {
       const rule = getMaterialQuantityRule(categoryKey, item.key);
       if (!rule) {
