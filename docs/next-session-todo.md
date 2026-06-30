@@ -358,6 +358,10 @@
 - DONE in mock v0.1: implement the Expected Range UX model with `expectedMin/Max`, `possibleMin/Max`, `confidence`, `displayMode`, and category-specific variation reasons.
 - DONE in mock v0.1: show the expected range as the primary client price and retain a wide technical possible range only as secondary information.
 - DONE in mock v0.1: store exact area and the complete expected/possible range model in the mock pricing snapshot; do not migrate this structure to production DB yet.
+- DONE in mock v0.1: stop writing calculator prices and calculator-version metadata into the free-form repair description.
+- DONE in mock v0.1: show the structured expected estimate separately in client requests, worker requests/history, and the repair map.
+- DONE in mock v0.1: hide legacy embedded calculator lines when old mock request descriptions are rendered without rewriting stored localStorage records.
+- Documentation: `docs/calculator-mock-pricing-v0.1.md` describes the current engine, area rules, range UX, snapshot, verification, and remaining work.
 - REMAINING TECHNICAL DEBT:
   - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
   - mock snapshots are complete, but production still needs a supported DTO and persistent historical calculation snapshot;
