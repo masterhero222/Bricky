@@ -30,7 +30,7 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 - [x] Frontend pricing verification passes: 97 activities and 174 material items.
 - [x] Frontend production build passes.
 - [x] Backend production build passes.
-- [x] Backend Jest passes with real request and worker-history tests: 4 suites and 23 tests.
+- [x] Backend Jest passes with request, worker-history, and storage tests: 6 suites and 26 tests.
 - [x] Request lifecycle unit success and critical role/ownership failures are covered.
 - [x] Duplicate application behavior is deterministic and tested.
 - [x] Canonical identity, state, category, application, media, estimate, and location contracts are documented.
@@ -94,9 +94,11 @@ MySQL `simple-array` hydration returned legacy `appliedWorkers` as strings after
 
 Worker history previously read only legacy JSON media columns while new uploads were stored in `request_images`. History now hydrates all completed requests from `request_images` with one batched query, preserving legacy fallbacks and avoiding an N+1 query pattern. This restores before/after media for worker history and public portfolio albums.
 
+Upload storage previously depended on `process.cwd()` in three separate code paths. All request, avatar, gallery, deletion, and static-serving paths now use one absolute storage contract. A restart test proves the same static file is served by a new Nest application instance, and the guarded MySQL E2E includes a full app restart after real multipart uploads.
+
 ## Final Audit And Sprint 2/P0 Carry-over
 
-The 2026-07-05 verification gate passed after the media/history fix: pricing `97/174`, frontend build, backend build, and backend Jest `23/23`.
+The 2026-07-05 verification gate passed after media/history and storage hardening: pricing `97/174`, frontend build, backend build, and backend Jest `26/26`.
 
 Sprint 1 has strong automated proof for the lifecycle and real multipart media API, but the following deployment-facing evidence remains mandatory before production sign-off:
 
@@ -116,6 +118,7 @@ These are P0 validation tasks. They do not invalidate the passing API E2E, autho
 
 - `docs/sprint-1-canonical-contracts.md`
 - `docs/sprint-1-smoke-checklist.md`
+- `docs/media-storage-deployment.md`
 - `docs/next-session-todo.md`
 - `backend/src/requests/requests.service.ts`
 - `backend/test/app.e2e-spec.ts`

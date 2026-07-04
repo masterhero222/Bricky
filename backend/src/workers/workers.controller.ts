@@ -16,8 +16,9 @@ import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { getUploadPath } from '../common/storage-paths';
 
 @Controller('workers')
 export class WorkersController {
@@ -60,7 +61,7 @@ export class WorkersController {
     FileInterceptor('avatar', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'workers');
+          const dir = getUploadPath('workers');
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },
@@ -104,7 +105,7 @@ export class WorkersController {
     FilesInterceptor('images', 20, {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'workers', 'gallery');
+          const dir = getUploadPath('workers', 'gallery');
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },

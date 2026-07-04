@@ -2,9 +2,9 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
 import { unlink } from 'fs/promises';
-import { join } from 'path';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
+import { getUploadPath, getUploadsRoot } from './../src/common/storage-paths';
 
 describe('Request lifecycle (MySQL e2e)', () => {
   let app: NestExpressApplication;
@@ -13,6 +13,8 @@ describe('Request lifecycle (MySQL e2e)', () => {
   let otherWorkerToken: string;
   let workerUserId: number;
   let requestId: number;
+  let persistentBeforePhotoUrl: string;
+  let persistentAfterPhotoUrl: string;
   const storedKeys = new Set<string>();
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -25,6 +27,18 @@ describe('Request lifecycle (MySQL e2e)', () => {
   const workerEmail = `worker-${suffix}@example.test`;
   const otherWorkerEmail = `worker-other-${suffix}@example.test`;
 
+  async function createApp() {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    const nextApp = moduleFixture.createNestApplication<NestExpressApplication>();
+    nextApp.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    nextApp.useStaticAssets(getUploadsRoot(), { prefix: '/uploads/' });
+    await nextApp.init();
+    return nextApp;
+  }
+
   beforeAll(async () => {
     if (process.env.NODE_ENV !== 'test') {
       throw new Error('E2E tests require NODE_ENV=test.');
@@ -33,20 +47,13 @@ describe('Request lifecycle (MySQL e2e)', () => {
       throw new Error('E2E tests require an isolated Sprint 1 database.');
     }
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication<NestExpressApplication>();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
-    await app.init();
+    app = await createApp();
   });
 
   afterAll(async () => {
     await app?.close();
     await Promise.all(
-      [...storedKeys].map((key) => unlink(join(process.cwd(), 'uploads', key)).catch(() => undefined)),
+      [...storedKeys].map((key) => unlink(getUploadPath(key)).catch(() => undefined)),
     );
   });
 
@@ -163,6 +170,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
       storedKeys.add(photo.storageKey);
       await request(app.getHttpServer()).get(photo.url).expect(200).expect('Content-Type', /image\/png/);
     }
+    persistentBeforePhotoUrl = uploaded.body.beforePhotos.find((photo: any) => photo.name === 'before.png').url;
 
     const deletedPhoto = uploaded.body.beforePhotos.find((photo: any) => photo.name === 'delete-me.png');
     await request(app.getHttpServer())
@@ -238,6 +246,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(201);
     expect(uploaded.body.afterPhotos).toHaveLength(1);
     expect(uploaded.body.afterPhotos[0].mimeType).toBe('image/png');
+    persistentAfterPhotoUrl = uploaded.body.afterPhotos[0].url;
     storedKeys.add(uploaded.body.afterPhotos[0].storageKey);
     await request(app.getHttpServer()).get(uploaded.body.afterPhotos[0].url).expect(200);
 
@@ -262,6 +271,24 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(200);
     expect(history.body.map((item: any) => item.id)).toContain(requestId);
+  });
+
+  it('serves uploaded media and hydrated worker history after an application restart', async () => {
+    await app.close();
+    app = await createApp();
+
+    await request(app.getHttpServer()).get(persistentBeforePhotoUrl).expect(200).expect('Content-Type', /image\/png/);
+    await request(app.getHttpServer()).get(persistentAfterPhotoUrl).expect(200).expect('Content-Type', /image\/png/);
+
+    const history = await request(app.getHttpServer())
+      .get('/workers/me/history')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    const completedRequest = history.body.find((item: any) => Number(item.id) === requestId);
+    expect(completedRequest.beforePhotos).toHaveLength(1);
+    expect(completedRequest.afterPhotos).toHaveLength(1);
+    expect(completedRequest.beforePhotos[0].url).toBe(persistentBeforePhotoUrl);
+    expect(completedRequest.afterPhotos[0].url).toBe(persistentAfterPhotoUrl);
   });
 
   it('allows one review by the owning client after completion', async () => {

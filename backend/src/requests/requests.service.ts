@@ -10,6 +10,7 @@ import { Brackets, Repository } from 'typeorm';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { extname, join, normalize, sep } from 'path';
 import { randomUUID } from 'crypto';
+import { getUploadPath, getUploadsRoot } from '../common/storage-paths';
 import { RequestEntity } from './entities/request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestImageEntity, RequestImageKind } from './entities/request-image.entity';
@@ -192,7 +193,7 @@ export class RequestsService {
     if (!request) throw new NotFoundException('Request not found');
     this.assertImageUploadAccess(request, actorUserId, actorRole, kind);
 
-    const targetDir = join(process.cwd(), 'uploads', 'requests');
+    const targetDir = getUploadPath('requests');
     await mkdir(targetDir, { recursive: true });
     const storedPaths: string[] = [];
     const photos: any[] = [];
@@ -245,7 +246,7 @@ export class RequestsService {
 
   private async deleteStoredFile(storageKey: string | null) {
     if (!storageKey) return;
-    const uploadsRoot = normalize(join(process.cwd(), 'uploads'));
+    const uploadsRoot = normalize(getUploadsRoot());
     const target = normalize(join(uploadsRoot, storageKey));
     if (target !== uploadsRoot && !target.startsWith(`${uploadsRoot}${sep}`)) return;
     await unlink(target).catch((error: NodeJS.ErrnoException) => {
