@@ -1,0 +1,156 @@
+# Sprint 1 Request Lifecycle Smoke Checklist
+
+Updated: 2026-07-04
+
+Use local mock or staging data. Do not create production accounts or requests unless the production mutation is explicitly approved.
+
+## Preconditions
+
+- Run `npm install` in `frontend` and `backend`.
+- Run `npm run verify:sprint1` from repository root.
+- Start local frontend with `npm run dev`.
+- Use one consistent origin, for example `http://127.0.0.1:5173`.
+- Reset the mock database from `Dev test` before the scenario.
+- Record the origin and seeded client/worker ids.
+
+## Scenario A - Client Creates Request
+
+- [ ] Enter as mock client.
+- [ ] Open `Направи заявка`.
+- [ ] Select a stable repair category.
+- [ ] Select at least one activity.
+- [ ] Move backward one step and confirm the previous answer is retained.
+- [ ] Move forward and enter a valid activity-specific quantity.
+- [ ] Select `Труд` or `Труд + материали`.
+- [ ] Confirm an expected EUR range is displayed separately from description.
+- [ ] Enter an exact address or use browser location when intentionally permitted.
+- [ ] Attach at least one before/problem photo.
+- [ ] Submit the request.
+- [ ] Confirm it appears in the client list with category, address, estimate, and photo.
+
+Expected data invariants:
+
+- request belongs to current client user id;
+- request has stable `categoryKey`;
+- price is structured, not appended to free-form description;
+- before photo is preserved;
+- initial request is open and unassigned.
+
+## Scenario B - Worker Sees and Applies
+
+- [ ] Switch to mock worker.
+- [ ] Confirm the request appears in the worker feed.
+- [ ] Confirm the same request appears on the worker-only map when coordinates exist.
+- [ ] Open/select the request and confirm client photo is visible.
+- [ ] Apply once.
+- [ ] Attempt to apply again.
+- [ ] Confirm no duplicate candidate is created and UI remains stable.
+
+Expected data invariants:
+
+- candidate uses worker `users.id`;
+- one logical application exists per request/worker;
+- request remains unassigned until the client chooses the worker.
+
+## Scenario C - Client Assigns
+
+- [ ] Switch back to the owning client.
+- [ ] Open the request.
+- [ ] Confirm the worker appears exactly once in candidates.
+- [ ] Open the public worker profile.
+- [ ] Return and assign the worker.
+- [ ] Confirm selected worker and in-progress state are visible.
+
+Expected data invariants:
+
+- only owning client can assign;
+- assigned id is worker `users.id`;
+- assigned worker has an application;
+- another client cannot mutate the request.
+
+## Scenario D - Worker Completes
+
+- [ ] Switch to the assigned worker.
+- [ ] Confirm assigned request is visible.
+- [ ] Attach at least one after photo.
+- [ ] Complete the request.
+- [ ] Confirm completed status, completion date, and duration.
+- [ ] Confirm before/after images appear in completed history.
+- [ ] Confirm completed object appears as one portfolio/history item, not unrelated loose photos.
+
+Expected data invariants:
+
+- only assigned worker can complete;
+- completed worker id matches assigned worker id;
+- duration is at least one day under current compatibility behavior;
+- after photo belongs to request and uploader.
+
+## Scenario E - Client Reviews
+
+- [ ] Switch to the owning client.
+- [ ] Confirm completed request is visible.
+- [ ] Submit a rating from 1 to 5 and optional comment.
+- [ ] Confirm the request shows as reviewed.
+- [ ] Attempt a second review.
+- [ ] Confirm duplicate review is rejected or disabled.
+- [ ] Confirm public worker rating reflects the review.
+
+Expected data invariants:
+
+- one review per request/client;
+- only owning client may review;
+- only completed requests may be reviewed;
+- reviewed worker id is the assigned worker user id.
+
+## Scenario F - Session and Responsive Navigation
+
+- [ ] Verify authenticated mobile menu has opaque background.
+- [ ] Verify `Моят профил` is visible.
+- [ ] Verify `Изход` is visible.
+- [ ] Log out.
+- [ ] Confirm token and role are cleared and login page opens.
+- [ ] Repeat logout behavior on desktop/profile navigation.
+
+## Failure Evidence To Capture
+
+For every failed item record:
+
+- actor role and user id;
+- route and request id;
+- expected vs actual state;
+- browser console/network error;
+- relevant mock DB fragment or staging row ids;
+- screenshot when the defect is visual;
+- whether reset/retry reproduces it.
+
+## Execution Record
+
+| Date | Environment/origin | Commit | Result | Evidence/notes |
+| --- | --- | --- | --- | --- |
+| 2026-07-04 | Local mock, `http://127.0.0.1:5173` | `codex/sprint-1-request-stabilization` | PARTIAL PASS | Created request #7 with `vik`, activity, labor+materials, quantity and exact test address; Back retained the selected activity; estimate displayed as 60-95 EUR; worker 201 saw and applied; duplicate apply became disabled/idempotent; owning client assigned worker 201; assigned worker completed; owning client submitted one 5-star review; review form disappeared after submission; logout returned to public auth actions. File upload and map visibility were not exercised in this run. |
+
+## 2026-07-04 Findings
+
+Passed:
+
+- category/activity/quantity request wizard flow;
+- backward navigation preserves selected activity;
+- two-mode pricing choice and structured expected estimate;
+- exact manual address fallback;
+- request creation and client list presentation;
+- worker feed visibility;
+- application and duplicate-application UI behavior;
+- owning-client assignment;
+- assigned-worker completion;
+- completed request review;
+- duplicate review UI prevention after submission;
+- logout session transition.
+
+Still required for a full smoke pass:
+
+- upload and render a real before photo in the new request;
+- upload and render a real after photo during completion;
+- verify the new coordinate-bearing request on the worker map;
+- verify completed request history/portfolio photo grouping;
+- repeat the responsive mobile menu/logout check as part of the same recorded Sprint run;
+- run the same lifecycle against a database-backed local/staging backend, not only localStorage mock.
