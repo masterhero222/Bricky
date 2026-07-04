@@ -43,8 +43,8 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 - [ ] Uploaded before/after photos are visually rendered in the final browser smoke run.
 - [ ] The created coordinate-bearing request is verified on the worker map.
 - [ ] Completed request is verified as one portfolio/history object with before/after media.
-- [ ] Responsive mobile menu/logout is verified in the same final smoke run.
-- [ ] Final requirement-by-requirement audit is recorded and remaining work is moved to Sprint 2/P0 honestly.
+- [x] Responsive mobile worker logout is verified at `390x844`; it opens `/auth` after clearing the session.
+- [x] Final requirement-by-requirement audit is recorded and remaining work is moved to Sprint 2/P0 honestly.
 
 ## Evidence
 
@@ -92,14 +92,26 @@ The run used a fresh `bricky_sprint1_*` schema over an SSH tunnel. Temporary sch
 
 MySQL `simple-array` hydration returned legacy `appliedWorkers` as strings after persistence. The response hydration path now guarantees `number[]`, matching the canonical external actor-id contract.
 
+## Final Audit And Sprint 2/P0 Carry-over
+
+The 2026-07-04 final verification gate passed again after the browser audit: pricing `97/174`, frontend build, backend build, and backend Jest `22/22`.
+
+Sprint 1 has strong automated proof for the lifecycle and real multipart media API, but the following deployment-facing evidence remains mandatory before production sign-off:
+
+1. Render API-uploaded before and after files in the client request, worker request, completed history, and public portfolio views.
+2. Select a coordinate-bearing request marker and verify the worker map detail panel, photos, and application action.
+3. Seed or stage one completed request with before/after media and verify it renders as one grouped portfolio/history object.
+4. Repeat media retrieval after a backend restart/deployment to prove persistent storage configuration, not only same-process serving.
+
+These are P0 validation tasks. They do not invalidate the passing API E2E, authorization, pricing, build, and responsive logout evidence, but they prevent claiming a full production-ready visual smoke pass.
+
 ## Remaining Execution Order
 
 1. Verify uploaded before/after photos visually in the browser flow.
-2. Verify map selection for the newly created request.
+2. Verify map detail-panel selection for a newly created request; worker-only route and clustering already passed locally.
 3. Verify completed history/portfolio grouping.
-4. Repeat responsive logout in the same run.
-5. Run `npm run verify:sprint1` again.
-6. Perform the final Sprint audit and classify every remaining item for Sprint 2/P0.
+4. Run `npm run verify:sprint1` again.
+5. Perform the final Sprint audit and classify every remaining item for Sprint 2/P0.
 
 ## References
 
