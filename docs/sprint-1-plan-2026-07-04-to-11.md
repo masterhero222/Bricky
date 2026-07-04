@@ -30,17 +30,17 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 - [x] Frontend pricing verification passes: 97 activities and 174 material items.
 - [x] Frontend production build passes.
 - [x] Backend production build passes.
-- [x] Backend Jest passes with real request tests: 3 suites and 20 tests.
+- [x] Backend Jest passes with real request tests: 3 suites and 22 tests.
 - [x] Request lifecycle unit success and critical role/ownership failures are covered.
 - [x] Duplicate application behavior is deterministic and tested.
 - [x] Canonical identity, state, category, application, media, estimate, and location contracts are documented.
 - [x] `npm run verify:sprint1` is implemented and passes.
-- [x] Isolated MySQL E2E passes: 1 suite and 7 tests.
+- [x] Isolated MySQL E2E passes: 1 suite and 8 tests.
 - [x] E2E safety guards reject non-test or non-`sprint1` databases.
 - [x] Temporary MySQL database/users are removed after the recorded run.
 - [x] No production credentials or personal data are committed.
-- [ ] Real multipart before-photo upload is exercised and rendered.
-- [ ] Real multipart after-photo upload is exercised and rendered.
+- [x] Real multipart before/after upload, HTTP serving, ownership rejection, and deletion are covered at API level.
+- [ ] Uploaded before/after photos are visually rendered in the final browser smoke run.
 - [ ] The created coordinate-bearing request is verified on the worker map.
 - [ ] Completed request is verified as one portfolio/history object with before/after media.
 - [ ] Responsive mobile menu/logout is verified in the same final smoke run.
@@ -71,21 +71,22 @@ The gate runs:
 - `DB_NAME` contains `sprint1`;
 - database variables point to an isolated schema.
 
-Result on 2026-07-04: PASS, 7/7.
+Result on 2026-07-04: PASS, 8/8.
 
 Covered:
 
 - client and two worker registrations/logins;
 - worker rejected from client-only request creation;
-- request category, coordinates, estimate, and before-image metadata;
+- request category, coordinates, and estimate;
+- real multipart before upload, static retrieval, database metadata, ownership, and physical deletion;
 - client ownership and worker feed/map visibility;
 - first and duplicate application;
 - owning-client assignment;
 - rejection of non-assigned worker completion;
-- assigned-worker completion and history;
+- assigned-worker multipart after upload, static retrieval, completion, and history;
 - one review, duplicate rejection, and public rating.
 
-The run used a fresh `bricky_sprint1_*` schema over an SSH tunnel. Temporary schema/users were removed afterward. It did not transfer real multipart files, so media upload remains open.
+The run used a fresh `bricky_sprint1_*` schema over an SSH tunnel. Temporary schema/users and local E2E files were removed afterward. Frontend visual rendering remains part of the final browser smoke.
 
 ## Known Finding Fixed
 
@@ -93,13 +94,12 @@ MySQL `simple-array` hydration returned legacy `appliedWorkers` as strings after
 
 ## Remaining Execution Order
 
-1. Add or exercise real multipart request-media endpoints in an isolated/staging lifecycle.
-2. Verify file retrieval and deletion plus missing-file behavior.
-3. Verify map selection for the newly created request.
-4. Verify completed history/portfolio grouping.
-5. Repeat responsive logout in the same run.
-6. Run `npm run verify:sprint1` again.
-7. Perform the final Sprint audit and classify every remaining item for Sprint 2/P0.
+1. Verify uploaded before/after photos visually in the browser flow.
+2. Verify map selection for the newly created request.
+3. Verify completed history/portfolio grouping.
+4. Repeat responsive logout in the same run.
+5. Run `npm run verify:sprint1` again.
+6. Perform the final Sprint audit and classify every remaining item for Sprint 2/P0.
 
 ## References
 

@@ -279,7 +279,8 @@ export default function WorkerProfile() {
   async function handleCompletionPhotos(requestId, files) {
     try {
       const photos = await filesToPhotos(files);
-      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...photos] }));
+      const withFiles = photos.map((photo, index) => ({ ...photo, file: files[index] }));
+      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...withFiles] }));
     } catch (err) {
       console.error(err);
       setApplyMsg("Не успях да прочета снимките след ремонта.");
@@ -298,7 +299,20 @@ export default function WorkerProfile() {
       setApplyMsg("");
       setCompletingId(requestId);
 
-      await apiPost(`/requests/${requestId}/complete`, { afterPhotos: completionPhotos[requestId] || [] });
+      const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
+      const photos = completionPhotos[requestId] || [];
+      if (!isDevMock) {
+        const files = photos.map((photo) => photo.file).filter(Boolean);
+        if (files.length) {
+          const data = new FormData();
+          files.forEach((file) => data.append("images", file));
+          await apiPost(`/requests/${requestId}/images/after`, data);
+        }
+      }
+
+      await apiPost(`/requests/${requestId}/complete`, {
+        afterPhotos: isDevMock ? photos.map(({ file: _file, ...photo }) => photo) : [],
+      });
 
       setApplyMsg(`Заявка #${requestId} е затворена ✅`);
       await loadRequests();

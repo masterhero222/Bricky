@@ -128,7 +128,7 @@ For every failed item record:
 | Date | Environment/origin | Commit | Result | Evidence/notes |
 | --- | --- | --- | --- | --- |
 | 2026-07-04 | Local mock, `http://127.0.0.1:5173` | `codex/sprint-1-request-stabilization` | PARTIAL PASS | Created request #7 with `vik`, activity, labor+materials, quantity and exact test address; Back retained the selected activity; estimate displayed as 60-95 EUR; worker 201 saw and applied; duplicate apply became disabled/idempotent; owning client assigned worker 201; assigned worker completed; owning client submitted one 5-star review; review form disappeared after submission; logout returned to public auth actions. File upload and map visibility were not exercised in this run. |
-| 2026-07-04 | Isolated MySQL over SSH tunnel | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | Fresh temporary `bricky_sprint1_*` schema; 7/7 E2E tests passed registration/login, role rejection, request create, client ownership, worker feed/map, idempotent apply, assign, completion authorization/history, one review, duplicate review rejection, and public rating. Temporary DB/users were removed. Image URL metadata was covered; real multipart file transfer was not. |
+| 2026-07-04 | Isolated MySQL over SSH tunnel | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | Fresh temporary `bricky_sprint1_*` schema; 8/8 E2E tests passed registration/login, role rejection, request create, real before/after multipart upload and static serving, ownership rejection, physical image deletion, client ownership, worker feed/map, idempotent apply, assign, completion/history, one review, duplicate review rejection, and public rating. Temporary DB/users and local E2E files were removed. |
 
 ## 2026-07-04 Findings
 
@@ -149,12 +149,12 @@ Passed:
 
 Still required for a full smoke pass:
 
-- upload and render a real before photo in the new request;
-- upload and render a real after photo during completion;
+- visually render the API-uploaded before photo in the client and worker request views;
+- visually render the API-uploaded after photo in completed history/portfolio;
 - verify the new coordinate-bearing request on the worker map;
 - verify completed request history/portfolio photo grouping;
 - repeat the responsive mobile menu/logout check as part of the same recorded Sprint run;
-- upload/retrieve/delete real multipart files against persistent staging storage; the MySQL lifecycle is now covered, but the E2E uses image URL metadata rather than file transfer.
+- repeat multipart persistence after a backend restart/deployment on staging; the isolated E2E now covers upload, retrieval, ownership rejection, and physical deletion in one process.
 
 ## Automated MySQL Evidence
 

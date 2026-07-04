@@ -7,11 +7,23 @@ import {
   Req,
   UseGuards,
   BadRequestException,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestDraftDto } from './dto/request-draft.dto';
+
+const requestImageUpload = FilesInterceptor('images', 10, {
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const ok = allowed.has(String(file.mimetype || '').toLowerCase());
+    cb(ok ? null : new BadRequestException('Invalid image type'), ok);
+  },
+});
 
 @Controller('requests')
 export class RequestsController {
@@ -29,6 +41,45 @@ export class RequestsController {
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
     return this.requests.create(dto, Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/images/before')
+  @UseInterceptors(requestImageUpload)
+  async uploadBefore(@Req() req: any, @Param('id') id: string, @UploadedFiles() files: any[]) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.addUploadedFiles(
+      Number(id),
+      Number(req.user.id),
+      req.user.role,
+      'before',
+      files,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/images/after')
+  @UseInterceptors(requestImageUpload)
+  async uploadAfter(@Req() req: any, @Param('id') id: string, @UploadedFiles() files: any[]) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.addUploadedFiles(
+      Number(id),
+      Number(req.user.id),
+      req.user.role,
+      'after',
+      files,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/images/:imageId/delete')
+  async deleteImage(@Req() req: any, @Param('id') id: string, @Param('imageId') imageId: string) {
+    return this.requests.deleteUploadedImage(
+      Number(id),
+      Number(imageId),
+      Number(req.user.id),
+      req.user.role,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -91,4 +142,5 @@ export class RequestsController {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     return this.requests.completeRequest(Number(id), Number(req.user.id), body?.afterPhotos || []);
   }
+
 }

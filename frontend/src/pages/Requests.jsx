@@ -198,7 +198,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
     try {
       const photos = await filesToPhotos(files);
-      setForm((prev) => ({ ...prev, photos: [...(prev.photos || []), ...photos] }));
+      const withFiles = photos.map((photo, index) => ({ ...photo, file: files[index] }));
+      setForm((prev) => ({ ...prev, photos: [...(prev.photos || []), ...withFiles] }));
     } catch (err) {
       console.error(err);
       setStatus("Не успях да прочета избраните снимки.");
@@ -304,6 +305,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
     try {
       setSubmitting(true);
       setStatus("");
+      const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
       const requestPayload = {
         clientName: form.clientName,
         email: form.email || "client@bricky.mock",
@@ -318,10 +320,12 @@ export function RequestFlow({ embedded = false, onCreated }) {
         estimateMin: estimate.expectedMin,
         estimateMax: estimate.expectedMax,
         estimateCurrency: estimate.currency,
-        photos: form.photos || [],
+        photos: isDevMock
+          ? (form.photos || []).map(({ file: _file, ...photo }) => photo)
+          : [],
       };
 
-      if (String(localStorage.getItem("token") || "").startsWith("local-dev-token")) {
+      if (isDevMock) {
         requestPayload.pricingSnapshot = {
           pricingVersion: estimate.pricingVersion,
           materialPricingVersion: estimate.materialPricingVersion,
@@ -357,8 +361,15 @@ export function RequestFlow({ embedded = false, onCreated }) {
         };
       }
 
-      await apiPost("/requests", requestPayload);
-      setStatus("Заявката е записана в mock средата.");
+      const created = await apiPost("/requests", requestPayload);
+      const requestId = Number(created.data?.id);
+      const files = (form.photos || []).map((photo) => photo.file).filter(Boolean);
+      if (!isDevMock && requestId && files.length) {
+        const data = new FormData();
+        files.forEach((file) => data.append("images", file));
+        await apiPost(`/requests/${requestId}/images/before`, data);
+      }
+      setStatus(isDevMock ? "Заявката е записана в mock средата." : "Заявката е създадена успешно.");
       onCreated?.();
       setStep(0);
       locationAskedRef.current = false;
@@ -378,7 +389,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
       }));
     } catch (err) {
       console.error(err);
-      setStatus("Не успях да изпратя заявката в mock средата.");
+      setStatus("Не успях да изпратя заявката.");
     } finally {
       setSubmitting(false);
     }

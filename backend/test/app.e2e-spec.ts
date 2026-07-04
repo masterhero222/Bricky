@@ -1,16 +1,23 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
+import { unlink } from 'fs/promises';
+import { join } from 'path';
 import request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
 describe('Request lifecycle (MySQL e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
   let clientToken: string;
   let workerToken: string;
   let otherWorkerToken: string;
   let workerUserId: number;
   let requestId: number;
+  const storedKeys = new Set<string>();
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const password = 'Sprint1-Test-Password';
@@ -30,13 +37,17 @@ describe('Request lifecycle (MySQL e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
     await app.init();
   });
 
   afterAll(async () => {
     await app?.close();
+    await Promise.all(
+      [...storedKeys].map((key) => unlink(join(process.cwd(), 'uploads', key)).catch(() => undefined)),
+    );
   });
 
   it('registers and logs in a client and two workers', async () => {
@@ -126,7 +137,6 @@ describe('Request lifecycle (MySQL e2e)', () => {
         estimateMin: 60,
         estimateMax: 95,
         estimateCurrency: 'EUR',
-        photos: [{ name: 'before.jpg', url: '/uploads/test/before.jpg' }],
       })
       .expect(201);
 
@@ -134,7 +144,34 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(requestId).toBeGreaterThan(0);
     expect(response.body.categoryKey).toBe('vik');
     expect(response.body.estimateCurrency).toBe('EUR');
-    expect(response.body.beforePhotos).toHaveLength(1);
+    expect(response.body.beforePhotos).toHaveLength(0);
+  });
+
+  it('uploads, serves, and deletes real before images for the owning client', async () => {
+    const uploaded = await request(app.getHttpServer())
+      .post(`/requests/${requestId}/images/before`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .attach('images', png, { filename: 'before.png', contentType: 'image/png' })
+      .attach('images', png, { filename: 'delete-me.png', contentType: 'image/png' })
+      .expect(201);
+
+    expect(uploaded.body.beforePhotos).toHaveLength(2);
+    for (const photo of uploaded.body.beforePhotos) {
+      expect(photo.storageKey).toMatch(/^requests\/request_/);
+      expect(photo.mimeType).toBe('image/png');
+      expect(photo.sizeBytes).toBe(png.length);
+      storedKeys.add(photo.storageKey);
+      await request(app.getHttpServer()).get(photo.url).expect(200).expect('Content-Type', /image\/png/);
+    }
+
+    const deletedPhoto = uploaded.body.beforePhotos.find((photo: any) => photo.name === 'delete-me.png');
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/images/${deletedPhoto.id}/delete`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .expect(201)
+      .expect({ ok: true, imageId: deletedPhoto.id });
+    storedKeys.delete(deletedPhoto.storageKey);
+    await request(app.getHttpServer()).get(deletedPhoto.url).expect(404);
   });
 
   it('enforces client request ownership and role-specific feeds', async () => {
@@ -189,6 +226,22 @@ describe('Request lifecycle (MySQL e2e)', () => {
 
   it('rejects completion by another worker and completes for the assigned worker', async () => {
     await request(app.getHttpServer())
+      .post(`/requests/${requestId}/images/after`)
+      .set('Authorization', `Bearer ${otherWorkerToken}`)
+      .attach('images', png, { filename: 'forbidden.png', contentType: 'image/png' })
+      .expect(403);
+
+    const uploaded = await request(app.getHttpServer())
+      .post(`/requests/${requestId}/images/after`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('images', png, { filename: 'after.png', contentType: 'image/png' })
+      .expect(201);
+    expect(uploaded.body.afterPhotos).toHaveLength(1);
+    expect(uploaded.body.afterPhotos[0].mimeType).toBe('image/png');
+    storedKeys.add(uploaded.body.afterPhotos[0].storageKey);
+    await request(app.getHttpServer()).get(uploaded.body.afterPhotos[0].url).expect(200);
+
+    await request(app.getHttpServer())
       .post(`/requests/${requestId}/complete`)
       .set('Authorization', `Bearer ${otherWorkerToken}`)
       .send({ afterPhotos: [] })
@@ -197,7 +250,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     const completed = await request(app.getHttpServer())
       .post(`/requests/${requestId}/complete`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .send({ afterPhotos: [{ name: 'after.jpg', url: '/uploads/test/after.jpg' }] })
+      .send({ afterPhotos: [] })
       .expect(201);
 
     expect(completed.body.completedByWorkerId).toBe(workerUserId);

@@ -39,6 +39,8 @@ describe('RequestsService', () => {
       create: jest.fn((value) => value),
       save: jest.fn(async (value) => value),
       find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     service = new RequestsService(
@@ -98,6 +100,35 @@ describe('RequestsService', () => {
       expect.objectContaining({ where: { client: { id: 101 } } }),
     );
     expect(result).toEqual([{ id: 3, appliedWorkers: [] }]);
+  });
+
+  it('stores uploaded before images only for the owning client', async () => {
+    requestsRepo.findOne.mockResolvedValue({ id: 9, client: { id: 101 }, appliedWorkers: [] });
+    const photos = [
+      {
+        name: 'before.png',
+        url: '/uploads/requests/before.png',
+        storageKey: 'requests/before.png',
+        mimeType: 'image/png',
+        sizeBytes: 68,
+      },
+    ];
+
+    await service.addUploadedImages(9, 101, 'client', 'before', photos);
+
+    expect(imagesRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 9,
+        uploaderUserId: 101,
+        kind: 'before',
+        storageKey: 'requests/before.png',
+        mimeType: 'image/png',
+        sizeBytes: 68,
+      }),
+    );
+    await expect(service.addUploadedImages(9, 102, 'client', 'before', photos)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('builds the worker feed query and hydrates its results', async () => {

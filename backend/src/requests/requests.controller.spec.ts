@@ -17,6 +17,9 @@ describe('RequestsController', () => {
       assignWorker: jest.fn(),
       unassignWorker: jest.fn(),
       completeRequest: jest.fn(),
+      addUploadedImages: jest.fn(),
+      addUploadedFiles: jest.fn(),
+      deleteUploadedImage: jest.fn(),
     };
     controller = new RequestsController(service);
   });
@@ -105,5 +108,26 @@ describe('RequestsController', () => {
     await expect(
       controller.complete({ user: { id: 101, role: 'client' } }, '9', { afterPhotos }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('passes multipart before-image metadata with client ownership context', async () => {
+    service.addUploadedFiles.mockResolvedValue({ id: 9 });
+    const file = {
+      originalname: 'before.png',
+      mimetype: 'image/png',
+      size: 68,
+      buffer: Buffer.from('png'),
+    };
+
+    await expect(
+      controller.uploadBefore({ user: { id: 101, role: 'client' } }, '9', [file]),
+    ).resolves.toEqual({ id: 9 });
+    expect(service.addUploadedFiles).toHaveBeenCalledWith(
+      9,
+      101,
+      'client',
+      'before',
+      [file],
+    );
   });
 });

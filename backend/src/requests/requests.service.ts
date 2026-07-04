@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
+import { mkdir, unlink, writeFile } from 'fs/promises';
+import { extname, join, normalize, sep } from 'path';
+import { randomUUID } from 'crypto';
 import { RequestEntity } from './entities/request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestImageEntity, RequestImageKind } from './entities/request-image.entity';
@@ -45,6 +48,9 @@ function normalizePhotos(arr: any): any[] {
       id: photo.id || `${Date.now()}-${index}`,
       name: photo.name || 'Снимка',
       url: photo.url,
+      storageKey: photo.storageKey || null,
+      mimeType: photo.mimeType || null,
+      sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
       created_at: photo.created_at || new Date().toISOString(),
     }));
 
@@ -150,6 +156,119 @@ export class RequestsService {
 
   private async hydrateManyRequestImages(requests: RequestEntity[]) {
     return Promise.all(requests.map((request) => this.hydrateRequestImages(request)));
+  }
+
+  async addUploadedImages(
+    requestId: number,
+    actorUserId: number,
+    actorRole: string,
+    kind: 'before' | 'after',
+    photos: any[],
+  ) {
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+
+    this.assertImageUploadAccess(request, actorUserId, actorRole, kind);
+
+    if (!Array.isArray(photos) || photos.length === 0) {
+      throw new BadRequestException('No images');
+    }
+
+    await this.saveRequestImages(requestId, actorUserId, kind, photos);
+    return this.hydrateRequestImages(request);
+  }
+
+  async addUploadedFiles(
+    requestId: number,
+    actorUserId: number,
+    actorRole: string,
+    kind: 'before' | 'after',
+    files: any[],
+  ) {
+    const list = Array.isArray(files) ? files : [];
+    if (!list.length) throw new BadRequestException('No images');
+
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+    this.assertImageUploadAccess(request, actorUserId, actorRole, kind);
+
+    const targetDir = join(process.cwd(), 'uploads', 'requests');
+    await mkdir(targetDir, { recursive: true });
+    const storedPaths: string[] = [];
+    const photos: any[] = [];
+
+    try {
+      for (const file of list) {
+        const extension = extname(file.originalname || '').toLowerCase();
+        const safeExtension = ['.jpg', '.jpeg', '.png', '.webp'].includes(extension) ? extension : '.jpg';
+        const filename = `request_${requestId}_${actorUserId}_${randomUUID()}${safeExtension}`;
+        const absolutePath = join(targetDir, filename);
+        await writeFile(absolutePath, file.buffer);
+        storedPaths.push(absolutePath);
+        photos.push({
+          name: file.originalname,
+          url: `/uploads/requests/${filename}`,
+          storageKey: `requests/${filename}`,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+        });
+      }
+
+      await this.saveRequestImages(requestId, actorUserId, kind, photos);
+      return this.hydrateRequestImages(request);
+    } catch (error) {
+      await Promise.all(storedPaths.map((path) => unlink(path).catch(() => undefined)));
+      throw error;
+    }
+  }
+
+  async deleteUploadedImage(requestId: number, imageId: number, actorUserId: number, actorRole: string) {
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+
+    const image = await this.imagesRepo.findOne({ where: { id: imageId, requestId } });
+    if (!image) throw new NotFoundException('Request image not found');
+
+    const clientOwnsBefore =
+      image.kind === 'before' && actorRole === 'client' && Number(request.client?.id) === actorUserId;
+    const workerOwnsAfter =
+      image.kind === 'after' && actorRole === 'worker' && Number(request.assignedWorkerId) === actorUserId;
+    const uploaderOwnsGeneral = image.kind === 'general' && Number(image.uploaderUserId) === actorUserId;
+    if (!clientOwnsBefore && !workerOwnsAfter && !uploaderOwnsGeneral) {
+      throw new ForbiddenException('Not allowed to delete this image');
+    }
+
+    await this.imagesRepo.delete({ id: image.id });
+    await this.deleteStoredFile(image.storageKey);
+    return { ok: true, imageId: image.id };
+  }
+
+  private async deleteStoredFile(storageKey: string | null) {
+    if (!storageKey) return;
+    const uploadsRoot = normalize(join(process.cwd(), 'uploads'));
+    const target = normalize(join(uploadsRoot, storageKey));
+    if (target !== uploadsRoot && !target.startsWith(`${uploadsRoot}${sep}`)) return;
+    await unlink(target).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+  }
+
+  private assertImageUploadAccess(
+    request: RequestEntity,
+    actorUserId: number,
+    actorRole: string,
+    kind: 'before' | 'after',
+  ) {
+    if (kind === 'before') {
+      if (actorRole !== 'client' || Number(request.client?.id) !== actorUserId) {
+        throw new ForbiddenException('Only the owning client can upload before images');
+      }
+      return;
+    }
+
+    if (actorRole !== 'worker' || Number(request.assignedWorkerId) !== actorUserId) {
+      throw new ForbiddenException('Only the assigned worker can upload after images');
+    }
   }
 
   private async ensureApplication(requestId: number, workerUserId: number, status: 'applied' | 'assigned') {
