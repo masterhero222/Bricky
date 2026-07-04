@@ -117,11 +117,14 @@ These are P0 validation tasks. They do not invalidate the passing API E2E, autho
 3. Run `npm run verify:sprint1` again after any staging-driven correction.
 4. Perform the final Sprint audit and classify every remaining item for Sprint 2/P0.
 
+Release candidate `9a638a5` is prepared and documented in `docs/sprint-1-release-candidate.md`. Production returned `404` for `/api/health/ready` on 2026-07-05, confirming that the candidate is not deployed yet.
+
 ## References
 
 - `docs/sprint-1-canonical-contracts.md`
 - `docs/sprint-1-smoke-checklist.md`
 - `docs/media-storage-deployment.md`
+- `docs/sprint-1-release-candidate.md`
 - `docs/next-session-todo.md`
 - `backend/src/requests/requests.service.ts`
 - `backend/test/app.e2e-spec.ts`
