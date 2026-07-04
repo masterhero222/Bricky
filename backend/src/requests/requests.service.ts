@@ -127,6 +127,7 @@ export class RequestsService {
   }
 
   private async hydrateRequestImages(request: RequestEntity) {
+    request.appliedWorkers = normalizeNumberArray(request.appliedWorkers);
     if (!request?.id) return request;
 
     const rows = await this.imagesRepo.find({
@@ -370,8 +371,8 @@ export class RequestsService {
 
     if (!applied.includes(workerUserId)) {
       applied.push(workerUserId);
-      req.appliedWorkers = applied;
     }
+    req.appliedWorkers = applied;
 
     if ((req.status || '').toLowerCase() === 'нова') req.status = 'кандидатствана';
 

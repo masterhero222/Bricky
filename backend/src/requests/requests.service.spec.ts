@@ -97,7 +97,7 @@ describe('RequestsService', () => {
     expect(requestsRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({ where: { client: { id: 101 } } }),
     );
-    expect(result).toEqual([{ id: 3 }]);
+    expect(result).toEqual([{ id: 3, appliedWorkers: [] }]);
   });
 
   it('builds the worker feed query and hydrates its results', async () => {
@@ -107,7 +107,7 @@ describe('RequestsService', () => {
 
     expect(requestsRepo.createQueryBuilder).toHaveBeenCalledWith('r');
     expect(queryBuilder.getMany).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([{ id: 4 }]);
+    expect(result).toEqual([{ id: 4, appliedWorkers: [] }]);
   });
 
   it('keeps duplicate applications idempotent in legacy and normalized storage', async () => {
@@ -115,16 +115,17 @@ describe('RequestsService', () => {
       id: 9,
       status: 'кандидатствана',
       assignedWorkerId: null,
-      appliedWorkers: [201],
+      appliedWorkers: ['201'],
       client: { id: 101 },
     };
     const application = { id: 5, requestId: 9, workerUserId: 201, status: 'applied' };
     requestsRepo.findOne.mockResolvedValue(request);
     applicationsRepo.findOne.mockResolvedValue(application);
 
-    await service.applyToRequest(9, 201);
+    const result = await service.applyToRequest(9, 201);
 
     expect(request.appliedWorkers).toEqual([201]);
+    expect(result.appliedWorkers).toEqual([201]);
     expect(applicationsRepo.create).not.toHaveBeenCalled();
     expect(applicationsRepo.save).toHaveBeenCalledWith(application);
   });
