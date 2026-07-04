@@ -20,6 +20,14 @@ Request photos, worker avatars, and worker gallery images must use one persisten
 
 Production frontend uses `VITE_API_URL=/api`. Unless `VITE_ASSET_BASE_URL` is configured separately, `/uploads/...` database values are requested by the browser as `/api/uploads/...`. The nginx `/api/` proxy must therefore strip `/api/` and forward the remaining `/uploads/...` path to Nest.
 
+Read-only production preflight on 2026-07-05 confirmed this contract:
+
+- `https://bricky.bg/api/workers` returned `200 application/json`;
+- a known existing `https://bricky.bg/api/uploads/workers/...jpg` returned `200 image/jpeg`;
+- the same path without `/api` returned the frontend HTML shell, not the image.
+
+Therefore production smoke commands must use `/api/uploads/...` unless nginx is intentionally changed to serve `/uploads/` directly. No backend restart or production mutation was performed during this preflight.
+
 ## Recommended Production Layout
 
 Use storage outside the Git checkout:
