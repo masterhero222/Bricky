@@ -8,6 +8,7 @@
   "scripts": {
     "build": "nest build",
     "verify:sprint1": "node scripts/verify-sprint-1.mjs",
+    "smoke:readiness": "node scripts/smoke-readiness.mjs",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

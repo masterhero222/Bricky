@@ -74,6 +74,20 @@ Do not delete the old `backend/uploads` directory until the smoke test and a bac
 
 Use a disposable staging client/request, not production customer data.
 
+After deploying this branch, readiness must return `200` and all checks must be `ok`:
+
+```bash
+curl -fsS https://bricky.bg/api/health/ready
+```
+
+Expected shape:
+
+```json
+{"status":"ok","database":"ok","storage":"ok","commit":"<optional-sha>","timestamp":"<iso-date>"}
+```
+
+The endpoint returns `503` when either MySQL or the configured upload directory is unavailable. It never exposes database credentials or the filesystem path.
+
 1. Upload one before image through the request API or UI.
 2. Record only its returned public URL, for example `<MEDIA_URL>`.
 3. Verify it before restart:
@@ -102,6 +116,16 @@ pm2 status bricky-backend
 ```bash
 find /var/lib/bricky/uploads -type f -name '<FILE_NAME>' -print
 ```
+
+The repository smoke command combines readiness and media checks:
+
+```bash
+BRICKY_BASE_URL=https://bricky.bg \
+BRICKY_MEDIA_URL=/api/uploads/requests/<FILE_NAME> \
+npm run smoke:readiness
+```
+
+Run the same command before and after `pm2 restart`. Both runs must pass against the exact same media URL.
 
 ## Automated Evidence
 

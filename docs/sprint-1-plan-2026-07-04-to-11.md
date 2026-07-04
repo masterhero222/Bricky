@@ -30,7 +30,7 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 - [x] Frontend pricing verification passes: 97 activities and 174 material items.
 - [x] Frontend production build passes.
 - [x] Backend production build passes.
-- [x] Backend Jest passes with request, worker-history, and storage tests: 6 suites and 26 tests.
+- [x] Backend Jest passes with request, worker-history, storage, and readiness tests: 7 suites and 29 tests.
 - [x] Request lifecycle unit success and critical role/ownership failures are covered.
 - [x] Duplicate application behavior is deterministic and tested.
 - [x] Canonical identity, state, category, application, media, estimate, and location contracts are documented.
@@ -98,7 +98,7 @@ Upload storage previously depended on `process.cwd()` in three separate code pat
 
 ## Final Audit And Sprint 2/P0 Carry-over
 
-The 2026-07-05 verification gate passed after media/history and storage hardening: pricing `97/174`, frontend build, backend build, and backend Jest `26/26`.
+The 2026-07-05 verification gate passed after media/history, storage, and readiness hardening: pricing `97/174`, frontend build, backend build, and backend Jest `29/29`.
 
 Sprint 1 has strong automated proof for the lifecycle and real multipart media API, but the following deployment-facing evidence remains mandatory before production sign-off:
 
