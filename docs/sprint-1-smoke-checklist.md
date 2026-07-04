@@ -135,6 +135,7 @@ For every failed item record:
 | 2026-07-05 | Local restart storage smoke | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | One absolute storage contract now covers request media, avatars, gallery files, deletion, and Nest static serving. A file remained retrievable from the same `/uploads/...` URL after closing the app and starting a new Nest instance. Full gate: `6 suites / 26 tests`. Guarded MySQL restart scenario is implemented but still requires a disposable Sprint 1 database to execute. |
 | 2026-07-05 | Production HTTPS, read-only | `bricky.bg` | PREFLIGHT PASS | `/api/workers` returned `200`; a known `/api/uploads/workers/...jpg` returned `200 image/jpeg`. Direct `/uploads/...` returned the SPA HTML shell, confirming that production media must currently resolve through the `/api` proxy. No restart, upload, database mutation, or deploy was performed. |
 | 2026-07-05 | Local readiness gate | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | `/health/ready` now checks MySQL and storage permissions independently; `npm run smoke:readiness` validates the deployed JSON health contract and an optional image URL. Full verification gate: `7 suites / 29 tests`. Production will expose this endpoint only after deployment. |
+| 2026-07-05 | GitHub Actions, Ubuntu/Node 22 | `69d67e0` | CI PASS | Clean checkout run [`28722161723`](https://github.com/masterhero222/Bricky/actions/runs/28722161723) completed successfully after separate frontend/backend `npm ci` installs and the complete Sprint gate. |
 
 ## 2026-07-04 Findings
 

@@ -35,7 +35,7 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 - [x] Duplicate application behavior is deterministic and tested.
 - [x] Canonical identity, state, category, application, media, estimate, and location contracts are documented.
 - [x] `npm run verify:sprint1` is implemented and passes.
-- [ ] GitHub Actions executes the same gate successfully from a clean checkout.
+- [x] GitHub Actions executes the same gate successfully from a clean Ubuntu checkout.
 - [x] Isolated MySQL E2E passes: 1 suite and 8 tests.
 - [x] E2E safety guards reject non-test or non-`sprint1` databases.
 - [x] Temporary MySQL database/users are removed after the recorded run.
@@ -55,7 +55,9 @@ Prove the Bricky request lifecycle from client creation through worker applicati
 npm run verify:sprint1
 ```
 
-Result on 2026-07-05: PASS, including 4 backend suites and 23 tests.
+Current result on 2026-07-05: PASS, including 7 backend suites and 29 tests.
+
+GitHub Actions run [`28722161723`](https://github.com/masterhero222/Bricky/actions/runs/28722161723) passed on commit `69d67e0` from a clean Ubuntu/Node 22 checkout. The workflow installs frontend and backend dependencies with `npm ci` and executes the same Sprint gate.
 
 The gate runs:
 
