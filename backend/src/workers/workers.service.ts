@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { RequestEntity } from '../requests/entities/request.entity';
+import { RequestImageEntity } from '../requests/entities/request-image.entity';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -26,6 +27,9 @@ export class WorkersService {
 
     @InjectRepository(RequestEntity)
     private readonly requestRepo: Repository<RequestEntity>,
+
+    @InjectRepository(RequestImageEntity)
+    private readonly requestImageRepo: Repository<RequestImageEntity>,
   ) {}
 
   /**
@@ -220,7 +224,52 @@ export class WorkersService {
       order: { completedAt: 'DESC', created_at: 'DESC' },
     });
 
-    return rows.filter((request) => this.isCompletedRequest(request, uid));
+    return this.hydrateHistoryImages(rows.filter((request) => this.isCompletedRequest(request, uid)));
+  }
+
+  private async hydrateHistoryImages(requests: RequestEntity[]) {
+    const requestIds = requests.map((request) => Number(request.id)).filter(Boolean);
+    if (requestIds.length === 0) return requests;
+
+    const imageRows = await this.requestImageRepo.find({
+      where: { requestId: In(requestIds) },
+      order: { requestId: 'ASC', kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
+    });
+
+    const imagesByRequest = new Map<number, RequestImageEntity[]>();
+    for (const image of imageRows) {
+      const images = imagesByRequest.get(image.requestId) || [];
+      images.push(image);
+      imagesByRequest.set(image.requestId, images);
+    }
+
+    return requests.map((request) => {
+      const rows = imagesByRequest.get(Number(request.id)) || [];
+      if (rows.length === 0) return request;
+
+      const toPhotos = (kind: RequestImageEntity['kind']) =>
+        rows
+          .filter((row) => row.kind === kind)
+          .map((row) => ({
+            id: row.id,
+            name: row.name || 'Photo',
+            url: this.normalizeUploadUrl(row.url),
+            storageKey: row.storageKey,
+            mimeType: row.mimeType,
+            sizeBytes: row.sizeBytes,
+            kind: row.kind,
+            created_at: row.created_at,
+          }));
+
+      const generalPhotos = toPhotos('general');
+      const beforePhotos = toPhotos('before');
+      const afterPhotos = toPhotos('after');
+
+      request.beforePhotos = beforePhotos.length ? beforePhotos : request.beforePhotos;
+      request.afterPhotos = afterPhotos.length ? afterPhotos : request.afterPhotos;
+      request.photos = [...generalPhotos, ...beforePhotos];
+      return request;
+    });
   }
 
   private async withGallerySummary(worker: Worker) {

@@ -335,7 +335,13 @@ export default function RepairMap() {
     Array.isArray(activeRequest.appliedWorkers) &&
     activeRequest.appliedWorkers.map(Number).includes(currentUserId);
   const isClosed = ["завършена", "отказана"].includes(String(activeRequest?.status || "").toLowerCase());
-  const activePhotos = Array.isArray(activeRequest?.photos) ? activeRequest.photos : [];
+  const activePhotos = Array.from(
+    new Map(
+      [...(Array.isArray(activeRequest?.beforePhotos) ? activeRequest.beforePhotos : []), ...(Array.isArray(activeRequest?.photos) ? activeRequest.photos : [])]
+        .filter((photo) => photoUrl(photo))
+        .map((photo) => [String(photo.id || photoUrl(photo)), photo]),
+    ).values(),
+  );
 
   return (
     <div className="min-h-screen bg-[#07101d] text-white px-6 py-24">
@@ -414,13 +420,13 @@ export default function RepairMap() {
             )}
           </div>
 
-          <aside className="rounded-xl border border-gray-700 bg-gray-900/90 p-5 min-h-[520px]">
+          <aside aria-label="Избрана заявка" className="rounded-xl border border-gray-700 bg-gray-900/90 p-5 min-h-[520px]">
             <h2 className="text-xl font-black mb-4">Избран обект</h2>
 
             {!activeRequest ? (
               <p className="text-gray-400">Избери заявка от картата.</p>
             ) : (
-              <div className="space-y-4">
+              <div key={activeRequest.id} aria-live="polite" data-request-id={activeRequest.id} className="space-y-4">
                 <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeRequest.status)}`}>
                   {activeRequest.status || "нова"}
                 </div>

@@ -1,6 +1,6 @@
 # Sprint 1 Request Lifecycle Smoke Checklist
 
-Updated: 2026-07-04
+Updated: 2026-07-05
 
 Use local mock or staging data. Do not create production accounts or requests unless the production mutation is explicitly approved.
 
@@ -130,6 +130,8 @@ For every failed item record:
 | 2026-07-04 | Local mock, `http://127.0.0.1:5173` | `codex/sprint-1-request-stabilization` | PARTIAL PASS | Created request #7 with `vik`, activity, labor+materials, quantity and exact test address; Back retained the selected activity; estimate displayed as 60-95 EUR; worker 201 saw and applied; duplicate apply became disabled/idempotent; owning client assigned worker 201; assigned worker completed; owning client submitted one 5-star review; review form disappeared after submission; logout returned to public auth actions. File upload and map visibility were not exercised in this run. |
 | 2026-07-04 | Isolated MySQL over SSH tunnel | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | Fresh temporary `bricky_sprint1_*` schema; 8/8 E2E tests passed registration/login, role rejection, request create, real before/after multipart upload and static serving, ownership rejection, physical image deletion, client ownership, worker feed/map, idempotent apply, assign, completion/history, one review, duplicate review rejection, and public rating. Temporary DB/users and local E2E files were removed. |
 | 2026-07-04 | Local mock, responsive/browser audit | `edf1188` | PARTIAL PASS | Worker-only `/repair-map` loaded with a two-request cluster and a separate request marker. The map detail-panel state change could not be proved through the browser DOM harness. At `390x844`, authenticated worker navigation exposed `Изход`; activating it cleared the session and opened `/auth`. The gallery route loaded, but the active seed account did not contain enough completed before/after media to prove grouped portfolio rendering. |
+| 2026-07-05 | Local mock, `http://127.0.0.1:5173` | `codex/sprint-1-request-stabilization` | VISUAL PASS | Reset seed provides one completed bathroom-renovation portfolio object with two before and two after images, address and six-day duration. The horizontal album card and four-image viewer rendered. Selecting map request `#3` changed the semantic detail panel from request `#1` to `#3`, including the matching address, description and two images. |
+| 2026-07-05 | Local verification gate | `codex/sprint-1-request-stabilization` | AUTOMATED PASS | Pricing `97/174`, frontend build, backend build, and backend Jest `4 suites / 23 tests`. Worker history has a regression test proving one batched `request_images` query and correct before/after hydration with legacy fallback. |
 
 ## 2026-07-04 Findings
 
@@ -148,14 +150,14 @@ Passed:
 - duplicate review UI prevention after submission;
 - logout session transition.
 - worker-only map route and request clustering presentation;
+- marker selection updates the matching request detail panel and photos;
+- grouped completed-job portfolio card and four-image before/after viewer;
 - responsive worker logout at `390x844`, including redirect to `/auth`.
 
 Still required for a full smoke pass:
 
 - visually render the API-uploaded before photo in the client and worker request views;
 - visually render the API-uploaded after photo in completed history/portfolio;
-- verify selection/detail-panel rendering for a coordinate-bearing request on the worker map;
-- verify completed request history/portfolio photo grouping;
 - repeat multipart persistence after a backend restart/deployment on staging; the isolated E2E now covers upload, retrieval, ownership rejection, and physical deletion in one process.
 
 ## Automated MySQL Evidence

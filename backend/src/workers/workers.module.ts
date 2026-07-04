@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { RequestEntity } from '../requests/entities/request.entity';
+import { RequestImageEntity } from '../requests/entities/request-image.entity';
 import { WorkersService } from './workers.service';
 import { WorkersController } from './workers.controller';
 import { MailModule } from '../mail/mail.module';
@@ -10,7 +11,7 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Worker, WorkerGalleryImage, RequestEntity]),
+    TypeOrmModule.forFeature([Worker, WorkerGalleryImage, RequestEntity, RequestImageEntity]),
     UsersModule,
     MailModule,
   ],

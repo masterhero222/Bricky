@@ -116,6 +116,33 @@ function guessRepairCategory(text) {
 }
 
 function seedDb() {
+  const completedJob = {
+    id: "job-seed-completed-201",
+    requestId: 9001,
+    category: repairCategoryByKey("bathroom_renovation").label,
+    clientName: CLIENTS[0].name,
+    address: "Sofia, Lozenets",
+    description: "Completed bathroom renovation verified through Bricky.",
+    startedAt: "2026-06-24T08:00:00.000Z",
+    completedAt: "2026-06-29T16:00:00.000Z",
+    durationDays: 6,
+    beforePhotos: [
+      { id: "seed-job-before-1", name: "Before renovation", url: "/media_files/banq.jpg", created_at: "2026-06-24T08:00:00.000Z" },
+      { id: "seed-job-before-2", name: "Before renovation detail", url: "/media_files/banq2.jpg", created_at: "2026-06-24T08:01:00.000Z" },
+    ],
+    afterPhotos: [
+      { id: "seed-job-after-1", name: "Completed renovation", url: "/media_files/banq3.jpg", created_at: "2026-06-29T16:00:00.000Z" },
+      { id: "seed-job-after-2", name: "Completed renovation detail", url: "/media_files/download.jpg", created_at: "2026-06-29T16:01:00.000Z" },
+    ],
+    created_at: "2026-06-29T16:00:00.000Z",
+  };
+  const workers = WORKERS.map((worker) => ({ ...worker, skills: [...(worker.skills || [])] }));
+  workers[0].completedJobs = [completedJob];
+  workers[0].gallery = [
+    ...completedJob.beforePhotos.map((photo) => ({ ...photo, userId: workers[0].userId, requestId: completedJob.requestId, phase: "before" })),
+    ...completedJob.afterPhotos.map((photo) => ({ ...photo, userId: workers[0].userId, requestId: completedJob.requestId, phase: "after" })),
+  ];
+
   return {
     mapSeedVersion: 4,
     nextRequestId: 7,
@@ -125,7 +152,7 @@ function seedDb() {
       flow: REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other,
     })),
     clients: CLIENTS,
-    workers: WORKERS,
+    workers,
     reviews: [],
     requests: [
       {
