@@ -41,6 +41,19 @@ CREATE TABLE requests (
   CONSTRAINT fk_requests_client FOREIGN KEY (clientId) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE request_images (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, requestId INT NOT NULL, uploaderUserId INT NULL,
+  kind ENUM('general','before','after') NOT NULL DEFAULT 'general', name VARCHAR(180) NULL,
+  url LONGTEXT NOT NULL, storageKey VARCHAR(255) NULL, mimeType VARCHAR(120) NULL,
+  sizeBytes INT NULL, sortOrder INT NOT NULL DEFAULT 0, isApproved TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE worker_gallery_images (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, userId INT NOT NULL, url VARCHAR(255) NOT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 INSERT INTO users (id, name, email, password, role) VALUES
   (1008, 'Sprint Client', 'client@example.test', 'not-a-real-password', 'client'),
   (1011, 'Sprint Worker', 'worker@example.test', 'not-a-real-password', 'worker');

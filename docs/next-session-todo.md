@@ -2,6 +2,18 @@
 
 ## Highest Priority
 
+- P0 IN PROGRESS: Sprint 2 admin moderation gate:
+  - DONE: separate request lifecycle status from publication moderation status;
+  - DONE: new requests and request images default to `pending_review`;
+  - DONE: worker feeds/map and public request media expose only approved content;
+  - DONE: JWT + admin-role protected request/media queues and audit log;
+  - DONE: `/admin` request/media queue with approve, reject, hide, reason, and counters;
+  - DONE: additive/idempotent migration and rollback package;
+  - NEXT: move worker avatar/gallery/portfolio into the canonical media queue;
+  - NEXT: add worker profile and review moderation actions;
+  - NEXT: add queue pagination/search and automated content-scanning hooks;
+  - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.
+
 - IN PROGRESS in this session: database/request model stabilization:
   - backend repair catalog is being aligned with the 15 approved quick repair categories;
   - request creation is being prepared to store `categoryKey`, coordinates, location source, and estimate fields;

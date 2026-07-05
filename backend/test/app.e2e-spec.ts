@@ -5,12 +5,15 @@ import { unlink } from 'fs/promises';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { getUploadPath, getUploadsRoot } from './../src/common/storage-paths';
+import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 
 describe('Request lifecycle (MySQL e2e)', () => {
   let app: NestExpressApplication;
   let clientToken: string;
   let workerToken: string;
   let otherWorkerToken: string;
+  let adminToken: string;
   let workerUserId: number;
   let requestId: number;
   let persistentBeforePhotoUrl: string;
@@ -26,6 +29,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
   const clientEmail = `client-${suffix}@example.test`;
   const workerEmail = `worker-${suffix}@example.test`;
   const otherWorkerEmail = `worker-other-${suffix}@example.test`;
+  const adminEmail = `admin-${suffix}@example.test`;
 
   async function createApp() {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -108,9 +112,21 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(201);
     otherWorkerToken = otherWorkerLogin.body.token;
 
+    const dataSource = app.get(DataSource);
+    await dataSource.query(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+      ['Sprint Admin', adminEmail, await bcrypt.hash(password, 10), 'admin'],
+    );
+    const adminLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: adminEmail, password })
+      .expect(201);
+    adminToken = adminLogin.body.token;
+
     expect(clientToken).toBeTruthy();
     expect(workerToken).toBeTruthy();
     expect(otherWorkerToken).toBeTruthy();
+    expect(adminToken).toBeTruthy();
     expect(workerUserId).toBeGreaterThan(0);
   });
 
@@ -194,11 +210,41 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(400);
 
+    const hiddenFeed = await request(app.getHttpServer())
+      .get('/requests/worker')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(hiddenFeed.body.map((item: any) => item.id)).not.toContain(requestId);
+
+    await request(app.getHttpServer())
+      .get('/admin/requests')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/admin/requests/${requestId}/approved`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
+
+    const pendingMedia = await request(app.getHttpServer())
+      .get('/admin/media?status=pending_review')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const beforeImage = pendingMedia.body.find((item: any) => item.requestId === requestId);
+    expect(beforeImage).toBeTruthy();
+    await request(app.getHttpServer())
+      .post(`/admin/media/${beforeImage.id}/approved`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
+
     const workerFeed = await request(app.getHttpServer())
       .get('/requests/worker')
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(200);
     expect(workerFeed.body.map((item: any) => item.id)).toContain(requestId);
+    expect(workerFeed.body.find((item: any) => item.id === requestId).beforePhotos).toHaveLength(1);
 
     const workerMap = await request(app.getHttpServer())
       .get('/requests/map')
@@ -265,6 +311,18 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(completed.body.completedByWorkerId).toBe(workerUserId);
     expect(completed.body.durationDays).toBeGreaterThanOrEqual(1);
     expect(completed.body.afterPhotos).toHaveLength(1);
+
+    const pendingMedia = await request(app.getHttpServer())
+      .get('/admin/media?status=pending_review')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const afterImage = pendingMedia.body.find((item: any) => item.requestId === requestId && item.kind === 'after');
+    expect(afterImage).toBeTruthy();
+    await request(app.getHttpServer())
+      .post(`/admin/media/${afterImage.id}/approved`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
 
     const history = await request(app.getHttpServer())
       .get('/requests/worker/completed')

@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { UserEntity } from '../../users/user.entity';
+import type { ModerationStatus } from '../../moderation/moderation.types';
 
 @Entity('requests')
 export class RequestEntity {
@@ -90,6 +91,18 @@ export class RequestEntity {
 
   @Column({ type: 'int', nullable: true })
   durationDays: number | null;
+
+  @Column({ type: 'varchar', length: 30, default: 'pending_review' })
+  moderationStatus: ModerationStatus;
+
+  @Column({ type: 'text', nullable: true })
+  moderationReason: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  moderatedByUserId: number | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  moderatedAt: Date | null;
 
   @CreateDateColumn()
   created_at: Date;

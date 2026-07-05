@@ -16,7 +16,7 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
-  const profilePath = role === "client" ? "/client/profile" : "/worker/profile";
+  const profilePath = role === "admin" ? "/admin" : role === "client" ? "/client/profile" : "/worker/profile";
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -39,6 +39,7 @@ export default function Navbar() {
           <NavLink to="/" end className={navClass}>Начало</NavLink>
           <NavLink to="/workers" className={navClass}>Майсторите</NavLink>
           {role === "worker" && <NavLink to="/repair-map" className={navClass}>Карта</NavLink>}
+          {role === "admin" && <NavLink to="/admin" className={navClass}>Admin</NavLink>}
           <NavLink to="/about" className={navClass}>За нас</NavLink>
         </nav>
 
@@ -71,6 +72,7 @@ export default function Navbar() {
             <Link to="/" onClick={() => setOpen(false)} className={mobileLinkClass}>Начало</Link>
             <Link to="/workers" onClick={() => setOpen(false)} className={mobileLinkClass}>Майсторите</Link>
             {role === "worker" && <Link to="/repair-map" onClick={() => setOpen(false)} className={mobileLinkClass}>Карта</Link>}
+            {role === "admin" && <Link to="/admin" onClick={() => setOpen(false)} className={mobileLinkClass}>Admin</Link>}
             <Link to="/about" onClick={() => setOpen(false)} className={mobileLinkClass}>За нас</Link>
 
             {!role ? (

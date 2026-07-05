@@ -113,7 +113,11 @@ export class RequestsService {
         mimeType: photo.mimeType || null,
         sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
         sortOrder: index,
-        isApproved: true,
+        isApproved: false,
+        moderationStatus: 'pending_review',
+        moderationReason: null,
+        moderatedByUserId: null,
+        moderatedAt: null,
       }),
     );
 
@@ -130,15 +134,19 @@ export class RequestsService {
       sizeBytes: row.sizeBytes,
       kind: row.kind,
       created_at: row.created_at,
+      moderationStatus: row.moderationStatus,
+      moderationReason: row.moderationReason,
     }));
   }
 
-  private async hydrateRequestImages(request: RequestEntity) {
+  private async hydrateRequestImages(request: RequestEntity, includeUnapproved = false) {
     request.appliedWorkers = normalizeNumberArray(request.appliedWorkers);
     if (!request?.id) return request;
 
     const rows = await this.imagesRepo.find({
-      where: { requestId: request.id },
+      where: includeUnapproved
+        ? { requestId: request.id }
+        : { requestId: request.id, moderationStatus: 'approved' },
       order: { kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
     });
 
@@ -155,8 +163,8 @@ export class RequestsService {
     return request;
   }
 
-  private async hydrateManyRequestImages(requests: RequestEntity[]) {
-    return Promise.all(requests.map((request) => this.hydrateRequestImages(request)));
+  private async hydrateManyRequestImages(requests: RequestEntity[], includeUnapproved = false) {
+    return Promise.all(requests.map((request) => this.hydrateRequestImages(request, includeUnapproved)));
   }
 
   async addUploadedImages(
@@ -176,7 +184,7 @@ export class RequestsService {
     }
 
     await this.saveRequestImages(requestId, actorUserId, kind, photos);
-    return this.hydrateRequestImages(request);
+    return this.hydrateRequestImages(request, true);
   }
 
   async addUploadedFiles(
@@ -216,7 +224,7 @@ export class RequestsService {
       }
 
       await this.saveRequestImages(requestId, actorUserId, kind, photos);
-      return this.hydrateRequestImages(request);
+      return this.hydrateRequestImages(request, true);
     } catch (error) {
       await Promise.all(storedPaths.map((path) => unlink(path).catch(() => undefined)));
       throw error;
@@ -401,6 +409,10 @@ export class RequestsService {
       completedAt: null,
       completedByWorkerId: null,
       durationDays: null,
+      moderationStatus: 'pending_review',
+      moderationReason: null,
+      moderatedByUserId: null,
+      moderatedAt: null,
     });
 
     const saved = await this.repo.save(request);
@@ -409,7 +421,7 @@ export class RequestsService {
     // completion info
     // this.mailService.sendRequestConfirmation(...).catch(() => null);
 
-    return this.hydrateRequestImages(saved);
+    return this.hydrateRequestImages(saved, true);
   }
 
   async getByClientUserId(clientUserId: number) {
@@ -419,7 +431,7 @@ export class RequestsService {
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
-    return this.hydrateManyRequestImages(requests);
+    return this.hydrateManyRequestImages(requests, true);
   }
 
   async getMapRequests(user: any) {
@@ -452,6 +464,7 @@ export class RequestsService {
       .where(
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId IS NULL')
+            .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
             .andWhere('r.status != :done', { done: 'завършена' })
             .andWhere('r.status != :canceled', { canceled: 'отказана' });
         }),
@@ -459,6 +472,7 @@ export class RequestsService {
       .orWhere(
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId = :wid', { wid: workerUserId })
+            .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
             .andWhere('r.status != :done', { done: 'завършена' })
             .andWhere('r.status != :canceled', { canceled: 'отказана' });
         }),
@@ -483,6 +497,7 @@ export class RequestsService {
   async applyToRequest(requestId: number, workerUserId: number) {
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
+    if (req.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
 
     if (req.assignedWorkerId) throw new BadRequestException('Request already has assigned worker');
     if (req.status === 'завършена' || req.status === 'отказана') throw new BadRequestException('Request is closed');
@@ -536,7 +551,7 @@ export class RequestsService {
     const saved = await this.repo.save(req);
     await this.ensureApplication(requestId, workerUserId, 'assigned');
 
-    return this.hydrateRequestImages(saved);
+    return this.hydrateRequestImages(saved, true);
   }
 
   async unassignWorker(requestId: number, clientUserId: number) {
@@ -567,7 +582,7 @@ export class RequestsService {
       }
     }
 
-    return this.hydrateRequestImages(saved);
+    return this.hydrateRequestImages(saved, true);
   }
 
   // completion info
@@ -596,7 +611,7 @@ export class RequestsService {
     const saved = await this.repo.save(req);
     await this.saveRequestImages(requestId, workerUserId, 'after', normalizedAfterPhotos);
 
-    return this.hydrateRequestImages(saved);
+    return this.hydrateRequestImages(saved, true);
   }
   private buildLocalDraft(prompt: string, address?: string) {
     const categoryKey = this.guessCategoryKey(prompt);

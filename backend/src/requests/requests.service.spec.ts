@@ -146,6 +146,7 @@ describe('RequestsService', () => {
       id: 9,
       status: 'кандидатствана',
       assignedWorkerId: null,
+      moderationStatus: 'approved',
       appliedWorkers: ['201'],
       client: { id: 101 },
     };

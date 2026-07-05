@@ -169,12 +169,12 @@ export class WorkersService {
   // =========================
   // ✅ GALLERY
   // =========================
-  async getGalleryByUserId(userId: number) {
+  async getGalleryByUserId(userId: number, includeUnapproved = false) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
     const rows = await this.galleryRepo.find({
-      where: { userId: uid },
+      where: includeUnapproved ? { userId: uid } : { userId: uid, moderationStatus: 'approved' },
       order: { created_at: 'DESC' },
     });
     return rows.map((row) => ({
@@ -193,10 +193,13 @@ export class WorkersService {
 
     if (clean.length === 0) throw new BadRequestException('No images');
 
-    const rows = clean.map((url) => this.galleryRepo.create({ userId: uid, url }));
+    const rows = clean.map((url) => this.galleryRepo.create({
+      userId: uid, url, moderationStatus: 'pending_review', moderationReason: null,
+      moderatedByUserId: null, moderatedAt: null,
+    }));
     await this.galleryRepo.save(rows);
 
-    return this.getGalleryByUserId(uid);
+    return this.getGalleryByUserId(uid, true);
   }
 
   async deleteGalleryImage(userId: number, imageId: number) {
@@ -232,7 +235,7 @@ export class WorkersService {
     if (requestIds.length === 0) return requests;
 
     const imageRows = await this.requestImageRepo.find({
-      where: { requestId: In(requestIds) },
+      where: { requestId: In(requestIds), moderationStatus: 'approved' },
       order: { requestId: 'ASC', kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
     });
 

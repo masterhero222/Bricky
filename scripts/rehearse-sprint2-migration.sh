@@ -16,6 +16,7 @@ before_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) 
 test "${before_count}" = "2"
 
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_001_sprint2_foundation_up.sql
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_002_moderation_gate_up.sql
 
 tables_after_up="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}' AND table_name IN ('request_activities','request_calculations','request_events');")"
 test "${tables_after_up}" = "3"
@@ -32,6 +33,14 @@ test "${migration_count}" = "1"
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_001_sprint2_foundation_up.sql
 second_up_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM bricky_schema_migrations WHERE version='20260705_001_sprint2_foundation';")"
 test "${second_up_count}" = "1"
+
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_002_moderation_gate_up.sql
+moderation_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM bricky_schema_migrations WHERE version='20260705_002_moderation_gate';")"
+test "${moderation_count}" = "1"
+moderation_tables="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}' AND table_name='admin_audit_logs';")"
+test "${moderation_tables}" = "1"
+
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_002_moderation_gate_down.sql
 
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_001_sprint2_foundation_down.sql
 

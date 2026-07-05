@@ -24,6 +24,7 @@ import Workers from "./pages/workers/Workers";
 
 // REQUESTS
 import Requests from "./pages/Requests";
+import AdminPanel from "./pages/AdminPanel";
 
 import DevTestPanel from "./components/DevTestPanel";
 
@@ -81,6 +82,7 @@ export default function App() {
 
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
+          <Route path="/admin" element={<RequireAdmin><AdminPanel /></RequireAdmin>} />
 
             <Route path="/worker/:userId" element={<WorkerPreview />} />
             <Route path="/workers/:id" element={<WorkerPreview />} />
@@ -100,6 +102,10 @@ function RequireWorker({ children }) {
   return localStorage.getItem("role") === "worker"
     ? children
     : (window.location.href = "/auth");
+}
+
+function RequireAdmin({ children }) {
+  return localStorage.getItem("role") === "admin" ? children : <Navigate to="/auth/login" replace />;
 }
 
 
