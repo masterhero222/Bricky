@@ -10,6 +10,7 @@ import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReviewModule } from './reviews/review.module';
 import { HealthModule } from './health/health.module';
+import { resolveTypeOrmSynchronize } from './config/database-policy';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { HealthModule } from './health/health.module';
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
+      synchronize: resolveTypeOrmSynchronize(),
     }),
 
     UsersModule,

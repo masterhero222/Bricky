@@ -55,6 +55,7 @@ Base: Sprint 1 documentation head `abbfe2f` and release-candidate code commit `9
 - CI now runs on all `codex/sprint-*` branches and pull requests to `main`.
 - DONE in code: CI provisions separate MySQL databases for migration rehearsal and the existing full Nest request-lifecycle E2E test.
 - DONE: full MySQL request lifecycle E2E passed in GitHub Actions run `28731998934`; evidence is recorded in `docs/sprint-2-request-lifecycle-e2e.md`.
+- DONE in code: production startup now rejects `TYPEORM_SYNCHRONIZE=true`; automatic schema synchronization remains available only for isolated test/dev environments.
 - NEXT: add browser-level E2E and post-deploy smoke gates.
 - Establish staging with production-like persistent media storage.
 
