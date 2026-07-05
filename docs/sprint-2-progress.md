@@ -72,7 +72,7 @@ Every administrative mutation records:
 - Pricing configuration verification: 97 activities and 174 material items passed.
 - MySQL 8.4 migration rehearsal and lifecycle E2E: passed in GitHub Actions run `28747728127`.
 - E2E covers rejection, owner correction/resubmission, approval, media visibility, administrative edit/delete, audit records, assignment, completion, and review approval.
-- Manual mock smoke covered admin login, all queues, filters, details, and media approval without browser-console errors.
+- Manual mock smoke covered admin login, all queues, filters, protected request details with photos, approval, rejection through the in-page reason modal, and the resulting filtered audit record without browser-console errors.
 
 ## Current Risks And Technical Debt
 

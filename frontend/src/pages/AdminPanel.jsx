@@ -9,6 +9,7 @@ export default function AdminPanel() {
   const [status, setStatus] = useState("pending_review");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
+  const [actionDialog, setActionDialog] = useState(null);
   const [summary, setSummary] = useState({ pendingRequests: 0, pendingMedia: 0, pendingWorkers: 0, pendingReviews: 0 });
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
@@ -26,22 +27,30 @@ export default function AdminPanel() {
     setLoading(false);
   }, [tab, query, status, page]);
   useEffect(() => { load().catch(() => setLoading(false)); }, [load]);
-  const moderate = async (id, action) => {
+  const performModeration = async (id, action, reason = "") => {
     if (tab === "users") {
-      const reason = window.prompt(action === "suspend" ? "Причина за спиране на акаунта:" : "Причина за активиране на акаунта:") || "";
-      if (!reason.trim()) return;
       await apiPost(`/admin/users/${id}/${action}`, { reason });
       await load();
       return;
     }
-    const reason = action === "approved" ? "" : window.prompt("Причина за модерацията:") || "";
-    if (action !== "approved" && !reason.trim()) return;
     const item = items.find((entry) => entry.id === id);
     let path = `/admin/${tab}/${id}/${action}`;
     if (tab === "media" && item?.source === "gallery") path = `/admin/media/gallery/${id}/${action}`;
     if (tab === "media" && item?.source === "avatar") path = `/admin/workers/${id}/avatar/${action}`;
     if (tab === "workers") path = `/admin/workers/${id}/profile/${action}`;
     await apiPost(path, { reason }); await load();
+  };
+  const moderate = async (id, action) => {
+    if (tab === "users" || action !== "approved") {
+      setActionDialog({ id, action, type: tab });
+      return;
+    }
+    await performModeration(id, action);
+  };
+  const confirmModeration = async (reason) => {
+    if (!actionDialog) return;
+    await performModeration(actionDialog.id, actionDialog.action, reason);
+    setActionDialog(null);
   };
   const openDetails = async (item) => {
     if (tab === "users" || tab === "audit") {
@@ -88,6 +97,7 @@ export default function AdminPanel() {
     <div className="flex items-center justify-end gap-3"><button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg bg-slate-800 px-4 py-2 font-bold disabled:opacity-40">Назад</button><span className="text-slate-300">Страница {page}</span><button disabled={items.length < 25} onClick={() => setPage((value) => value + 1)} className="rounded-lg bg-slate-800 px-4 py-2 font-bold disabled:opacity-40">Напред</button></div>
     {summary.recentActions?.length > 0 && <section className="bricky-card p-5"><h2 className="text-xl font-black">Последни административни действия</h2><div className="mt-4 grid gap-2">{summary.recentActions.slice(0, 5).map((action) => <p key={action.id} className="rounded-lg bg-slate-900/70 p-3 text-sm text-slate-300"><strong className="text-white">{action.action}</strong> · {action.entityType} #{action.entityId}</p>)}</div></section>}
     {selected && <DetailDrawer item={selected} type={tab} onClose={() => setSelected(null)} onEdit={editRequest} onDelete={deleteRequest}/>}
+    {actionDialog && <ActionReasonDialog action={actionDialog.action} type={actionDialog.type} onCancel={() => setActionDialog(null)} onConfirm={confirmModeration}/>}
   </div></section>;
 }
 function Stat({ title, value }) { return <div className="bricky-card p-6"><p className="text-slate-400">{title}</p><strong className="text-4xl">{value}</strong></div>; }
@@ -97,6 +107,18 @@ function QueueItem({ item, type, onAction, onView }) { return <article className
   <div className="flex flex-wrap gap-2"><button onClick={onView} className="rounded-lg border border-slate-600 px-4 py-3 font-bold">Детайли</button>{type === "audit" ? null : type === "users" ? item.accountStatus === "suspended" ? <button onClick={() => onAction(item.id,"activate")} className="bricky-button-primary"><Check size={17}/> Активирай</button> : <button onClick={() => onAction(item.id,"suspend")} className="rounded-lg bg-red-500/15 px-4 py-3 font-bold text-red-200"><EyeOff size={17} className="inline"/> Спри акаунта</button> : <><button onClick={() => onAction(item.id,"approved")} className="bricky-button-primary"><Check size={17}/> Одобри</button><button onClick={() => onAction(item.id,"rejected")} className="rounded-lg bg-red-500/15 px-4 py-3 font-bold text-red-200"><X size={17} className="inline"/> Отхвърли</button><button onClick={() => onAction(item.id,"hidden")} className="rounded-lg bg-slate-700 px-4 py-3 font-bold"><EyeOff size={17} className="inline"/> Скрий</button></>}</div>
 </article>; }
 function DetailDrawer({ item, type, onClose, onEdit, onDelete }) { return <div className="fixed inset-0 z-[80] flex justify-end bg-black/60" onClick={onClose}><aside className="h-full w-full max-w-xl overflow-y-auto border-l border-slate-600 bg-[#0b1525] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold uppercase tracking-widest text-cyan-300">{type}</p><h2 className="mt-1 text-2xl font-black">{queueTitle(item, type)}</h2></div><button onClick={onClose} aria-label="Затвори детайлите" className="rounded-lg bg-slate-800 p-3"><X/></button></div>{item.url && <img src={item.url} alt="Преглед" className="mt-6 max-h-80 w-full rounded-xl object-contain"/>}{Array.isArray(item.images) && item.images.length > 0 && <div className="mt-6 grid grid-cols-2 gap-3">{item.images.map((image) => <img key={image.id} src={image.url} alt={image.name || "Снимка към заявката"} className="h-36 w-full rounded-xl object-cover"/>)}</div>}{type === "requests" && <div className="mt-6 flex flex-wrap gap-3"><button onClick={() => onEdit(item)} className="bricky-button-secondary">Коригирай заявката</button><button onClick={() => onDelete(item)} className="rounded-lg bg-red-500/15 px-4 py-3 font-bold text-red-200">Изтрий като спам</button></div>}<dl className="mt-6 grid gap-3">{Object.entries(item).filter(([key,value]) => value != null && key !== "images").map(([key,value]) => <div key={key} className="rounded-xl bg-slate-900/80 p-4"><dt className="text-xs font-bold uppercase text-slate-500">{key}</dt><dd className="mt-1 break-words whitespace-pre-wrap text-slate-100">{typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}</dd></div>)}</dl></aside></div>; }
+function ActionReasonDialog({ action, type, onCancel, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const labels = { rejected: "Отхвърляне", hidden: "Скриване", suspend: "Спиране на акаунт", activate: "Активиране на акаунт" };
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true);
+    try { await onConfirm(reason.trim()); } finally { setSubmitting(false); }
+  };
+  return <div className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4" onClick={onCancel}><form onSubmit={submit} className="bricky-card w-full max-w-lg p-6" onClick={(event) => event.stopPropagation()}><p className="text-sm font-bold uppercase tracking-widest text-cyan-300">{type}</p><h2 className="mt-2 text-2xl font-black">{labels[action] || "Административно действие"}</h2><label className="mt-5 block text-sm font-bold text-slate-300" htmlFor="admin-action-reason">Причина</label><textarea id="admin-action-reason" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} placeholder="Опиши ясно причината за одитния запис..." className="mt-2 w-full rounded-xl border border-slate-600 bg-[#0d1728] p-4 text-white outline-none focus:border-cyan-300"/><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={onCancel} className="rounded-lg bg-slate-700 px-5 py-3 font-bold">Отказ</button><button type="submit" disabled={!reason.trim() || submitting} className="bricky-button-primary disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Записване..." : "Потвърди"}</button></div></form></div>;
+}
 function queueTitle(item, type) {
   if (type === "requests") return `#${item.id} · ${item.category || "Заявка"}`;
   if (type === "workers") return item.fullName || `Майстор #${item.id}`;

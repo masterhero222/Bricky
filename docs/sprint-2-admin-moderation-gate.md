@@ -38,7 +38,7 @@ Worker request feeds and the request map return only approved requests. Request 
 
 ## Frontend
 
-`/admin` provides request, media, worker profile, and review queues, pending and operational counters, previews, status filters, text search, pagination, detail drawer, recent audit actions, approve, reject, and hide actions. Reject/hide require a reason. Request details also expose controlled correction and spam deletion. Each queue type has a protected detail endpoint. The route and navigation entry are restricted to the admin role.
+`/admin` provides request, media, worker profile, review, account, and audit workspaces, pending and operational counters, previews, status filters, text search, pagination, detail drawer, recent audit actions, approve, reject, and hide actions. Reject/hide and account status changes use an in-page modal with a required reason. Request details load through a protected endpoint, include linked photos, and expose controlled correction and spam deletion. The route and navigation entry are restricted to the admin role.
 
 When content is rejected or hidden, its owner can still see the moderation reason. A client can correct a rejected/hidden request and resubmit it through `PUT /api/requests/:id/resubmit`; the request then returns to `pending_review` and remains invisible to workers until a new approval.
 
