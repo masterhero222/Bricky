@@ -44,7 +44,7 @@ Base: Sprint 1 documentation head `abbfe2f` and release-candidate code commit `9
 - DONE: document field-by-field current-to-target mapping in `docs/sprint-2-migration-mapping.md`.
 - DONE: add a minimal production-like legacy schema fixture and automated MySQL 8.4 UP/idempotency/DOWN rehearsal.
 - DONE: add migration static safety/contract checks to the main verification gate.
-- IN PROGRESS: run the MySQL rehearsal in GitHub Actions.
+- DONE: MySQL 8.4 UP/idempotency/DOWN rehearsal passed in GitHub Actions run `28731780770`; evidence is recorded in `docs/sprint-2-migration-rehearsal.md`.
 - NEXT: restore an actual production backup into an isolated schema and run preflight plus rehearsal against it.
 - NEXT: produce reviewed row-count and orphan reports from the restored dump.
 - Do not reset or clean production before explicit approval and a verified restore test.
