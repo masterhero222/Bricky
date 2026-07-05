@@ -29,12 +29,14 @@ Base: Sprint 1 documentation head `abbfe2f` and release-candidate code commit `9
 
 ### 2. Canonical data model
 
-- Decide one canonical actor identifier (`users.id` is the current candidate).
-- Freeze request state transitions and machine-readable status values.
-- Freeze stable repair category/activity keys.
-- Define normalized request applications, media, completed-job history, review uniqueness, moderation, and address privacy.
-- Define the immutable calculator snapshot stored with each request.
-- Produce an ERD and migration acceptance checklist before editing production data.
+- DONE as proposed contract: `users.id` is the canonical authenticated actor identifier.
+- DONE as proposed contract: request state transitions and machine-readable status values are specified.
+- DONE as proposed contract: stable repair category/activity keys are required.
+- DONE as proposed contract: normalized applications, media, completed-job portfolio, review uniqueness, audit events, moderation, and address privacy are specified.
+- DONE as proposed contract: immutable calculator snapshot storage is specified.
+- DONE: ERD, transaction boundaries, compatibility exit gates, required indexes, and technical approval questions are documented in `docs/sprint-2-canonical-data-model.md`.
+- DONE: add `scripts/db-sprint2-preflight.sql`, a read-only schema/row/orphan/status inventory for restored or staging databases.
+- NEXT: technical approval and field-by-field mapping to versioned migrations.
 
 ### 3. Migration and database rehearsal
 

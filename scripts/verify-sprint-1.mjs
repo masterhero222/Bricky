@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const isWindows = process.platform === "win32";
 
 const checks = [
+  { name: "Database preflight safety", cwd: ".", command: "node", args: ["scripts/verify-db-preflight.mjs"] },
   { name: "Frontend pricing verification", cwd: "frontend", args: ["run", "test:pricing"] },
   { name: "Frontend production build", cwd: "frontend", args: ["run", "build"] },
   { name: "Backend production build", cwd: "backend", args: ["run", "build"] },
@@ -14,9 +15,10 @@ const checks = [
 
 for (const check of checks) {
   process.stdout.write(`\n=== ${check.name} ===\n`);
-  const command = isWindows ? process.env.ComSpec : "npm";
+  const baseCommand = check.command || "npm";
+  const command = isWindows ? process.env.ComSpec : baseCommand;
   const args = isWindows
-    ? ["/d", "/s", "/c", ["npm", ...check.args].join(" ")]
+    ? ["/d", "/s", "/c", [baseCommand, ...check.args].join(" ")]
     : check.args;
   const result = spawnSync(command, args, {
     cwd: path.join(root, check.cwd),
