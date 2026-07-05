@@ -51,4 +51,21 @@ describe('AdminService', () => {
     expect(image.isApproved).toBe(true);
     expect(audit.save).toHaveBeenCalled();
   });
+
+  it('requires a reason for non-approval moderation actions', async () => {
+    await expect(service.moderateRequest(7, 'rejected', 99)).rejects.toThrow('Reason is required');
+    expect(requests.findOne).not.toHaveBeenCalled();
+  });
+
+  it('filters and paginates audit records', async () => {
+    audit.find.mockResolvedValue([
+      { id: 3, adminUserId: 99, entityType: 'request', entityId: 7, action: 'approved', reason: null },
+      { id: 2, adminUserId: 99, entityType: 'user', entityId: 8, action: 'suspend', reason: 'spam' },
+      { id: 1, adminUserId: 42, entityType: 'request', entityId: 9, action: 'rejected', reason: 'missing details' },
+    ]);
+
+    await expect(service.listAudit('spam', 'suspend', 'user', 1, 25)).resolves.toEqual([
+      expect.objectContaining({ id: 2, action: 'suspend', entityType: 'user' }),
+    ]);
+  });
 });

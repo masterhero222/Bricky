@@ -678,6 +678,14 @@ export async function mockRequest(method, url, data) {
       ...db.clients.map((item) => ({ ...item, accountStatus: item.accountStatus || "active" })),
       ...db.workers.map((item) => ({ ...item, id: item.userId || item.id, accountStatus: item.accountStatus || "active" })),
     ];
+    db.adminAuditLogs = Array.isArray(db.adminAuditLogs) ? db.adminAuditLogs : [];
+    const audit = (entityType, entityId, action, reason, oldValue = null, newValue = null) => {
+      db.adminAuditLogs.unshift({
+        id: Date.now() + db.adminAuditLogs.length, adminUserId: 999, entityType, entityId,
+        action, reason: reason || null, oldValue, newValue, ipAddress: "127.0.0.1",
+        created_at: new Date().toISOString(),
+      });
+    };
 
     if (method === "get" && path === "/admin/dashboard") return response({
       pendingRequests: requestRows.filter((item) => item.moderationStatus === "pending_review").length,
@@ -688,7 +696,7 @@ export async function mockRequest(method, url, data) {
       completedRequests: requestRows.filter((item) => item.moderationStatus === "approved" && item.completedAt).length,
       activeUsers: db.clients.length + db.workers.length,
       activeWorkers: workerRows.filter((item) => item.moderationStatus === "approved").length,
-      recentActions: [],
+      recentActions: db.adminAuditLogs.slice(0, 10),
       systemHealth: { api: "ok", database: "mock" },
     });
     if (method === "get" && path === "/admin/requests") return response(pageRows(requestRows));
@@ -696,27 +704,40 @@ export async function mockRequest(method, url, data) {
     if (method === "get" && path === "/admin/workers") return response(pageRows(workerRows));
     if (method === "get" && path === "/admin/reviews") return response(pageRows(reviewRows));
     if (method === "get" && path === "/admin/users") return response(userRows);
+    if (method === "get" && path === "/admin/audit-logs") {
+      const wantedAction = params.get("action") || "";
+      const rows = db.adminAuditLogs
+        .filter((item) => !wantedAction || item.action === wantedAction)
+        .filter((item) => !query || JSON.stringify(item).toLowerCase().includes(query));
+      return response(rows.slice((page - 1) * limit, page * limit));
+    }
     const userAction = path.match(/^\/admin\/users\/(\d+)\/(activate|suspend)$/);
     if (method === "post" && userAction) {
       const id = Number(userAction[1]);
       const item = db.clients.find((entry) => Number(entry.id) === id) || db.workers.find((entry) => Number(entry.userId || entry.id) === id);
       if (!item) return fail("User not found", 404);
+      const oldValue = { accountStatus: item.accountStatus || "active" };
       item.accountStatus = userAction[2] === "suspend" ? "suspended" : "active";
+      audit("user", id, userAction[2], data?.reason, oldValue, { accountStatus: item.accountStatus });
       writeDb(db); return response(item, 201);
     }
     const requestEdit = path.match(/^\/admin\/requests\/(\d+)$/);
     if (method === "put" && requestEdit) {
       const item = db.requests.find((entry) => Number(entry.id) === Number(requestEdit[1]));
       if (!item) return fail("Item not found", 404);
+      const oldValue = { category: item.category, categoryKey: item.categoryKey, description: item.description, address: item.address };
       ["category", "categoryKey", "description", "address"].forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(data || {}, field)) item[field] = data[field];
       });
+      audit("request", item.id, "edited", data?.reason, oldValue, { category: item.category, categoryKey: item.categoryKey, description: item.description, address: item.address });
       writeDb(db); return response(item);
     }
     if (method === "delete" && requestEdit) {
       const index = db.requests.findIndex((entry) => Number(entry.id) === Number(requestEdit[1]));
       if (index < 0) return fail("Item not found", 404);
+      const deleted = db.requests[index];
       db.requests.splice(index, 1);
+      audit("request", deleted.id, "deleted", data?.reason, deleted, null);
       writeDb(db); return response({ ok: true, id: Number(requestEdit[1]), reason: data?.reason || null });
     }
     const actionMatch = path.match(/^\/admin\/(requests|reviews)\/(\d+)\/(approved|rejected|hidden)$/);
@@ -724,7 +745,9 @@ export async function mockRequest(method, url, data) {
       const collection = actionMatch[1] === "requests" ? db.requests : db.reviews;
       const item = collection.find((entry) => Number(entry.id) === Number(actionMatch[2]));
       if (!item) return fail("Item not found", 404);
+      const oldValue = { moderationStatus: item.moderationStatus || "pending_review", moderationReason: item.moderationReason || null };
       item.moderationStatus = actionMatch[3]; item.moderationReason = data?.reason || null;
+      audit(actionMatch[1] === "requests" ? "request" : "review", item.id, actionMatch[3], data?.reason, oldValue, { moderationStatus: item.moderationStatus, moderationReason: item.moderationReason });
       writeDb(db); return response(item, 201);
     }
     const mediaAction = path.match(/^\/admin\/media\/(\d+)-(\d+)\/(approved|rejected|hidden)$/);
@@ -732,14 +755,18 @@ export async function mockRequest(method, url, data) {
       const requestItem = db.requests.find((entry) => Number(entry.id) === Number(mediaAction[1]));
       const photo = requestItem?.photos?.[Number(mediaAction[2])];
       if (!photo) return fail("Media not found", 404);
+      const oldValue = { moderationStatus: photo.moderationStatus || "pending_review" };
       photo.moderationStatus = mediaAction[3]; photo.moderationReason = data?.reason || null;
+      audit("request_media", Number(mediaAction[1]), mediaAction[3], data?.reason, oldValue, { moderationStatus: photo.moderationStatus });
       writeDb(db); return response(photo, 201);
     }
     const workerAction = path.match(/^\/admin\/workers\/(\d+)\/(profile|avatar)\/(approved|rejected|hidden)$/);
     if (method === "post" && workerAction) {
       const item = db.workers.find((entry) => Number(entry.id) === Number(workerAction[1]));
       if (!item) return fail("Worker not found", 404);
+      const oldValue = { moderationStatus: item.moderationStatus || "pending_review" };
       item.moderationStatus = workerAction[3]; item.moderationReason = data?.reason || null;
+      audit(`worker_${workerAction[2]}`, item.id, workerAction[3], data?.reason, oldValue, { moderationStatus: item.moderationStatus });
       writeDb(db); return response(item, 201);
     }
   }

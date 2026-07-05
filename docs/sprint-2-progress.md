@@ -54,6 +54,7 @@ Every administrative mutation records:
 - Search, status filtering, pagination, previews, and detail drawer.
 - Approve, reject, hide, request correction, and spam deletion controls.
 - Recent administrative activity summary.
+- Searchable and paginated audit-log tab with action filters, reasons, IP addresses, and old/new values.
 - Local mock administrator identity and moderation test data.
 
 ### Database rollout
@@ -83,6 +84,5 @@ Every administrative mutation records:
 
 ## Next Sprint 2 Steps
 
-1. Add a dedicated audit-log view with filters.
-2. Prepare the canonical media model as a separate additive migration proposal; do not mix it into the current moderation rollout.
-3. Produce and execute the production deployment checklist only after staging verification.
+1. Prepare the canonical media model as a separate additive migration proposal; do not mix it into the current moderation rollout.
+2. Produce and execute the production deployment checklist only after staging verification.

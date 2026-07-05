@@ -19,7 +19,10 @@ export class AdminController {
   @Get('reviews') reviews(@Query('status') status?: ModerationStatus, @Query('q') q?: string, @Query('page') page?: string, @Query('limit') limit?: string) { return this.admin.listReviews(status, q, Number(page), Number(limit)); }
   @Get('reviews/:id') review(@Param('id') id: string) { return this.admin.getReview(Number(id)); }
   @Get('users') users() { return this.admin.listUsers(); }
-  @Get('audit-logs') audit() { return this.admin.listAudit(); }
+  @Get('audit-logs')
+  audit(@Query('q') q?: string, @Query('action') action?: string, @Query('entityType') entityType?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.admin.listAudit(q, action, entityType, Number(page), Number(limit));
+  }
 
   @Post('requests/:id/:action')
   requestAction(@Req() req: any, @Param('id') id: string, @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {

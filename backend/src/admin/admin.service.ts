@@ -127,8 +127,16 @@ export class AdminService {
     return entity;
   }
 
-  listAudit() {
-    return this.audit.find({ order: { created_at: 'DESC' }, take: 200 });
+  async listAudit(q = '', action = '', entityType = '', page = 1, limit = 25) {
+    const rows = await this.audit.find({ order: { created_at: 'DESC' }, take: 1000 });
+    const needle = String(q || '').trim().toLowerCase();
+    return this.paginate(rows.filter((item) => {
+      if (action && item.action !== action) return false;
+      if (entityType && item.entityType !== entityType) return false;
+      if (!needle) return true;
+      return [item.adminUserId, item.entityType, item.entityId, item.action, item.reason, item.ipAddress]
+        .some((value) => String(value ?? '').toLowerCase().includes(needle));
+    }), page, limit);
   }
 
   async moderateRequest(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
