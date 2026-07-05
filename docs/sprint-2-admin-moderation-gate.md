@@ -35,7 +35,7 @@ Worker request feeds and the request map return only approved requests. Request 
 
 ## Frontend
 
-`/admin` provides request, media, worker profile, and review queues, pending counters, previews, approve, reject, and hide actions. Reject/hide require a reason. The route and navigation entry are restricted to the admin role.
+`/admin` provides request, media, worker profile, and review queues, pending counters, previews, status filters, text search, pagination, approve, reject, and hide actions. Reject/hide require a reason. Each queue type has a protected detail endpoint. The route and navigation entry are restricted to the admin role.
 
 ## Database rollout
 
@@ -55,6 +55,6 @@ The second migration is additive and has a matching down migration. Rehearsal ru
 
 ## Remaining hardening scope
 
-- Add pagination, search, reason presets, and richer audit metadata.
+- Add reason presets and richer audit metadata.
 - Add content scanning hooks before human review; automated decisions must not bypass the audit trail.
 - Consolidate request/gallery/avatar rows into one canonical media asset model in a later additive migration.

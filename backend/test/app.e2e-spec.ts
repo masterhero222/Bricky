@@ -131,6 +131,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(pendingWorkers.body).toHaveLength(2);
+    await request(app.getHttpServer())
+      .get(`/admin/workers/${pendingWorkers.body[0].id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
     for (const worker of pendingWorkers.body) {
       await request(app.getHttpServer())
         .post(`/admin/workers/${worker.id}/profile/approved`)
@@ -274,6 +278,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({})
       .expect(201);
+    await request(app.getHttpServer())
+      .get(`/admin/requests/${requestId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
 
     const pendingMedia = await request(app.getHttpServer())
       .get('/admin/media?status=pending_review')
@@ -281,6 +289,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(200);
     const beforeImage = pendingMedia.body.find((item: any) => item.requestId === requestId);
     expect(beforeImage).toBeTruthy();
+    await request(app.getHttpServer())
+      .get(`/admin/media/request/${beforeImage.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
     await request(app.getHttpServer())
       .post(`/admin/media/${beforeImage.id}/approved`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -417,6 +429,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(200);
     const pendingReview = pendingReviews.body.find((item: any) => item.id === review.body.id);
     expect(pendingReview).toBeTruthy();
+    await request(app.getHttpServer())
+      .get(`/admin/reviews/${review.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
     await request(app.getHttpServer())
       .post(`/admin/reviews/${review.body.id}/approved`)
       .set('Authorization', `Bearer ${adminToken}`)

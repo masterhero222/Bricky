@@ -38,21 +38,22 @@ export class AdminService {
     }));
   }
 
-  listRequests(status?: ModerationStatus) {
-    return this.requests.find({
+  async listRequests(status?: ModerationStatus, q = '', page = 1, limit = 25) {
+    const rows = await this.requests.find({
       where: status ? { moderationStatus: status } : {},
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
+    return this.paginate(rows.filter((item) => this.matches(item, q, ['category', 'description', 'address', 'clientName', 'email'])), page, limit);
   }
 
-  async listMedia(status?: ModerationStatus) {
+  async listMedia(status?: ModerationStatus, q = '', page = 1, limit = 25) {
     const [requestMedia, galleryMedia, avatars] = await Promise.all([
       this.media.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } }),
       this.gallery.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } }),
       this.workers.find({ where: status ? { avatarModerationStatus: status } : {}, order: { createdAt: 'DESC' } }),
     ]);
-    return [
+    const rows = [
       ...requestMedia.map((item) => ({ ...item, source: 'request' })),
       ...galleryMedia.map((item) => ({ ...item, source: 'gallery' })),
       ...avatars.filter((item) => item.avatarUrl).map((item) => ({
@@ -61,19 +62,56 @@ export class AdminService {
         created_at: item.createdAt,
       })),
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return this.paginate(rows.filter((item) => this.matches(item, q, ['name', 'url', 'source'])), page, limit);
   }
 
-  listWorkers(status?: ModerationStatus) {
-    return this.workers.find({ where: status ? { moderationStatus: status } : {}, order: { createdAt: 'DESC' } });
+  async listWorkers(status?: ModerationStatus, q = '', page = 1, limit = 25) {
+    const rows = await this.workers.find({ where: status ? { moderationStatus: status } : {}, order: { createdAt: 'DESC' } });
+    return this.paginate(rows.filter((item) => this.matches(item, q, ['fullName', 'email', 'city', 'description'])), page, limit);
   }
 
-  listReviews(status?: ModerationStatus) {
-    return this.reviews.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } });
+  async listReviews(status?: ModerationStatus, q = '', page = 1, limit = 25) {
+    const rows = await this.reviews.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } });
+    return this.paginate(rows.filter((item) => this.matches(item, q, ['comment', 'rating', 'workerUserId', 'clientUserId'])), page, limit);
   }
 
   async listUsers() {
     const rows = await this.users.find({ order: { id: 'DESC' } });
     return rows.map(({ password: _password, ...user }) => user);
+  }
+
+  async getRequest(id: number) {
+    const entity = await this.requests.findOne({ where: { id }, relations: ['client'] });
+    if (!entity) throw new NotFoundException('Request not found');
+    return entity;
+  }
+
+  async getMedia(source: 'request' | 'gallery' | 'avatar', id: number) {
+    if (source === 'gallery') {
+      const entity = await this.gallery.findOne({ where: { id } });
+      if (!entity) throw new NotFoundException('Media not found');
+      return { ...entity, source };
+    }
+    if (source === 'avatar') {
+      const entity = await this.workers.findOne({ where: { id } });
+      if (!entity?.avatarUrl) throw new NotFoundException('Media not found');
+      return { id: entity.id, userId: entity.userId, url: entity.avatarUrl, source, moderationStatus: entity.avatarModerationStatus };
+    }
+    const entity = await this.media.findOne({ where: { id } });
+    if (!entity) throw new NotFoundException('Media not found');
+    return { ...entity, source };
+  }
+
+  async getWorker(id: number) {
+    const entity = await this.workers.findOne({ where: { id } });
+    if (!entity) throw new NotFoundException('Worker not found');
+    return entity;
+  }
+
+  async getReview(id: number) {
+    const entity = await this.reviews.findOne({ where: { id } });
+    if (!entity) throw new NotFoundException('Review not found');
+    return entity;
   }
 
   listAudit() {
@@ -167,6 +205,18 @@ export class AdminService {
     entity.moderationReason = reason?.trim() || null;
     entity.moderatedByUserId = adminUserId;
     entity.moderatedAt = new Date();
+  }
+
+  private matches(item: any, q: string, fields: string[]) {
+    const needle = String(q || '').trim().toLowerCase();
+    if (!needle) return true;
+    return fields.some((field) => String(item?.[field] ?? '').toLowerCase().includes(needle));
+  }
+
+  private paginate<T>(rows: T[], page: number, limit: number) {
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 25));
+    const safePage = Math.max(1, Number(page) || 1);
+    return rows.slice((safePage - 1) * safeLimit, safePage * safeLimit);
   }
 
   private writeAudit(adminUserId: number, entityType: string, entityId: number, action: string, reason: string | null) {

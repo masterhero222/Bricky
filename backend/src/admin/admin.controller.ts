@@ -10,10 +10,14 @@ export class AdminController {
   constructor(private readonly admin: AdminService) {}
 
   @Get('dashboard') dashboard() { return this.admin.dashboard(); }
-  @Get('requests') requests(@Query('status') status?: ModerationStatus) { return this.admin.listRequests(status); }
-  @Get('media') media(@Query('status') status?: ModerationStatus) { return this.admin.listMedia(status); }
-  @Get('workers') workers(@Query('status') status?: ModerationStatus) { return this.admin.listWorkers(status); }
-  @Get('reviews') reviews(@Query('status') status?: ModerationStatus) { return this.admin.listReviews(status); }
+  @Get('requests') requests(@Query('status') status?: ModerationStatus, @Query('q') q?: string, @Query('page') page?: string, @Query('limit') limit?: string) { return this.admin.listRequests(status, q, Number(page), Number(limit)); }
+  @Get('requests/:id') request(@Param('id') id: string) { return this.admin.getRequest(Number(id)); }
+  @Get('media') media(@Query('status') status?: ModerationStatus, @Query('q') q?: string, @Query('page') page?: string, @Query('limit') limit?: string) { return this.admin.listMedia(status, q, Number(page), Number(limit)); }
+  @Get('media/:source/:id') mediaDetail(@Param('source') source: 'request' | 'gallery' | 'avatar', @Param('id') id: string) { return this.admin.getMedia(source, Number(id)); }
+  @Get('workers') workers(@Query('status') status?: ModerationStatus, @Query('q') q?: string, @Query('page') page?: string, @Query('limit') limit?: string) { return this.admin.listWorkers(status, q, Number(page), Number(limit)); }
+  @Get('workers/:id') worker(@Param('id') id: string) { return this.admin.getWorker(Number(id)); }
+  @Get('reviews') reviews(@Query('status') status?: ModerationStatus, @Query('q') q?: string, @Query('page') page?: string, @Query('limit') limit?: string) { return this.admin.listReviews(status, q, Number(page), Number(limit)); }
+  @Get('reviews/:id') review(@Param('id') id: string) { return this.admin.getReview(Number(id)); }
   @Get('users') users() { return this.admin.listUsers(); }
   @Get('audit-logs') audit() { return this.admin.listAudit(); }
 

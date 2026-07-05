@@ -11,6 +11,7 @@
   - DONE: additive/idempotent migration and rollback package;
   - DONE: worker profiles, avatars, gallery, completed-job media, and reviews require approval publicly;
   - DONE: account suspend/activate actions and password-safe admin user listing;
+  - DONE: queue search, status filters, pagination, and protected detail endpoints;
   - DONE: suspended accounts lose access with already-issued JWT sessions;
   - NEXT: consolidate media records into one canonical media asset table;
   - NEXT: add queue pagination/search and automated content-scanning hooks;
