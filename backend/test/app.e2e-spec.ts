@@ -168,7 +168,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     await request(app.getHttpServer())
       .post(`/admin/users/${otherWorker.id}/activate`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({})
+      .send({ reason: 'E2E moderation check complete' })
       .expect(201);
     await request(app.getHttpServer())
       .get('/workers/me')
