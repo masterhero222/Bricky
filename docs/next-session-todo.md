@@ -14,7 +14,7 @@
   - DONE: searchable/filterable audit-log tab with old/new values, reason, IP, and actor;
   - DONE: queue search, status filters, pagination, and protected detail endpoints;
   - DONE: suspended accounts lose access with already-issued JWT sessions;
-  - NEXT: consolidate media records into one canonical media asset table;
+  - DESIGNED: canonical media asset/link model and additive migration sequence documented in `docs/canonical-media-model-proposal.md`; implementation remains a separate later migration;
   - DONE: queue pagination/search and protected detail views;
   - NEXT: add automated content-scanning hooks without bypassing human review or audit;
   - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.

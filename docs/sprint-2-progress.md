@@ -81,8 +81,9 @@ Every administrative mutation records:
 - Standard moderation reason presets are not implemented; free-text reasons work.
 - Automated content scanning is not implemented and must never bypass human auditability.
 - Production deployment still requires backup, migration rehearsal against a production copy, deploy, and smoke tests before enabling the gate publicly.
+- Canonical media consolidation is specified in `docs/canonical-media-model-proposal.md` but intentionally excluded from the current moderation migration.
 
 ## Next Sprint 2 Steps
 
-1. Prepare the canonical media model as a separate additive migration proposal; do not mix it into the current moderation rollout.
-2. Produce and execute the production deployment checklist only after staging verification.
+1. Execute `docs/sprint-2-staging-deployment-checklist.md` against an isolated staging copy.
+2. Implement canonical media consolidation only as a separately approved later migration.

@@ -300,7 +300,11 @@ describe('Request lifecycle (MySQL e2e)', () => {
     await request(app.getHttpServer())
       .get(`/admin/requests/${requestId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.images).toHaveLength(1);
+        expect(response.body.images[0].requestId).toBe(requestId);
+      });
 
     const pendingMedia = await request(app.getHttpServer())
       .get('/admin/media?status=pending_review')

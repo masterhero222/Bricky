@@ -94,9 +94,12 @@ export class AdminService {
   }
 
   async getRequest(id: number) {
-    const entity = await this.requests.findOne({ where: { id }, relations: ['client'] });
+    const [entity, images] = await Promise.all([
+      this.requests.findOne({ where: { id }, relations: ['client'] }),
+      this.media.find({ where: { requestId: id }, order: { sortOrder: 'ASC', created_at: 'ASC' } }),
+    ]);
     if (!entity) throw new NotFoundException('Request not found');
-    return entity;
+    return { ...entity, images };
   }
 
   async getMedia(source: 'request' | 'gallery' | 'avatar', id: number) {

@@ -711,6 +711,26 @@ export async function mockRequest(method, url, data) {
         .filter((item) => !query || JSON.stringify(item).toLowerCase().includes(query));
       return response(rows.slice((page - 1) * limit, page * limit));
     }
+    const requestDetail = path.match(/^\/admin\/requests\/(\d+)$/);
+    if (method === "get" && requestDetail) {
+      const item = requestRows.find((entry) => Number(entry.id) === Number(requestDetail[1]));
+      return item ? response({ ...item, images: item.photos || [] }) : fail("Item not found", 404);
+    }
+    const mediaDetail = path.match(/^\/admin\/media\/(request|gallery|avatar)\/(.+)$/);
+    if (method === "get" && mediaDetail) {
+      const item = mediaRows.find((entry) => String(entry.id) === String(mediaDetail[2]) && entry.source === mediaDetail[1]);
+      return item ? response(item) : fail("Media not found", 404);
+    }
+    const workerDetail = path.match(/^\/admin\/workers\/(\d+)$/);
+    if (method === "get" && workerDetail) {
+      const item = workerRows.find((entry) => Number(entry.id) === Number(workerDetail[1]));
+      return item ? response(item) : fail("Worker not found", 404);
+    }
+    const reviewDetail = path.match(/^\/admin\/reviews\/(\d+)$/);
+    if (method === "get" && reviewDetail) {
+      const item = reviewRows.find((entry) => Number(entry.id) === Number(reviewDetail[1]));
+      return item ? response(item) : fail("Review not found", 404);
+    }
     const userAction = path.match(/^\/admin\/users\/(\d+)\/(activate|suspend)$/);
     if (method === "post" && userAction) {
       const id = Number(userAction[1]);
