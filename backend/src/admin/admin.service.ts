@@ -240,6 +240,7 @@ export class AdminService {
   }
 
   async setUserStatus(id: number, action: 'activate' | 'suspend', adminUserId: number, reason?: string, ipAddress?: string) {
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
     if (id === adminUserId && action === 'suspend') throw new BadRequestException('Admin cannot suspend own account');
     const entity = await this.users.findOne({ where: { id } });
     if (!entity) throw new NotFoundException('User not found');

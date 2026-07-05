@@ -674,6 +674,10 @@ export async function mockRequest(method, url, data) {
       ...photo, id: `${requestItem.id}-${index}`, requestId: requestItem.id, source: "request",
       moderationStatus: photo.moderationStatus || requestItem.moderationStatus,
     })));
+    const userRows = [
+      ...db.clients.map((item) => ({ ...item, accountStatus: item.accountStatus || "active" })),
+      ...db.workers.map((item) => ({ ...item, id: item.userId || item.id, accountStatus: item.accountStatus || "active" })),
+    ];
 
     if (method === "get" && path === "/admin/dashboard") return response({
       pendingRequests: requestRows.filter((item) => item.moderationStatus === "pending_review").length,
@@ -691,6 +695,15 @@ export async function mockRequest(method, url, data) {
     if (method === "get" && path === "/admin/media") return response(pageRows(mediaRows));
     if (method === "get" && path === "/admin/workers") return response(pageRows(workerRows));
     if (method === "get" && path === "/admin/reviews") return response(pageRows(reviewRows));
+    if (method === "get" && path === "/admin/users") return response(userRows);
+    const userAction = path.match(/^\/admin\/users\/(\d+)\/(activate|suspend)$/);
+    if (method === "post" && userAction) {
+      const id = Number(userAction[1]);
+      const item = db.clients.find((entry) => Number(entry.id) === id) || db.workers.find((entry) => Number(entry.userId || entry.id) === id);
+      if (!item) return fail("User not found", 404);
+      item.accountStatus = userAction[2] === "suspend" ? "suspended" : "active";
+      writeDb(db); return response(item, 201);
+    }
     const requestEdit = path.match(/^\/admin\/requests\/(\d+)$/);
     if (method === "put" && requestEdit) {
       const item = db.requests.find((entry) => Number(entry.id) === Number(requestEdit[1]));

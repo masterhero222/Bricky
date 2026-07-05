@@ -14,7 +14,8 @@
   - DONE: queue search, status filters, pagination, and protected detail endpoints;
   - DONE: suspended accounts lose access with already-issued JWT sessions;
   - NEXT: consolidate media records into one canonical media asset table;
-  - NEXT: add queue pagination/search and automated content-scanning hooks;
+  - DONE: queue pagination/search and protected detail views;
+  - NEXT: add automated content-scanning hooks without bypassing human review or audit;
   - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.
 
 - IN PROGRESS in this session: database/request model stabilization:
