@@ -31,7 +31,7 @@ Existing production rows are backfilled to `approved` once during migration so t
 
 Every endpoint requires a valid JWT and `users.role = admin`. Public registration cannot create an admin. Every mutation stores actor, target, action, reason, and timestamp in `admin_audit_logs`.
 
-Worker request feeds and the request map return only approved requests. Request images shown to workers return only approved media. Owners retain access to their pending/rejected request content. Public worker profiles, avatars, gallery, completed-job media, and reviews require approval; owners retain all moderation states in their own profile surfaces. Suspended accounts cannot create a new login session. Admin user responses never include password hashes.
+Worker request feeds and the request map return only approved requests. Request images shown to workers return only approved media. Owners retain access to their pending/rejected request content. Public worker profiles, avatars, gallery, completed-job media, and reviews require approval; owners retain all moderation states in their own profile surfaces. Suspended accounts cannot create a new login session and already-issued JWTs are rejected on their next protected request. The database role is authoritative over a stale JWT role. Admin user responses never include password hashes.
 
 ## Frontend
 
@@ -57,5 +57,4 @@ The second migration is additive and has a matching down migration. Rehearsal ru
 
 - Add pagination, search, reason presets, and richer audit metadata.
 - Add content scanning hooks before human review; automated decisions must not bypass the audit trail.
-- Invalidate already-issued JWT sessions immediately when an account is suspended.
 - Consolidate request/gallery/avatar rows into one canonical media asset model in a later additive migration.

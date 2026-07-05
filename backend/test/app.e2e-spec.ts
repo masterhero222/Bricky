@@ -158,10 +158,18 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .send({ email: otherWorkerEmail, password })
       .expect(400);
     await request(app.getHttpServer())
+      .get('/workers/me')
+      .set('Authorization', `Bearer ${otherWorkerToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
       .post(`/admin/users/${otherWorker.id}/activate`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({})
       .expect(201);
+    await request(app.getHttpServer())
+      .get('/workers/me')
+      .set('Authorization', `Bearer ${otherWorkerToken}`)
+      .expect(200);
 
     expect(clientToken).toBeTruthy();
     expect(workerToken).toBeTruthy();
