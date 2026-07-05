@@ -7,6 +7,7 @@ const isWindows = process.platform === "win32";
 
 const checks = [
   { name: "Database preflight safety", cwd: ".", command: "node", args: ["scripts/verify-db-preflight.mjs"] },
+  { name: "Sprint 2 migration contract", cwd: ".", command: "node", args: ["scripts/verify-sprint2-migration.mjs"] },
   { name: "Frontend pricing verification", cwd: "frontend", args: ["run", "test:pricing"] },
   { name: "Frontend production build", cwd: "frontend", args: ["run", "build"] },
   { name: "Backend production build", cwd: "backend", args: ["run", "build"] },

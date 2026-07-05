@@ -40,10 +40,13 @@ Base: Sprint 1 documentation head `abbfe2f` and release-candidate code commit `9
 
 ### 3. Migration and database rehearsal
 
-- Build versioned forward and rollback migrations.
-- Restore a production backup into an isolated schema.
-- Rehearse migration, backfill, constraint validation, and rollback.
-- Produce row-count and orphan reports.
+- DONE for additive Phase 1: build versioned forward and rollback migrations for canonical request fields, activities, calculation snapshots, and events.
+- DONE: document field-by-field current-to-target mapping in `docs/sprint-2-migration-mapping.md`.
+- DONE: add a minimal production-like legacy schema fixture and automated MySQL 8.4 UP/idempotency/DOWN rehearsal.
+- DONE: add migration static safety/contract checks to the main verification gate.
+- IN PROGRESS: run the MySQL rehearsal in GitHub Actions.
+- NEXT: restore an actual production backup into an isolated schema and run preflight plus rehearsal against it.
+- NEXT: produce reviewed row-count and orphan reports from the restored dump.
 - Do not reset or clean production before explicit approval and a verified restore test.
 
 ### 4. Release foundation
