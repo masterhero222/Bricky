@@ -2,7 +2,7 @@
 
 Updated: 2026-07-05  
 Branch: `codex/sprint-2-foundation`  
-Latest verified commit: `5543d2e`
+Verified release-candidate code commit: `40ce168`
 
 ## Sprint Objective
 
@@ -70,7 +70,7 @@ Every administrative mutation records:
 - Backend production build: passed.
 - Backend unit tests: 41 passed across 11 suites.
 - Pricing configuration verification: 97 activities and 174 material items passed.
-- MySQL 8.4 migration rehearsal and lifecycle E2E: passed in GitHub Actions run `28747728127`.
+- MySQL 8.4 migration rehearsal and lifecycle E2E: passed in GitHub Actions run `28752769918`.
 - E2E covers rejection, owner correction/resubmission, approval, media visibility, administrative edit/delete, audit records, assignment, completion, and review approval.
 - Manual mock smoke covered admin login, all queues, filters, protected request details with photos, approval, rejection through the in-page reason modal, and the resulting filtered audit record without browser-console errors.
 
@@ -82,6 +82,25 @@ Every administrative mutation records:
 - Automated content scanning is not implemented and must never bypass human auditability.
 - Production deployment still requires backup, migration rehearsal against a production copy, deploy, and smoke tests before enabling the gate publicly.
 - Canonical media consolidation is specified in `docs/canonical-media-model-proposal.md` but intentionally excluded from the current moderation migration.
+
+## Definition Of Done Audit
+
+- [x] `/admin` exists and is protected in the frontend.
+- [x] `/api/admin` endpoints require JWT plus a database-authoritative admin role.
+- [x] Requests are reviewed before publishing.
+- [x] Pending and rejected requests are absent from worker feed/map.
+- [x] Approved requests are visible to workers.
+- [x] Rejected requests remain visible to owner/admin with a correction reason and resubmission path.
+- [x] Request before/after images, worker gallery images, avatars, and reviews require approval before public display.
+- [x] Admin can approve, reject, and hide content and can edit/delete requests under controlled rules.
+- [x] Every admin mutation writes an audit record with actor, target, old/new values, reason, IP, and timestamp.
+- [x] Backend unit tests and MySQL lifecycle E2E cover moderation visibility boundaries.
+- [x] Frontend mock smoke covers admin login, queues, approval, rejection with reason, request photos, and audit filtering.
+- [x] Production schema changes are migration-only and `TYPEORM_SYNCHRONIZE` is forbidden in production.
+- [x] Frontend has no direct database access and no raw SQL is exposed.
+- [x] Payments, credits, subscriptions, messaging, and AI moderation were not added in this sprint.
+
+Sprint 2 is complete at code/release-candidate level. Staging and production rollout are controlled by `docs/sprint-2-staging-deployment-checklist.md` and are deployment work, not missing moderation functionality.
 
 ## Next Sprint 2 Steps
 
