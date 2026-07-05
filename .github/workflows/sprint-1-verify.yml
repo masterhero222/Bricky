@@ -29,6 +29,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
           cache-dependency-path: |
             frontend/package-lock.json
             backend/package-lock.json
@@ -79,3 +86,33 @@ jobs:
           MYSQL_PASSWORD: root
           MYSQL_DATABASE: bricky_rehearsal
         run: bash scripts/rehearse-sprint2-migration.sh
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Create isolated lifecycle database
+        env:
+          MYSQL_PWD: root
+        run: mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+      - name: Run MySQL request lifecycle E2E
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: root
+          DB_NAME: bricky_sprint1_e2e
+          TYPEORM_SYNCHRONIZE: "true"
+          JWT_SECRET: sprint2-ci-only-secret
+          UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          MAIL_HOST: 127.0.0.1
+          MAIL_PORT: 2525
+          MAIL_USER: test
+          MAIL_PASS: test
+          MAIL_FROM: test@example.test
+        run: |
+          mkdir -p "$UPLOADS_DIR"
+          npm run test:e2e -- --runInBand

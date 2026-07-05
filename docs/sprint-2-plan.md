@@ -53,7 +53,9 @@ Base: Sprint 1 documentation head `abbfe2f` and release-candidate code commit `9
 
 - Keep the existing build/test gate mandatory.
 - CI now runs on all `codex/sprint-*` branches and pull requests to `main`.
-- Add isolated MySQL integration, migration rehearsal, browser E2E, and post-deploy smoke gates.
+- DONE in code: CI provisions separate MySQL databases for migration rehearsal and the existing full Nest request-lifecycle E2E test.
+- IN PROGRESS: validate the MySQL lifecycle E2E job in GitHub Actions.
+- NEXT: add browser-level E2E and post-deploy smoke gates.
 - Establish staging with production-like persistent media storage.
 
 ## Definition Of Done
