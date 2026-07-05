@@ -274,6 +274,25 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(403);
 
     await request(app.getHttpServer())
+      .post(`/admin/requests/${requestId}/rejected`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Please clarify the repair description' })
+      .expect(201);
+    const rejectedOwnerView = await request(app.getHttpServer())
+      .get('/requests/client')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .expect(200);
+    const rejectedRequest = rejectedOwnerView.body.find((item: any) => item.id === requestId);
+    expect(rejectedRequest.moderationStatus).toBe('rejected');
+    expect(rejectedRequest.moderationReason).toContain('clarify');
+    await request(app.getHttpServer())
+      .put(`/requests/${requestId}/resubmit`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({ description: 'Clarified integration test leak.' })
+      .expect(200)
+      .expect((response) => expect(response.body.moderationStatus).toBe('pending_review'));
+
+    await request(app.getHttpServer())
       .post(`/admin/requests/${requestId}/approved`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({})
@@ -409,6 +428,40 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(completedRequest.afterPhotos[0].url).toBe(persistentAfterPhotoUrl);
   });
 
+  it('allows an admin to correct and delete a spam request with an audit trail', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({
+        clientName: 'Spam Client',
+        email: clientEmail,
+        phone: '0888000101',
+        address: 'Wrong address',
+        categoryKey: 'vik',
+        description: 'Spam request',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .put(`/admin/requests/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ address: 'Corrected address', reason: 'Minor correction requested by support' })
+      .expect(200)
+      .expect((response) => expect(response.body.address).toBe('Corrected address'));
+
+    await request(app.getHttpServer())
+      .delete(`/admin/requests/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Confirmed spam' })
+      .expect(200)
+      .expect({ ok: true, id: created.body.id });
+
+    await request(app.getHttpServer())
+      .get(`/admin/requests/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(404);
+  });
+
   it('allows one review by the owning client after completion', async () => {
     const review = await request(app.getHttpServer())
       .post('/reviews')
@@ -459,6 +512,8 @@ describe('Request lifecycle (MySQL e2e)', () => {
       expect.objectContaining({ entityType: 'request', entityId: requestId, action: 'approved' }),
       expect.objectContaining({ entityType: 'review', entityId: review.body.id, action: 'approved' }),
       expect.objectContaining({ entityType: 'user', entityId: otherWorkerUserId, action: 'suspend' }),
+      expect.objectContaining({ entityType: 'request', action: 'edited' }),
+      expect.objectContaining({ entityType: 'request', action: 'deleted' }),
     ]));
   });
 });

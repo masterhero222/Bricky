@@ -17,6 +17,9 @@ Existing production rows are backfilled to `approved` once during migration so t
 
 - `GET /api/admin/dashboard`
 - `GET /api/admin/requests?status=pending_review`
+- `GET /api/admin/requests/:id`
+- `PUT /api/admin/requests/:id` (controlled correction of category, description, or address)
+- `DELETE /api/admin/requests/:id` (spam removal with mandatory operational reason)
 - `POST /api/admin/requests/:id/approved|rejected|hidden`
 - `GET /api/admin/media?status=pending_review`
 - `POST /api/admin/media/:id/approved|rejected|hidden`
@@ -29,13 +32,15 @@ Existing production rows are backfilled to `approved` once during migration so t
 - `POST /api/admin/users/:id/suspend|activate`
 - `GET /api/admin/audit-logs`
 
-Every endpoint requires a valid JWT and `users.role = admin`. Public registration cannot create an admin. Every mutation stores actor, target, action, reason, and timestamp in `admin_audit_logs`.
+Every endpoint requires a valid JWT and `users.role = admin`. Public registration cannot create an admin. Every mutation stores actor, target, action, reason, timestamp, previous value, new value, and request IP in `admin_audit_logs`.
 
 Worker request feeds and the request map return only approved requests. Request images shown to workers return only approved media. Owners retain access to their pending/rejected request content. Public worker profiles, avatars, gallery, completed-job media, and reviews require approval; owners retain all moderation states in their own profile surfaces. Suspended accounts cannot create a new login session and already-issued JWTs are rejected on their next protected request. The database role is authoritative over a stale JWT role. Admin user responses never include password hashes.
 
 ## Frontend
 
-`/admin` provides request, media, worker profile, and review queues, pending counters, previews, status filters, text search, pagination, approve, reject, and hide actions. Reject/hide require a reason. Each queue type has a protected detail endpoint. The route and navigation entry are restricted to the admin role.
+`/admin` provides request, media, worker profile, and review queues, pending and operational counters, previews, status filters, text search, pagination, detail drawer, recent audit actions, approve, reject, and hide actions. Reject/hide require a reason. Request details also expose controlled correction and spam deletion. Each queue type has a protected detail endpoint. The route and navigation entry are restricted to the admin role.
+
+When content is rejected or hidden, its owner can still see the moderation reason. A client can correct a rejected/hidden request and resubmit it through `PUT /api/requests/:id/resubmit`; the request then returns to `pending_review` and remains invisible to workers until a new approval.
 
 ## Database rollout
 
@@ -50,11 +55,12 @@ The second migration is additive and has a matching down migration. Rehearsal ru
 
 - Backend production build
 - Frontend production build
-- 37 backend unit tests, including admin guard, moderation mutation, and audit behavior
-- MySQL E2E updated to prove pending requests are absent from the worker feed, non-admin access returns 403, approval makes the request/media visible, and lifecycle continues afterward
+- Backend unit tests cover the admin guard, moderation mutations, audit behavior, and suspended-session rejection.
+- MySQL E2E proves pending requests are absent from the worker feed, non-admin access returns 403, rejection exposes a correction reason to the owner, resubmission returns to review, approval makes request/media visible, admin edit/delete are audited, and the normal lifecycle continues afterward.
+- Manual frontend smoke in the local mock environment covered admin login, all moderation queues, search/status controls, request details, and removal of approved media from the pending queue without browser-console errors.
 
 ## Remaining hardening scope
 
-- Add reason presets and richer audit metadata.
+- Add optional reason presets for faster moderation; free-text reasons remain supported.
 - Add content scanning hooks before human review; automated decisions must not bypass the audit trail.
 - Consolidate request/gallery/avatar rows into one canonical media asset model in a later additive migration.

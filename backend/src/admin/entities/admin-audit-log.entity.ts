@@ -26,7 +26,15 @@ export class AdminAuditLogEntity {
   @Column({ type: 'simple-json', nullable: true })
   metadata: Record<string, unknown> | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  oldValue: Record<string, unknown> | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  newValue: Record<string, unknown> | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  ipAddress: string | null;
+
   @CreateDateColumn()
   created_at: Date;
 }
-

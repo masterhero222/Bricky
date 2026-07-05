@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost, apiPut } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 import { photoMediaUrl } from "../utils/mediaUrls";
@@ -249,6 +249,20 @@ export default function ClientProfile() {
       setWorkersMap((prev) => ({ ...prev, ...map }));
     } catch (e) {
       console.log("hydrateWorkers fallback failed:", e);
+    }
+  }
+
+  async function editAndResubmit(requestItem) {
+    const description = window.prompt("Коригирай описанието на заявката:", cleanRequestDescription(requestItem.description) || "");
+    if (description === null) return;
+    const address = window.prompt("Коригирай адреса:", requestItem.address || "");
+    if (address === null) return;
+    try {
+      await apiPut(`/requests/${requestItem.id}/resubmit`, { description, address });
+      setActionMsg("Заявката е върната за нов преглед.");
+      await loadData();
+    } catch (error) {
+      setActionMsg(error?.response?.data?.message || "Не успях да върна заявката за преглед.");
     }
   }
 
@@ -508,6 +522,14 @@ export default function ClientProfile() {
                           </div>
                         </div>
                       </div>
+
+                      {r.moderationStatus && r.moderationStatus !== "approved" && (
+                        <div className={`mt-5 rounded-xl border p-4 ${r.moderationStatus === "rejected" ? "border-red-400/30 bg-red-500/10" : "border-amber-400/30 bg-amber-500/10"}`}>
+                          <p className="font-extrabold text-white">{r.moderationStatus === "rejected" ? "Заявката е върната за корекция." : r.moderationStatus === "hidden" ? "Заявката е скрита от Bricky." : "Заявката чака преглед от Bricky."}</p>
+                          {r.moderationReason && <p className="mt-2 text-sm text-slate-200"><strong>Причина:</strong> {r.moderationReason}</p>}
+                          {["rejected", "hidden"].includes(r.moderationStatus) && <button onClick={() => editAndResubmit(r)} className="mt-3 rounded-lg bg-white/10 px-4 py-2 font-bold text-white hover:bg-white/15">Редактирай и изпрати отново</button>}
+                        </div>
+                      )}
 
                       <div className="grid gap-8 py-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)]">
                         <div className="space-y-4 xl:border-r xl:border-slate-400/15 xl:pr-8">

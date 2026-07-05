@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Req,
   UseGuards,
   BadRequestException,
@@ -141,6 +142,13 @@ export class RequestsController {
   async complete(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     return this.requests.completeRequest(Number(id), Number(req.user.id), body?.afterPhotos || []);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/resubmit')
+  async resubmit(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.resubmitRequest(Number(id), Number(req.user.id), body || {});
   }
 
 }

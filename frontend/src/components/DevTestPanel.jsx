@@ -18,7 +18,7 @@ export default function DevTestPanel() {
 
   if (!import.meta.env.DEV) return null;
 
-  const { clients, workers } = getDevIdentities();
+  const { clients, workers, admins } = getDevIdentities();
   const activeRole = localStorage.getItem("role") || "none";
   const activeUserId = localStorage.getItem("userId") || "";
   const activeName = localStorage.getItem("userName") || "няма";
@@ -26,7 +26,7 @@ export default function DevTestPanel() {
 
   const login = (role, id) => {
     setDevIdentity(role, id);
-    window.location.href = role === "worker" ? "/worker/profile" : "/client/profile";
+    window.location.href = role === "admin" ? "/admin" : role === "worker" ? "/worker/profile" : "/client/profile";
   };
 
   return (
@@ -78,6 +78,10 @@ export default function DevTestPanel() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="mt-3">
+            {admins.map((admin) => <button key={admin.id} type="button" onClick={() => login("admin", admin.id)} className="w-full rounded bg-cyan-700 px-3 py-2 text-sm font-bold hover:bg-cyan-600">Вход като администратор</button>)}
           </div>
 
           <button

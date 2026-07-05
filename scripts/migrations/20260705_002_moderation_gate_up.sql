@@ -50,9 +50,13 @@ CALL bricky_moderation_backfill();
 CREATE TABLE IF NOT EXISTS admin_audit_logs (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, adminUserId INT NOT NULL, entityType VARCHAR(40) NOT NULL,
   entityId INT NOT NULL, action VARCHAR(40) NOT NULL, reason TEXT NULL, metadata JSON NULL,
+  oldValue JSON NULL, newValue JSON NULL, ipAddress VARCHAR(64) NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   KEY idx_admin_audit_actor (adminUserId), KEY idx_admin_audit_entity (entityType, entityId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CALL bricky_moderation_add_column('admin_audit_logs', 'oldValue', 'ALTER TABLE admin_audit_logs ADD COLUMN oldValue JSON NULL');
+CALL bricky_moderation_add_column('admin_audit_logs', 'newValue', 'ALTER TABLE admin_audit_logs ADD COLUMN newValue JSON NULL');
+CALL bricky_moderation_add_column('admin_audit_logs', 'ipAddress', 'ALTER TABLE admin_audit_logs ADD COLUMN ipAddress VARCHAR(64) NULL');
 INSERT INTO bricky_schema_migrations (version, description) VALUES ('20260705_002_moderation_gate', 'Add moderation gate and audit log') ON DUPLICATE KEY UPDATE description = VALUES(description);
 DROP PROCEDURE IF EXISTS bricky_moderation_add_column;
 DROP PROCEDURE IF EXISTS bricky_moderation_backfill;

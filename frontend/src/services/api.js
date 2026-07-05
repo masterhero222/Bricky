@@ -44,6 +44,6 @@ export const apiPut = (url, data, config) =>
   shouldUseMock(url) ? mockRequest("put", url, data) : api.put(url, data, config);
 
 export const apiDelete = (url, config) =>
-  shouldUseMock(url) ? mockRequest("delete", url) : api.delete(url, config);
+  shouldUseMock(url) ? mockRequest("delete", url, config?.data) : api.delete(url, config);
 
 export default api;

@@ -169,7 +169,7 @@ function seedDb() {
         description: "Тече под мивката в кухнята.",
         status: "нова",
         photos: [
-          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
+          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", moderationStatus: "pending_review", created_at: nowIso() },
           { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
         ],
         beforePhotos: [
@@ -253,6 +253,7 @@ function seedDb() {
         category: "Освежителен ремонт",
         description: "Освежаване на дневна и коридор, нужни са шпакловка и боя.",
         status: "нова",
+        moderationStatus: "pending_review",
         photos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
         beforePhotos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
         afterPhotos: [],
@@ -393,6 +394,7 @@ function currentUser() {
   const role = localStorage.getItem("role") || "client";
   const id = Number(localStorage.getItem("userId")) || (role === "worker" ? 201 : 101);
   const db = readDb();
+  if (role === "admin") return { id: id || 999, role: "admin", name: "Bricky Admin", email: "admin@bricky.dev" };
   const user = role === "worker" ? db.workers.find((w) => Number(w.userId) === id) : db.clients.find((c) => Number(c.id) === id);
   return user || { id, userId: id, role, name: role === "worker" ? "Dev Worker" : "Dev Client" };
 }
@@ -622,7 +624,9 @@ export function isDevMockToken() {
 
 export function setDevIdentity(role, id) {
   const db = readDb();
-  const user = role === "worker" ? db.workers.find((w) => Number(w.userId) === Number(id)) : db.clients.find((c) => Number(c.id) === Number(id));
+  const user = role === "admin"
+    ? { id: Number(id) || 999, role: "admin", name: "Bricky Admin", email: "admin@bricky.dev" }
+    : role === "worker" ? db.workers.find((w) => Number(w.userId) === Number(id)) : db.clients.find((c) => Number(c.id) === Number(id));
   if (!user) return null;
 
   const userId = role === "worker" ? user.userId : user.id;
@@ -641,7 +645,7 @@ export function resetDevDb() {
 
 export function getDevIdentities() {
   const db = readDb();
-  return { clients: db.clients, workers: db.workers };
+  return { clients: db.clients, workers: db.workers, admins: [{ id: 999, role: "admin", name: "Bricky Admin" }] };
 }
 
 export async function mockRequest(method, url, data) {
@@ -651,9 +655,85 @@ export async function mockRequest(method, url, data) {
   const role = localStorage.getItem("role") || user.role;
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
 
+  if (path.startsWith("/admin")) {
+    if (role !== "admin") return fail("Admin only", 403);
+    const params = new URL(String(url || ""), window.location.origin).searchParams;
+    const wantedStatus = params.get("status") || "pending_review";
+    const query = String(params.get("q") || "").toLowerCase();
+    const page = Math.max(1, Number(params.get("page")) || 1);
+    const limit = Math.max(1, Number(params.get("limit")) || 25);
+    const normalizeStatus = (item, fallback = "approved") => item.moderationStatus || fallback;
+    const pageRows = (rows) => rows
+      .filter((item) => normalizeStatus(item) === wantedStatus)
+      .filter((item) => !query || JSON.stringify(item).toLowerCase().includes(query))
+      .slice((page - 1) * limit, page * limit);
+    const requestRows = db.requests.map((item, index) => ({ ...item, moderationStatus: normalizeStatus(item, index === 0 ? "pending_review" : "approved") }));
+    const workerRows = db.workers.map((item, index) => ({ ...item, moderationStatus: normalizeStatus(item, index === 1 ? "pending_review" : "approved") }));
+    const reviewRows = db.reviews.map((item, index) => ({ ...item, moderationStatus: normalizeStatus(item, index === 0 ? "pending_review" : "approved") }));
+    const mediaRows = requestRows.flatMap((requestItem) => (requestItem.photos || []).map((photo, index) => ({
+      ...photo, id: `${requestItem.id}-${index}`, requestId: requestItem.id, source: "request",
+      moderationStatus: photo.moderationStatus || requestItem.moderationStatus,
+    })));
+
+    if (method === "get" && path === "/admin/dashboard") return response({
+      pendingRequests: requestRows.filter((item) => item.moderationStatus === "pending_review").length,
+      pendingMedia: mediaRows.filter((item) => item.moderationStatus === "pending_review").length,
+      pendingWorkers: workerRows.filter((item) => item.moderationStatus === "pending_review").length,
+      pendingReviews: reviewRows.filter((item) => item.moderationStatus === "pending_review").length,
+      activeRequests: requestRows.filter((item) => item.moderationStatus === "approved" && !item.completedAt).length,
+      completedRequests: requestRows.filter((item) => item.moderationStatus === "approved" && item.completedAt).length,
+      activeUsers: db.clients.length + db.workers.length,
+      activeWorkers: workerRows.filter((item) => item.moderationStatus === "approved").length,
+      recentActions: [],
+      systemHealth: { api: "ok", database: "mock" },
+    });
+    if (method === "get" && path === "/admin/requests") return response(pageRows(requestRows));
+    if (method === "get" && path === "/admin/media") return response(pageRows(mediaRows));
+    if (method === "get" && path === "/admin/workers") return response(pageRows(workerRows));
+    if (method === "get" && path === "/admin/reviews") return response(pageRows(reviewRows));
+    const requestEdit = path.match(/^\/admin\/requests\/(\d+)$/);
+    if (method === "put" && requestEdit) {
+      const item = db.requests.find((entry) => Number(entry.id) === Number(requestEdit[1]));
+      if (!item) return fail("Item not found", 404);
+      ["category", "categoryKey", "description", "address"].forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(data || {}, field)) item[field] = data[field];
+      });
+      writeDb(db); return response(item);
+    }
+    if (method === "delete" && requestEdit) {
+      const index = db.requests.findIndex((entry) => Number(entry.id) === Number(requestEdit[1]));
+      if (index < 0) return fail("Item not found", 404);
+      db.requests.splice(index, 1);
+      writeDb(db); return response({ ok: true, id: Number(requestEdit[1]), reason: data?.reason || null });
+    }
+    const actionMatch = path.match(/^\/admin\/(requests|reviews)\/(\d+)\/(approved|rejected|hidden)$/);
+    if (method === "post" && actionMatch) {
+      const collection = actionMatch[1] === "requests" ? db.requests : db.reviews;
+      const item = collection.find((entry) => Number(entry.id) === Number(actionMatch[2]));
+      if (!item) return fail("Item not found", 404);
+      item.moderationStatus = actionMatch[3]; item.moderationReason = data?.reason || null;
+      writeDb(db); return response(item, 201);
+    }
+    const mediaAction = path.match(/^\/admin\/media\/(\d+)-(\d+)\/(approved|rejected|hidden)$/);
+    if (method === "post" && mediaAction) {
+      const requestItem = db.requests.find((entry) => Number(entry.id) === Number(mediaAction[1]));
+      const photo = requestItem?.photos?.[Number(mediaAction[2])];
+      if (!photo) return fail("Media not found", 404);
+      photo.moderationStatus = mediaAction[3]; photo.moderationReason = data?.reason || null;
+      writeDb(db); return response(photo, 201);
+    }
+    const workerAction = path.match(/^\/admin\/workers\/(\d+)\/(profile|avatar)\/(approved|rejected|hidden)$/);
+    if (method === "post" && workerAction) {
+      const item = db.workers.find((entry) => Number(entry.id) === Number(workerAction[1]));
+      if (!item) return fail("Worker not found", 404);
+      item.moderationStatus = workerAction[3]; item.moderationReason = data?.reason || null;
+      writeDb(db); return response(item, 201);
+    }
+  }
+
   if (method === "post" && path === "/auth/dev-login") {
-    const loginRole = data?.role === "worker" ? "worker" : "client";
-    const first = loginRole === "worker" ? db.workers[0] : db.clients[0];
+    const loginRole = data?.role === "admin" ? "admin" : data?.role === "worker" ? "worker" : "client";
+    const first = loginRole === "admin" ? { id: 999, role: "admin", name: "Bricky Admin" } : loginRole === "worker" ? db.workers[0] : db.clients[0];
     setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
     return response({ token: localStorage.getItem("token"), user: publicUser(first) });
   }

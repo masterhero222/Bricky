@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { ModerationStatus } from '../moderation/moderation.types';
 import { AdminRoleGuard } from './admin-role.guard';
@@ -23,31 +23,41 @@ export class AdminController {
 
   @Post('requests/:id/:action')
   requestAction(@Req() req: any, @Param('id') id: string, @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {
-    return this.admin.moderateRequest(Number(id), action, Number(req.user.id), body?.reason);
+    return this.admin.moderateRequest(Number(id), action, Number(req.user.id), body?.reason, req.ip);
+  }
+
+  @Put('requests/:id')
+  editRequest(@Req() req: any, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.admin.editRequest(Number(id), body, Number(req.user.id), String(body?.reason || ''), req.ip);
+  }
+
+  @Delete('requests/:id')
+  deleteRequest(@Req() req: any, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.admin.deleteRequest(Number(id), Number(req.user.id), body?.reason, req.ip);
   }
 
   @Post('media/:id/:action')
   mediaAction(@Req() req: any, @Param('id') id: string, @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {
-    return this.admin.moderateMedia(Number(id), action, Number(req.user.id), body?.reason);
+    return this.admin.moderateMedia(Number(id), action, Number(req.user.id), body?.reason, req.ip);
   }
 
   @Post('media/gallery/:id/:action')
   galleryAction(@Req() req: any, @Param('id') id: string, @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {
-    return this.admin.moderateGallery(Number(id), action, Number(req.user.id), body?.reason);
+    return this.admin.moderateGallery(Number(id), action, Number(req.user.id), body?.reason, req.ip);
   }
 
   @Post('workers/:id/:target/:action')
   workerAction(@Req() req: any, @Param('id') id: string, @Param('target') target: 'profile' | 'avatar', @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {
-    return this.admin.moderateWorker(Number(id), target, action, Number(req.user.id), body?.reason);
+    return this.admin.moderateWorker(Number(id), target, action, Number(req.user.id), body?.reason, req.ip);
   }
 
   @Post('reviews/:id/:action')
   reviewAction(@Req() req: any, @Param('id') id: string, @Param('action') action: ModerationStatus, @Body() body: { reason?: string }) {
-    return this.admin.moderateReview(Number(id), action, Number(req.user.id), body?.reason);
+    return this.admin.moderateReview(Number(id), action, Number(req.user.id), body?.reason, req.ip);
   }
 
   @Post('users/:id/:action')
   userAction(@Req() req: any, @Param('id') id: string, @Param('action') action: 'activate' | 'suspend', @Body() body: { reason?: string }) {
-    return this.admin.setUserStatus(Number(id), action, Number(req.user.id), body?.reason);
+    return this.admin.setUserStatus(Number(id), action, Number(req.user.id), body?.reason, req.ip);
   }
 }

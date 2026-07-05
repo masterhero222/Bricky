@@ -463,6 +463,17 @@
 
 ## Cleanup
 
+### Sprint 2 moderation gate
+
+- DONE: role-protected `/admin` and `/api/admin` surfaces.
+- DONE: separate lifecycle status from `pending_review`, `approved`, `rejected`, and `hidden` publication moderation.
+- DONE: moderate requests, request media, worker profiles, avatars, galleries, and reviews.
+- DONE: hide unapproved content from worker/public surfaces while preserving owner visibility.
+- DONE: client correction and resubmission after rejection.
+- DONE: dashboard counters, queues, detail view, search, status filters, pagination, approve/reject/hide, controlled request edit, and spam deletion.
+- DONE: immutable admin audit records include actor, action, target, old/new values, reason, request IP, and timestamp.
+- OPTIONAL NEXT: add standardized reason presets and a dedicated account-management tab in the admin UI.
+
 - DONE in mock v0.2: request browser geolocation permission when the client reaches the location step; store GPS coordinates when allowed and fall back to one exact-address field when denied or unavailable.
 - DONE in mock v0.2: remove the Sofia district dropdown so the client address is not classified under an incorrect neighborhood.
 

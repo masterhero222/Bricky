@@ -434,6 +434,30 @@ export class RequestsService {
     return this.hydrateManyRequestImages(requests, true);
   }
 
+  async resubmitRequest(requestId: number, clientUserId: number, patch: Record<string, unknown>) {
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+    if (Number(request.client?.id) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (!['rejected', 'hidden'].includes(request.moderationStatus)) {
+      throw new BadRequestException('Only rejected or hidden requests can be resubmitted');
+    }
+    const editableFields = ['category', 'categoryKey', 'description', 'address'] as const;
+    if (!editableFields.some((field) => Object.prototype.hasOwnProperty.call(patch, field))) {
+      throw new BadRequestException('At least one corrected field is required');
+    }
+    for (const field of editableFields) {
+      if (Object.prototype.hasOwnProperty.call(patch, field)) {
+        const value = patch[field];
+        (request as any)[field] = value == null ? null : String(value).trim();
+      }
+    }
+    request.moderationStatus = 'pending_review';
+    request.moderationReason = null;
+    request.moderatedByUserId = null;
+    request.moderatedAt = null;
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
+
   async getMapRequests(user: any) {
     const role = String(user?.role || '');
     const userId = Number(user?.id);
