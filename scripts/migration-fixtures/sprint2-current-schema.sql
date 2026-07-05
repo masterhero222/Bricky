@@ -54,6 +54,21 @@ CREATE TABLE worker_gallery_images (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE worker (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, userId INT NOT NULL, fullName VARCHAR(255) NULL,
+  email VARCHAR(255) NULL, password VARCHAR(255) NULL, phone VARCHAR(255) NULL, city VARCHAR(255) NULL,
+  skills TEXT NULL, description TEXT NULL, experience TEXT NULL, equipment TEXT NULL,
+  avatarUrl VARCHAR(255) NULL, isApproved TINYINT(1) NOT NULL DEFAULT 0,
+  createdAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE reviews (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, requestId INT NOT NULL, workerUserId INT NOT NULL,
+  clientUserId INT NOT NULL, rating INT NOT NULL, comment TEXT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), completedAt DATETIME NULL,
+  completedByWorkerId INT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 INSERT INTO users (id, name, email, password, role) VALUES
   (1008, 'Sprint Client', 'client@example.test', 'not-a-real-password', 'client'),
   (1011, 'Sprint Worker', 'worker@example.test', 'not-a-real-password', 'worker');

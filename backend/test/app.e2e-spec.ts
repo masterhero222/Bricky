@@ -123,6 +123,44 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(201);
     adminToken = adminLogin.body.token;
 
+    const hiddenWorkers = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(hiddenWorkers.body).toHaveLength(0);
+    const pendingWorkers = await request(app.getHttpServer())
+      .get('/admin/workers?status=pending_review')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(pendingWorkers.body).toHaveLength(2);
+    for (const worker of pendingWorkers.body) {
+      await request(app.getHttpServer())
+        .post(`/admin/workers/${worker.id}/profile/approved`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({})
+        .expect(201);
+    }
+    const publicWorkers = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(publicWorkers.body).toHaveLength(2);
+
+    const users = await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(users.body.every((user: any) => !Object.prototype.hasOwnProperty.call(user, 'password'))).toBe(true);
+    const otherWorker = users.body.find((user: any) => user.email === otherWorkerEmail);
+    await request(app.getHttpServer())
+      .post(`/admin/users/${otherWorker.id}/suspend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'E2E moderation check' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: otherWorkerEmail, password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/admin/users/${otherWorker.id}/activate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
+
     expect(clientToken).toBeTruthy();
     expect(workerToken).toBeTruthy();
     expect(otherWorkerToken).toBeTruthy();
@@ -358,6 +396,23 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(review.body.workerUserId).toBe(workerUserId);
     expect(review.body.rating).toBe(5);
 
+    const hiddenRating = await request(app.getHttpServer())
+      .get(`/reviews/worker/${workerUserId}`)
+      .expect(200);
+    expect(hiddenRating.body.total).toBe(0);
+
+    const pendingReviews = await request(app.getHttpServer())
+      .get('/admin/reviews?status=pending_review')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const pendingReview = pendingReviews.body.find((item: any) => item.id === review.body.id);
+    expect(pendingReview).toBeTruthy();
+    await request(app.getHttpServer())
+      .post(`/admin/reviews/${review.body.id}/approved`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
+
     await request(app.getHttpServer())
       .post('/reviews')
       .set('Authorization', `Bearer ${clientToken}`)
@@ -369,5 +424,15 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(200);
     expect(publicRating.body.total).toBe(1);
     expect(publicRating.body.average).toBe(5);
+
+    const audit = await request(app.getHttpServer())
+      .get('/admin/audit-logs')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(audit.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entityType: 'request', entityId: requestId, action: 'approved' }),
+      expect.objectContaining({ entityType: 'review', entityId: review.body.id, action: 'approved' }),
+      expect.objectContaining({ entityType: 'user', entityId: otherWorker.id, action: 'suspend' }),
+    ]));
   });
 });

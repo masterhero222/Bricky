@@ -76,7 +76,7 @@ export class WorkersService {
 
   async findByUserId(userId: number) {
     const worker = await this.workerRepository.findOne({ where: { userId } });
-    return worker ? this.withGallerySummary(worker) : worker;
+    return worker ? this.withGallerySummary(worker, true) : worker;
   }
 
   /**
@@ -94,6 +94,7 @@ export class WorkersService {
     if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
 
     if (!worker) throw new NotFoundException('Worker not found');
+    if (worker.moderationStatus !== 'approved') throw new NotFoundException('Worker not found');
     return this.withGallerySummary(worker);
   }
 
@@ -113,6 +114,14 @@ export class WorkersService {
       city: data.city ?? null,
       skills: data.skills ?? [],
       isApproved: false,
+      moderationStatus: 'pending_review',
+      moderationReason: null,
+      moderatedByUserId: null,
+      moderatedAt: null,
+      avatarModerationStatus: 'pending_review',
+      avatarModerationReason: null,
+      avatarModeratedByUserId: null,
+      avatarModeratedAt: null,
     } as any);
 
     const saved = (await this.workerRepository.save(worker as any)) as Worker;
@@ -157,12 +166,29 @@ export class WorkersService {
   }
 
   async updateProfileByUserId(userId: number, data: Partial<Worker>) {
-    await this.workerRepository.update({ userId }, data as any);
+    const profileFields = ['fullName', 'city', 'skills', 'description', 'experience', 'equipment'];
+    const touchesProfile = profileFields.some((field) => Object.prototype.hasOwnProperty.call(data, field));
+    const touchesAvatar = Object.prototype.hasOwnProperty.call(data, 'avatarUrl');
+    const update: Partial<Worker> = { ...data };
+    if (touchesProfile) {
+      update.moderationStatus = 'pending_review';
+      update.moderationReason = null;
+      update.moderatedByUserId = null;
+      update.moderatedAt = null;
+      update.isApproved = false;
+    }
+    if (touchesAvatar) {
+      update.avatarModerationStatus = 'pending_review';
+      update.avatarModerationReason = null;
+      update.avatarModeratedByUserId = null;
+      update.avatarModeratedAt = null;
+    }
+    await this.workerRepository.update({ userId }, update as any);
     return this.findByUserId(userId);
   }
 
   async getAll() {
-    const workers = await this.workerRepository.find();
+    const workers = await this.workerRepository.find({ where: { moderationStatus: 'approved' } });
     return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
@@ -217,7 +243,7 @@ export class WorkersService {
     return { ok: true };
   }
 
-  async getHistoryByUserId(userId: number) {
+  async getHistoryByUserId(userId: number, includeUnapproved = false) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
@@ -227,15 +253,20 @@ export class WorkersService {
       order: { completedAt: 'DESC', created_at: 'DESC' },
     });
 
-    return this.hydrateHistoryImages(rows.filter((request) => this.isCompletedRequest(request, uid)));
+    return this.hydrateHistoryImages(
+      rows.filter((request) => this.isCompletedRequest(request, uid) && (includeUnapproved || request.moderationStatus === 'approved')),
+      includeUnapproved,
+    );
   }
 
-  private async hydrateHistoryImages(requests: RequestEntity[]) {
+  private async hydrateHistoryImages(requests: RequestEntity[], includeUnapproved = false) {
     const requestIds = requests.map((request) => Number(request.id)).filter(Boolean);
     if (requestIds.length === 0) return requests;
 
     const imageRows = await this.requestImageRepo.find({
-      where: { requestId: In(requestIds), moderationStatus: 'approved' },
+      where: includeUnapproved
+        ? { requestId: In(requestIds) }
+        : { requestId: In(requestIds), moderationStatus: 'approved' },
       order: { requestId: 'ASC', kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
     });
 
@@ -275,18 +306,20 @@ export class WorkersService {
     });
   }
 
-  private async withGallerySummary(worker: Worker) {
+  private async withGallerySummary(worker: Worker, includeUnapproved = false) {
     const userId = Number(worker?.userId);
     if (!userId) return worker;
 
     const [gallery, completedJobs] = await Promise.all([
-      this.getGalleryByUserId(userId).catch(() => []),
-      this.getHistoryByUserId(userId).catch(() => []),
+      this.getGalleryByUserId(userId, includeUnapproved).catch(() => []),
+      this.getHistoryByUserId(userId, includeUnapproved).catch(() => []),
     ]);
 
     return {
       ...worker,
-      avatarUrl: this.normalizeUploadUrl(worker.avatarUrl),
+      avatarUrl: includeUnapproved || worker.avatarModerationStatus === 'approved'
+        ? this.normalizeUploadUrl(worker.avatarUrl)
+        : '',
       gallery,
       completedJobs,
     };

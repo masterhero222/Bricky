@@ -9,8 +9,10 @@
   - DONE: JWT + admin-role protected request/media queues and audit log;
   - DONE: `/admin` request/media queue with approve, reject, hide, reason, and counters;
   - DONE: additive/idempotent migration and rollback package;
-  - NEXT: move worker avatar/gallery/portfolio into the canonical media queue;
-  - NEXT: add worker profile and review moderation actions;
+  - DONE: worker profiles, avatars, gallery, completed-job media, and reviews require approval publicly;
+  - DONE: account suspend/activate actions and password-safe admin user listing;
+  - NEXT: invalidate already-issued JWT sessions when an account is suspended;
+  - NEXT: consolidate media records into one canonical media asset table;
   - NEXT: add queue pagination/search and automated content-scanning hooks;
   - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.
 

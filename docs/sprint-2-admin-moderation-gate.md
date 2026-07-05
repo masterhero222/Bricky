@@ -20,15 +20,22 @@ Existing production rows are backfilled to `approved` once during migration so t
 - `POST /api/admin/requests/:id/approved|rejected|hidden`
 - `GET /api/admin/media?status=pending_review`
 - `POST /api/admin/media/:id/approved|rejected|hidden`
+- `GET /api/admin/workers?status=pending_review`
+- `POST /api/admin/workers/:id/profile/approved|rejected|hidden`
+- `POST /api/admin/workers/:id/avatar/approved|rejected|hidden`
+- `GET /api/admin/reviews?status=pending_review`
+- `POST /api/admin/reviews/:id/approved|rejected|hidden`
+- `GET /api/admin/users`
+- `POST /api/admin/users/:id/suspend|activate`
 - `GET /api/admin/audit-logs`
 
 Every endpoint requires a valid JWT and `users.role = admin`. Public registration cannot create an admin. Every mutation stores actor, target, action, reason, and timestamp in `admin_audit_logs`.
 
-Worker request feeds and the request map return only approved requests. Request images shown to workers return only approved media. Owners retain access to their pending/rejected request content. Public worker gallery and history reads return approved media; the worker's own gallery retains all moderation states.
+Worker request feeds and the request map return only approved requests. Request images shown to workers return only approved media. Owners retain access to their pending/rejected request content. Public worker profiles, avatars, gallery, completed-job media, and reviews require approval; owners retain all moderation states in their own profile surfaces. Suspended accounts cannot create a new login session. Admin user responses never include password hashes.
 
 ## Frontend
 
-`/admin` provides request and media queues, pending counters, previews, approve, reject, and hide actions. Reject/hide require a reason. The route and navigation entry are restricted to the admin role.
+`/admin` provides request, media, worker profile, and review queues, pending counters, previews, approve, reject, and hide actions. Reject/hide require a reason. The route and navigation entry are restricted to the admin role.
 
 ## Database rollout
 
@@ -46,10 +53,9 @@ The second migration is additive and has a matching down migration. Rehearsal ru
 - 37 backend unit tests, including admin guard, moderation mutation, and audit behavior
 - MySQL E2E updated to prove pending requests are absent from the worker feed, non-admin access returns 403, approval makes the request/media visible, and lifecycle continues afterward
 
-## Remaining moderation scope
+## Remaining hardening scope
 
-- Extend the admin media queue actions from request images to worker gallery/avatar/portfolio records through one canonical media asset model.
-- Add worker profile and review queue actions.
 - Add pagination, search, reason presets, and richer audit metadata.
 - Add content scanning hooks before human review; automated decisions must not bypass the audit trail.
-
+- Invalidate already-issued JWT sessions immediately when an account is suspended.
+- Consolidate request/gallery/avatar rows into one canonical media asset model in a later additive migration.

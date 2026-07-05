@@ -149,7 +149,7 @@ export class WorkersController {
   @Get('me/history')
   async myHistory(@Req() req: any) {
     const userId = Number(req.user.id);
-    return this.workersService.getHistoryByUserId(userId);
+    return this.workersService.getHistoryByUserId(userId, true);
   }
 
   @Get(':userId/gallery')

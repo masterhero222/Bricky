@@ -20,6 +20,19 @@ CALL bricky_moderation_add_column('worker_gallery_images', 'moderationStatus', '
 CALL bricky_moderation_add_column('worker_gallery_images', 'moderationReason', 'ALTER TABLE worker_gallery_images ADD COLUMN moderationReason TEXT NULL');
 CALL bricky_moderation_add_column('worker_gallery_images', 'moderatedByUserId', 'ALTER TABLE worker_gallery_images ADD COLUMN moderatedByUserId INT NULL');
 CALL bricky_moderation_add_column('worker_gallery_images', 'moderatedAt', 'ALTER TABLE worker_gallery_images ADD COLUMN moderatedAt DATETIME NULL');
+CALL bricky_moderation_add_column('worker', 'moderationStatus', 'ALTER TABLE worker ADD COLUMN moderationStatus VARCHAR(30) NOT NULL DEFAULT ''pending_review''');
+CALL bricky_moderation_add_column('worker', 'moderationReason', 'ALTER TABLE worker ADD COLUMN moderationReason TEXT NULL');
+CALL bricky_moderation_add_column('worker', 'moderatedByUserId', 'ALTER TABLE worker ADD COLUMN moderatedByUserId INT NULL');
+CALL bricky_moderation_add_column('worker', 'moderatedAt', 'ALTER TABLE worker ADD COLUMN moderatedAt DATETIME NULL');
+CALL bricky_moderation_add_column('worker', 'avatarModerationStatus', 'ALTER TABLE worker ADD COLUMN avatarModerationStatus VARCHAR(30) NOT NULL DEFAULT ''pending_review''');
+CALL bricky_moderation_add_column('worker', 'avatarModerationReason', 'ALTER TABLE worker ADD COLUMN avatarModerationReason TEXT NULL');
+CALL bricky_moderation_add_column('worker', 'avatarModeratedByUserId', 'ALTER TABLE worker ADD COLUMN avatarModeratedByUserId INT NULL');
+CALL bricky_moderation_add_column('worker', 'avatarModeratedAt', 'ALTER TABLE worker ADD COLUMN avatarModeratedAt DATETIME NULL');
+CALL bricky_moderation_add_column('reviews', 'moderationStatus', 'ALTER TABLE reviews ADD COLUMN moderationStatus VARCHAR(30) NOT NULL DEFAULT ''pending_review''');
+CALL bricky_moderation_add_column('reviews', 'moderationReason', 'ALTER TABLE reviews ADD COLUMN moderationReason TEXT NULL');
+CALL bricky_moderation_add_column('reviews', 'moderatedByUserId', 'ALTER TABLE reviews ADD COLUMN moderatedByUserId INT NULL');
+CALL bricky_moderation_add_column('reviews', 'moderatedAt', 'ALTER TABLE reviews ADD COLUMN moderatedAt DATETIME NULL');
+CALL bricky_moderation_add_column('users', 'accountStatus', 'ALTER TABLE users ADD COLUMN accountStatus VARCHAR(30) NOT NULL DEFAULT ''active''');
 DELIMITER //
 DROP PROCEDURE IF EXISTS bricky_moderation_backfill//
 CREATE PROCEDURE bricky_moderation_backfill()
@@ -28,6 +41,8 @@ BEGIN
     UPDATE requests SET moderationStatus = 'approved', moderatedAt = COALESCE(moderatedAt, NOW()) WHERE moderationStatus = 'pending_review';
     UPDATE request_images SET moderationStatus = 'approved', isApproved = 1, moderatedAt = COALESCE(moderatedAt, NOW()) WHERE moderationStatus = 'pending_review';
     UPDATE worker_gallery_images SET moderationStatus = 'approved', moderatedAt = COALESCE(moderatedAt, NOW()) WHERE moderationStatus = 'pending_review';
+    UPDATE worker SET moderationStatus = 'approved', avatarModerationStatus = 'approved', isApproved = 1, moderatedAt = COALESCE(moderatedAt, NOW()), avatarModeratedAt = COALESCE(avatarModeratedAt, NOW()) WHERE moderationStatus = 'pending_review' OR avatarModerationStatus = 'pending_review';
+    UPDATE reviews SET moderationStatus = 'approved', moderatedAt = COALESCE(moderatedAt, NOW()) WHERE moderationStatus = 'pending_review';
   END IF;
 END//
 DELIMITER ;

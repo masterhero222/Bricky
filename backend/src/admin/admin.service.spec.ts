@@ -3,8 +3,12 @@ import { AdminService } from './admin.service';
 describe('AdminService', () => {
   const requests: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
   const media: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
+  const workers: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
+  const gallery: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
+  const reviews: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
+  const users: any = { findOne: jest.fn(), save: jest.fn(), find: jest.fn() };
   const audit: any = { create: jest.fn((value) => value), save: jest.fn(), find: jest.fn() };
-  const service = new AdminService(requests, media, audit);
+  const service = new AdminService(requests, media, workers, gallery, reviews, users, audit);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -19,6 +23,21 @@ describe('AdminService', () => {
     expect(request.moderationStatus).toBe('approved');
     expect(request.moderatedByUserId).toBe(99);
     expect(audit.save).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'request', entityId: 7, action: 'approved' }));
+  });
+
+  it('approves worker profiles and keeps the legacy flag aligned', async () => {
+    const worker: any = { id: 4, moderationStatus: 'pending_review', isApproved: false };
+    workers.findOne.mockResolvedValue(worker);
+    workers.save.mockImplementation((value) => value);
+    audit.save.mockImplementation((value) => value);
+    await service.moderateWorker(4, 'profile', 'approved', 99);
+    expect(worker.isApproved).toBe(true);
+    expect(audit.save).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'worker_profile' }));
+  });
+
+  it('never returns password hashes from the user queue', async () => {
+    users.find.mockResolvedValue([{ id: 1, email: 'user@example.test', password: 'secret', role: 'client' }]);
+    await expect(service.listUsers()).resolves.toEqual([{ id: 1, email: 'user@example.test', role: 'client' }]);
   });
 
   it('keeps media approval compatibility in sync', async () => {

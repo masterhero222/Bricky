@@ -59,6 +59,10 @@ export class ReviewsService {
       clientUserId,
       rating,
       comment: dto.comment?.trim() ? dto.comment.trim() : null,
+      moderationStatus: 'pending_review',
+      moderationReason: null,
+      moderatedByUserId: null,
+      moderatedAt: null,
     });
 
     return this.reviewsRepo.save(review);
@@ -80,7 +84,7 @@ export class ReviewsService {
     if (!wid) throw new BadRequestException('Invalid workerUserId');
 
     const items = await this.reviewsRepo.find({
-      where: { workerUserId: wid },
+      where: { workerUserId: wid, moderationStatus: 'approved' },
       order: { created_at: 'DESC' },
     });
 
