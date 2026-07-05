@@ -1,9 +1,9 @@
-name: Sprint 1 verification
+name: Bricky verification
 
 on:
   push:
     branches:
-      - codex/sprint-1-request-stabilization
+      - "codex/sprint-*"
   pull_request:
     branches:
       - main
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sprint-1-${{ github.workflow }}-${{ github.ref }}
+  group: bricky-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,5 +41,5 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Run Sprint 1 gate
+      - name: Run Bricky verification gate
         run: node scripts/verify-sprint-1.mjs

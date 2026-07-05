@@ -389,8 +389,8 @@
   - formula/version identifier so the shape is ready for later DB migration.
 - IN PROGRESS: move both mock calculator experiences to the same pricing engine/config:
   - DONE: request wizard estimate;
-  - NEXT: worker profile calculator;
-  - NEXT: remove the remaining duplicate pricing table and direct pricing constants from `WorkerProfile.jsx`.
+  - DONE in Sprint 2: worker profile calculator now uses the shared v0.2 engine, 15-category catalog, activity selection, exact-area handling, and the two canonical pricing modes;
+  - DONE in Sprint 2: removed the duplicate price table, manual labor-per-square-meter input, BGN output, and direct pricing constants from `WorkerProfile.jsx`.
 - DONE in mock v0.2: calculator result model exposes labor, material, expected, possible, and total ranges for the two current pricing modes.
 - HIGH: implement calculation multipliers:
   - size/quantity;

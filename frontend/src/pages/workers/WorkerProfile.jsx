@@ -6,14 +6,9 @@ import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevW
 import LogoutButton from "../../components/LogoutButton";
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
-
-const PRICE_TABLE = {
-  Баня: { material: 140 },
-  "Шпакловка и боя": { material: 18 },
-  Плочки: { material: 40 },
-  ВиК: { material: 55 },
-  Електро: { material: 35 },
-};
+import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
+import { getPricingActivity } from "../../constants/repairPricingConfig";
+import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../../utils/repairPriceCalculator";
 
 function formatBG(dateStr) {
   try {
@@ -104,6 +99,12 @@ function toNum(x) {
   return Number.isFinite(n) ? n : null;
 }
 
+function formatEuroRange(min, max) {
+  const safeMin = Number(min) || 0;
+  const safeMax = Number(max) || 0;
+  return `${safeMin.toLocaleString("bg-BG")}–${safeMax.toLocaleString("bg-BG")} EUR`;
+}
+
 export default function WorkerProfile() {
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -141,13 +142,34 @@ export default function WorkerProfile() {
   const [ratingError, setRatingError] = useState("");
 
   const [calc, setCalc] = useState({
-    type: "",
-    area: "",
-    laborPerM2: "",
-    materials: 0,
-    labor: 0,
-    total: 0,
+    categoryKey: "bathroom_renovation",
+    activities: [],
+    sizeOption: "",
+    exactAreaM2: "",
+    pricingMode: "labor_plus_materials",
   });
+
+  const calcCategory = useMemo(
+    () => REPAIR_CATEGORY_OPTIONS.find((item) => item.key === calc.categoryKey) || REPAIR_CATEGORY_OPTIONS[0],
+    [calc.categoryKey]
+  );
+  const calcFlow = REPAIR_CATEGORY_FLOW[calcCategory.key] || { activities: [], quantityOptions: [] };
+  const calcPricingActivities = useMemo(
+    () => calc.activities.map((item) => getPricingActivity(calcCategory.key, item)).filter(Boolean),
+    [calc.activities, calcCategory.key]
+  );
+  const calcAsksForArea = calcPricingActivities.some((item) => item.areaBased);
+  const calcEstimate = useMemo(
+    () => calculateRepairEstimate({
+      categoryKey: calcCategory.key,
+      selectedActivities: calc.activities,
+      sizeOption: calc.sizeOption,
+      exactAreaM2: calc.exactAreaM2,
+      pricingMode: calc.pricingMode,
+      location: "sofia_regular",
+    }),
+    [calc.activities, calc.exactAreaM2, calc.pricingMode, calc.sizeOption, calcCategory.key]
+  );
 
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -451,23 +473,24 @@ export default function WorkerProfile() {
     }
   };
 
-  const updateCalc = (field, value) => {
-    const next = { ...calc, [field]: value };
-    const areaNum = parseFloat(next.area) || 0;
-    const laborNum = parseFloat(next.laborPerM2) || 0;
-    const conf = PRICE_TABLE[next.type];
+  const selectCalcCategory = (categoryKey) => {
+    const nextFlow = REPAIR_CATEGORY_FLOW[categoryKey] || { quantityOptions: [] };
+    setCalc((prev) => ({
+      ...prev,
+      categoryKey,
+      activities: [],
+      sizeOption: nextFlow.quantityOptions?.[0] || "",
+      exactAreaM2: "",
+    }));
+  };
 
-    if (!conf || !areaNum) {
-      next.materials = 0;
-      next.labor = 0;
-      next.total = 0;
-    } else {
-      next.materials = Math.round(areaNum * conf.material);
-      next.labor = Math.round(areaNum * laborNum);
-      next.total = next.materials + next.labor;
-    }
-
-    setCalc(next);
+  const toggleCalcActivity = (activity) => {
+    setCalc((prev) => ({
+      ...prev,
+      activities: prev.activities.includes(activity)
+        ? prev.activities.filter((item) => item !== activity)
+        : [...prev.activities, activity],
+    }));
   };
 
   // =========================
@@ -1480,55 +1503,116 @@ export default function WorkerProfile() {
         )}
 
         {activeTab === "calculator" && (
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold mb-6">Калкулатор</h1>
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-6">
+              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-cyan-300">Bricky pricing engine v0.2</p>
+              <h1 className="mt-2 text-3xl font-bold">Калкулатор</h1>
+              <p className="mt-2 text-sm text-gray-300">Ориентир за труд или труд и материали по същите правила, които използва заявката.</p>
+            </div>
 
-            <div className="bg-gray-800 p-6 rounded-xl space-y-4 border border-gray-700">
-              <h2 className="text-2xl font-bold">Bricky Калкулатор</h2>
+            <div className="space-y-6 rounded-xl border border-gray-700 bg-gray-800 p-6">
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-gray-200">Тип ремонт</span>
+                <select
+                  value={calc.categoryKey}
+                  onChange={(e) => selectCalcCategory(e.target.value)}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                >
+                  {REPAIR_CATEGORY_OPTIONS.map((item) => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </select>
+              </label>
 
-              <select
-                value={calc.type}
-                onChange={(e) => updateCalc("type", e.target.value)}
-                className="w-full p-3 rounded bg-gray-700"
-              >
-                <option value="">Тип ремонт</option>
-                {Object.keys(PRICE_TABLE).map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="number"
-                  value={calc.area}
-                  onChange={(e) => updateCalc("area", e.target.value)}
-                  placeholder="Площ (кв.м)"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
-                <input
-                  type="number"
-                  value={calc.laborPerM2}
-                  onChange={(e) => updateCalc("laborPerM2", e.target.value)}
-                  placeholder="Цена за труд / кв.м"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
+              <div>
+                <div className="mb-3 text-sm font-bold text-gray-200">Дейности</div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {calcFlow.activities.map((activity) => {
+                    const selected = calc.activities.includes(activity);
+                    return (
+                      <label
+                        key={activity}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${selected ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900 hover:border-gray-500"}`}
+                      >
+                        <input type="checkbox" checked={selected} onChange={() => toggleCalcActivity(activity)} />
+                        <span className="font-semibold">{activity}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="bg-gray-900 p-4 rounded-xl space-y-2">
-                <div className="flex justify-between">
-                  <span>Материали:</span>
-                  <span>{calc.materials} лв</span>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-bold text-gray-200">Приблизителен обхват</span>
+                  <select
+                    value={calc.sizeOption}
+                    onChange={(e) => setCalc((prev) => ({ ...prev, sizeOption: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                  >
+                    <option value="">Избери обхват</option>
+                    {calcFlow.quantityOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </label>
+
+                {calcAsksForArea && (
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-bold text-gray-200">Точна площ (кв.м)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max={MAX_EXACT_AREA_M2}
+                      step="0.1"
+                      value={calc.exactAreaM2}
+                      onChange={(e) => setCalc((prev) => ({ ...prev, exactAreaM2: e.target.value }))}
+                      placeholder="Напр. 24"
+                      className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <fieldset>
+                <legend className="mb-3 text-sm font-bold text-gray-200">Какво да включва ориентирът?</legend>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    ["labor_only", "Труд"],
+                    ["labor_plus_materials", "Труд + материали"],
+                  ].map(([value, label]) => (
+                    <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 ${calc.pricingMode === value ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900"}`}>
+                      <input
+                        type="radio"
+                        name="worker-calculator-pricing-mode"
+                        checked={calc.pricingMode === value}
+                        onChange={() => setCalc((prev) => ({ ...prev, pricingMode: value }))}
+                      />
+                      <span className="font-bold">{label}</span>
+                    </label>
+                  ))}
                 </div>
-                <div className="flex justify-between">
-                  <span>Труд:</span>
-                  <span>{calc.labor} лв</span>
+              </fieldset>
+
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-700 pb-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-gray-400">Най-вероятен ориентир</div>
+                    <div className="mt-1 text-2xl font-black text-green-400">{formatEuroRange(calcEstimate.expectedMin, calcEstimate.expectedMax)}</div>
+                  </div>
+                  <div className="text-right text-xs text-gray-400">Версия {calcEstimate.pricingVersion}</div>
                 </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span>Общо:</span>
-                  <span className="text-green-400 font-bold text-lg">{calc.total} лв</span>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div><span className="block text-gray-400">Труд</span><strong>{formatEuroRange(calcEstimate.laborMin, calcEstimate.laborMax)}</strong></div>
+                  <div><span className="block text-gray-400">Материали</span><strong>{formatEuroRange(calcEstimate.materialMin, calcEstimate.materialMax)}</strong></div>
+                  <div><span className="block text-gray-400">Технически диапазон</span><strong>{formatEuroRange(calcEstimate.possibleMin, calcEstimate.possibleMax)}</strong></div>
                 </div>
+
+                {calcEstimate.warnings?.length > 0 && (
+                  <ul className="mt-4 space-y-1 border-t border-gray-700 pt-4 text-sm text-amber-200">
+                    {calcEstimate.warnings.slice(0, 3).map((warning) => <li key={warning}>• {warning}</li>)}
+                  </ul>
+                )}
+
+                <p className="mt-4 text-xs leading-5 text-gray-400">Ориентировъчна стойност, не оферта. Крайната цена зависи от оглед, достъп, състояние на обекта и избрани материали.</p>
               </div>
             </div>
           </div>
