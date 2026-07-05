@@ -15,6 +15,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
   let otherWorkerToken: string;
   let adminToken: string;
   let workerUserId: number;
+  let otherWorkerUserId: number;
   let requestId: number;
   let persistentBeforePhotoUrl: string;
   let persistentAfterPhotoUrl: string;
@@ -146,6 +147,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(200);
     expect(users.body.every((user: any) => !Object.prototype.hasOwnProperty.call(user, 'password'))).toBe(true);
     const otherWorker = users.body.find((user: any) => user.email === otherWorkerEmail);
+    otherWorkerUserId = otherWorker.id;
     await request(app.getHttpServer())
       .post(`/admin/users/${otherWorker.id}/suspend`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -432,7 +434,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(audit.body).toEqual(expect.arrayContaining([
       expect.objectContaining({ entityType: 'request', entityId: requestId, action: 'approved' }),
       expect.objectContaining({ entityType: 'review', entityId: review.body.id, action: 'approved' }),
-      expect.objectContaining({ entityType: 'user', entityId: otherWorker.id, action: 'suspend' }),
+      expect.objectContaining({ entityType: 'user', entityId: otherWorkerUserId, action: 'suspend' }),
     ]));
   });
 });
