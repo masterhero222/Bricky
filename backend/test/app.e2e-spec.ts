@@ -14,6 +14,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
   let workerToken: string;
   let otherWorkerToken: string;
   let adminToken: string;
+  let clientUserId: number;
   let workerUserId: number;
   let otherWorkerUserId: number;
   let requestId: number;
@@ -99,6 +100,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .send({ email: clientEmail, password })
       .expect(201);
     clientToken = clientLogin.body.token;
+    clientUserId = clientLogin.body.user.id;
 
     const workerLogin = await request(app.getHttpServer())
       .post('/auth/login')
@@ -165,6 +167,9 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .get('/workers/me')
       .set('Authorization', `Bearer ${otherWorkerToken}`)
       .expect(401);
+    const workersWithoutSuspended = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(workersWithoutSuspended.body.map((worker: any) => worker.userId)).not.toContain(otherWorker.id);
+    await request(app.getHttpServer()).get(`/workers/${otherWorker.id}`).expect(404);
     await request(app.getHttpServer())
       .post(`/admin/users/${otherWorker.id}/activate`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -174,6 +179,8 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .get('/workers/me')
       .set('Authorization', `Bearer ${otherWorkerToken}`)
       .expect(200);
+    const workersAfterReactivation = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(workersAfterReactivation.body.map((worker: any) => worker.userId)).toContain(otherWorker.id);
 
     expect(clientToken).toBeTruthy();
     expect(workerToken).toBeTruthy();
@@ -285,6 +292,11 @@ describe('Request lifecycle (MySQL e2e)', () => {
     const rejectedRequest = rejectedOwnerView.body.find((item: any) => item.id === requestId);
     expect(rejectedRequest.moderationStatus).toBe('rejected');
     expect(rejectedRequest.moderationReason).toContain('clarify');
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/assign`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({ workerUserId })
+      .expect(403);
     const rejectedWorkerFeed = await request(app.getHttpServer())
       .get('/requests/worker')
       .set('Authorization', `Bearer ${workerToken}`)
@@ -366,6 +378,69 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(secondApply.body.appliedWorkers).toEqual([workerUserId]);
     expect(typeof secondApply.body.appliedWorkers[0]).toBe('number');
 
+    const galleryUpload = await request(app.getHttpServer())
+      .post('/workers/me/gallery')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('images', png, { filename: 'gallery-delete-check.png', contentType: 'image/png' })
+      .expect(201);
+    const galleryImage = galleryUpload.body.find((image: any) =>
+      String(image.url || '').includes('/uploads/workers/gallery/'),
+    );
+    expect(galleryImage).toBeTruthy();
+    storedKeys.add(String(galleryImage.url).replace(/^\/uploads\//, ''));
+
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/suspend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 assignment enforcement' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/apply`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({})
+      .expect(401);
+    await request(app.getHttpServer())
+      .put('/workers/me')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({ city: 'Blocked update' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/workers/me/gallery')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('images', png, { filename: 'blocked-gallery.png', contentType: 'image/png' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/workers/me/avatar')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('avatar', png, { filename: 'blocked-avatar.png', contentType: 'image/png' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/workers/me/gallery/${galleryImage.id}/delete`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/assign`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({ workerUserId })
+      .expect(403);
+    const publicWorkersWhileSuspended = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(publicWorkersWhileSuspended.body.map((worker: any) => worker.userId)).not.toContain(workerUserId);
+    await request(app.getHttpServer()).get(`/workers/${workerUserId}`).expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/activate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 assignment enforcement passed' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .get('/workers/me')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/workers/me/gallery/${galleryImage.id}/delete`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(201);
+
     const assigned = await request(app.getHttpServer())
       .post(`/requests/${requestId}/assign`)
       .set('Authorization', `Bearer ${clientToken}`)
@@ -380,6 +455,27 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${otherWorkerToken}`)
       .attach('images', png, { filename: 'forbidden.png', contentType: 'image/png' })
       .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/suspend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 completion enforcement' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/images/after`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('images', png, { filename: 'suspended.png', contentType: 'image/png' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/requests/${requestId}/complete`)
+      .set('Authorization', `Bearer ${workerToken}`)
+      .send({ afterPhotos: [] })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/activate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 completion enforcement passed' })
+      .expect(201);
 
     const uploaded = await request(app.getHttpServer())
       .post(`/requests/${requestId}/images/after`)
@@ -479,7 +575,90 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .expect(404);
   });
 
+  it('enforces client suspension, reactivation, and hidden-map visibility', async () => {
+    await request(app.getHttpServer())
+      .post(`/admin/users/${clientUserId}/suspend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 client enforcement' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({
+        clientName: 'Blocked Client', email: clientEmail, phone: '0888000101',
+        address: 'Blocked address', categoryKey: 'vik', description: 'Must not be created',
+      })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/admin/users/${clientUserId}/activate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 client enforcement passed' })
+      .expect(201);
+
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({
+        clientName: 'Reactivated Client', email: clientEmail, phone: '0888000101',
+        address: 'Sofia, Hidden Map 1', categoryKey: 'vik', description: 'Hidden map check',
+        latitude: 42.69, longitude: 23.32, locationSource: 'manual',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/admin/requests/${created.body.id}/approve`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
+    const visibleMap = await request(app.getHttpServer())
+      .get('/requests/map')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(visibleMap.body.map((item: any) => item.id)).toContain(created.body.id);
+
+    await request(app.getHttpServer())
+      .post(`/admin/requests/${created.body.id}/hide`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Hidden map acceptance check' })
+      .expect(201);
+    const hiddenMap = await request(app.getHttpServer())
+      .get('/requests/map')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(hiddenMap.body.map((item: any) => item.id)).not.toContain(created.body.id);
+    await request(app.getHttpServer())
+      .post(`/requests/${created.body.id}/assign`)
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({ workerUserId })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/admin/requests/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Acceptance fixture cleanup' })
+      .expect(200);
+  });
+
   it('allows one review by the owning client after completion', async () => {
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/suspend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 review enforcement' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/reviews')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .send({ requestId, rating: 5, comment: 'Must not be accepted' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(`/reviews/worker/${workerUserId}`)
+      .expect(403);
+    const publicWorkersBeforeReviewReactivation = await request(app.getHttpServer()).get('/workers').expect(200);
+    expect(publicWorkersBeforeReviewReactivation.body.map((worker: any) => worker.userId)).not.toContain(workerUserId);
+    await request(app.getHttpServer())
+      .post(`/admin/users/${workerUserId}/activate`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Sprint 2.1 review enforcement passed' })
+      .expect(201);
+
     const review = await request(app.getHttpServer())
       .post('/reviews')
       .set('Authorization', `Bearer ${clientToken}`)

@@ -10,10 +10,12 @@ import { MailModule } from '../mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkersModule } from '../workers/workers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UserEntity } from '../users/user.entity';
+import { Worker } from '../workers/worker.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RequestEntity, RequestApplicationEntity, RequestImageEntity]),
+    TypeOrmModule.forFeature([RequestEntity, RequestApplicationEntity, RequestImageEntity, UserEntity, Worker]),
     MailModule,
     AuthModule,
     WorkersModule,

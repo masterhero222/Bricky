@@ -61,6 +61,7 @@ The second migration is additive and has a matching down migration. Rehearsal ru
 
 ## Remaining hardening scope
 
+- Complete the Sprint 2.1 enforcement release gate documented in `docs/sprint-2-1-enforcement-layer.md` before production deployment.
 - Add optional reason presets for faster moderation; free-text reasons remain supported.
 - Add content scanning hooks before human review; automated decisions must not bypass the audit trail.
 - Consolidate request/gallery/avatar rows into one canonical media asset model in a later additive migration.

@@ -5,6 +5,7 @@ import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { RequestEntity } from '../requests/entities/request.entity';
 import { RequestImageEntity } from '../requests/entities/request-image.entity';
+import { UserEntity } from '../users/user.entity';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -30,7 +31,29 @@ export class WorkersService {
 
     @InjectRepository(RequestImageEntity)
     private readonly requestImageRepo: Repository<RequestImageEntity>,
+
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
   ) {}
+
+  private async activeWorkerUserIds(userIds: number[]) {
+    const ids = Array.from(new Set(userIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)));
+    if (!ids.length) return new Set<number>();
+    const users = await this.usersRepo.find({
+      where: { id: In(ids), role: 'worker', accountStatus: 'active' },
+      select: { id: true },
+    });
+    return new Set(users.map((user) => Number(user.id)));
+  }
+
+  private async assertPublicWorker(worker: Worker) {
+    if (worker.moderationStatus !== 'approved') throw new NotFoundException('Worker not found');
+    const user = await this.usersRepo.findOne({
+      where: { id: Number(worker.userId), role: 'worker', accountStatus: 'active' },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('Worker not found');
+  }
 
   /**
    * LEGACY: Register worker as standalone account in workers table
@@ -94,7 +117,7 @@ export class WorkersService {
     if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
 
     if (!worker) throw new NotFoundException('Worker not found');
-    if (worker.moderationStatus !== 'approved') throw new NotFoundException('Worker not found');
+    await this.assertPublicWorker(worker);
     return this.withGallerySummary(worker);
   }
 
@@ -139,10 +162,9 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    const workers = await this.workerRepository.find({
-      where: { userId: In(clean) },
-    });
-    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
+    const workers = await this.workerRepository.find({ where: { userId: In(clean), moderationStatus: 'approved' } });
+    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
+    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
   }
 
   async findByIdsSmart(ids: number[]) {
@@ -155,9 +177,10 @@ export class WorkersService {
     if (clean.length === 0) return [];
 
     const workers = await this.workerRepository.find({
-      where: [{ id: In(clean) }, { userId: In(clean) }],
+      where: [{ id: In(clean), moderationStatus: 'approved' }, { userId: In(clean), moderationStatus: 'approved' }],
     });
-    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
+    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
+    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
   }
 
   async updateProfile(id: number, data: Partial<Worker>) {
@@ -189,7 +212,8 @@ export class WorkersService {
 
   async getAll() {
     const workers = await this.workerRepository.find({ where: { moderationStatus: 'approved' } });
-    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
+    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
+    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
   }
 
   // =========================

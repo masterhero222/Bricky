@@ -1,8 +1,24 @@
 # Bricky Sprint 2 Progress
 
-Updated: 2026-07-05  
-Branch: `codex/sprint-2-foundation`  
-Verified release-candidate code commit: `40ce168`
+Updated: 2026-07-06
+Branch: `codex/sprint-2-foundation`
+Verified Sprint 2 baseline commit: `02b6ee4`
+
+## Sprint 2.1 Enforcement Update
+
+The admin panel baseline is complete, but production readiness now includes a separate enforcement audit. Sprint 2.1 makes account suspension, request moderation, worker eligibility, request transitions, and review prerequisites authoritative in backend services rather than relying on frontend visibility.
+
+Implemented locally:
+
+- suspended existing JWT sessions are rejected by database status on every protected request;
+- suspended workers and clients are blocked from their respective mutations;
+- suspended/unapproved workers disappear from all audited public worker lookup paths;
+- pending, rejected, and hidden requests cannot receive applications, assignment, completion, after-photos, or reviews;
+- review creation requires an approved completed request and active participants;
+- reactivation restores permissions without altering history;
+- backend build and 53 unit tests pass.
+
+The expanded MySQL E2E suite is awaiting CI verification. See `docs/sprint-2-1-enforcement-layer.md`.
 
 ## Sprint Objective
 
@@ -100,7 +116,7 @@ Every administrative mutation records:
 - [x] Frontend has no direct database access and no raw SQL is exposed.
 - [x] Payments, credits, subscriptions, messaging, and AI moderation were not added in this sprint.
 
-Sprint 2 is complete at code/release-candidate level. Staging and production rollout are controlled by `docs/sprint-2-staging-deployment-checklist.md` and are deployment work, not missing moderation functionality.
+Sprint 2 admin functionality is complete at baseline level. Sprint 2.1 enforcement is implemented locally but is not production-ready until its expanded MySQL E2E suite passes and the staging acceptance gate is completed.
 
 ## Next Sprint 2 Steps
 

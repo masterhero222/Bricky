@@ -10,6 +10,8 @@ describe('RequestsService', () => {
   let requestsRepo: any;
   let applicationsRepo: any;
   let imagesRepo: any;
+  let usersRepo: any;
+  let workersRepo: any;
   let queryBuilder: any;
 
   beforeEach(() => {
@@ -43,10 +45,25 @@ describe('RequestsService', () => {
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
+    usersRepo = {
+      findOne: jest.fn().mockImplementation(({ where }: any) => Promise.resolve({
+        id: where.id,
+        role: where.id === 101 || where.id === 102 ? 'client' : 'worker',
+        accountStatus: 'active',
+      })),
+    };
+    workersRepo = {
+      findOne: jest.fn().mockImplementation(({ where }: any) => Promise.resolve({
+        id: 1, userId: where.userId, moderationStatus: 'approved',
+      })),
+    };
+
     service = new RequestsService(
       requestsRepo,
       applicationsRepo,
       imagesRepo,
+      usersRepo,
+      workersRepo,
       { sendRequestConfirmation: jest.fn() } as any,
       { notifyWorkerAssigned: jest.fn() } as any,
     );
@@ -162,11 +179,19 @@ describe('RequestsService', () => {
     expect(applicationsRepo.save).toHaveBeenCalledWith(application);
   });
 
+  it('blocks a suspended worker before applying', async () => {
+    usersRepo.findOne.mockResolvedValue({ id: 201, role: 'worker', accountStatus: 'suspended' });
+
+    await expect(service.applyToRequest(9, 201)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(requestsRepo.findOne).not.toHaveBeenCalled();
+  });
+
   it('rejects assignment by a client who does not own the request', async () => {
     requestsRepo.findOne.mockResolvedValue({
       id: 9,
       client: { id: 101 },
       status: 'кандидатствана',
+      moderationStatus: 'approved',
       appliedWorkers: [201],
     });
 
@@ -178,10 +203,24 @@ describe('RequestsService', () => {
       id: 9,
       client: { id: 101 },
       status: 'нова',
+      moderationStatus: 'approved',
       appliedWorkers: [],
     });
 
     await expect(service.assignWorker(9, 101, 201)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each(['pending_review', 'rejected', 'hidden'])('rejects assignment while moderation is %s', async (moderationStatus) => {
+    requestsRepo.findOne.mockResolvedValue({
+      id: 9,
+      client: { id: 101 },
+      status: 'кандидатствана',
+      moderationStatus,
+      appliedWorkers: [201],
+      assignedWorkerId: null,
+    });
+
+    await expect(service.assignWorker(9, 101, 201)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('assigns an applicant selected by the owning client', async () => {
@@ -189,6 +228,7 @@ describe('RequestsService', () => {
       id: 9,
       client: { id: 101 },
       status: 'кандидатствана',
+      moderationStatus: 'approved',
       appliedWorkers: [201],
       assignedWorkerId: null,
     };
@@ -207,6 +247,7 @@ describe('RequestsService', () => {
       id: 9,
       assignedWorkerId: 201,
       status: 'в процес',
+      moderationStatus: 'approved',
       client: { id: 101 },
     });
 
@@ -218,6 +259,7 @@ describe('RequestsService', () => {
       id: 9,
       assignedWorkerId: 201,
       status: 'в процес',
+      moderationStatus: 'approved',
       client: { id: 101 },
       created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     };
@@ -232,5 +274,17 @@ describe('RequestsService', () => {
     expect(imagesRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({ requestId: 9, uploaderUserId: 201, kind: 'after' }),
     );
+  });
+
+  it('blocks completion when an assigned request is hidden', async () => {
+    requestsRepo.findOne.mockResolvedValue({
+      id: 9,
+      assignedWorkerId: 201,
+      status: 'в процес',
+      moderationStatus: 'hidden',
+      client: { id: 101 },
+    });
+
+    await expect(service.completeRequest(9, 201)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

@@ -2,7 +2,19 @@
 
 ## Highest Priority
 
-- P0 IN PROGRESS: Sprint 2 admin moderation gate:
+- P0 IN PROGRESS: Sprint 2.1 admin enforcement layer:
+  - DONE: suspended accounts are reloaded from the database and rejected on every protected request, including with existing JWTs;
+  - DONE: suspended workers are blocked from applications, assignment, completion, uploads, gallery deletion, profile changes, and reviews;
+  - DONE: suspended clients are blocked from request creation/resubmission, uploads, assignment, and reviews;
+  - DONE: suspended or unapproved workers are removed from public lists, profiles, batch lookups, and recommendation-oriented service results;
+  - DONE: non-approved requests cannot receive applications, assignment, completion, after-photos, or reviews;
+  - DONE: review creation requires an approved completed request and active client/worker accounts;
+  - DONE: reactivation restores normal permissions without changing historical data;
+  - DONE locally: backend build and 53 unit tests pass;
+  - NEXT RELEASE GATE: expanded MySQL E2E must pass in GitHub Actions, followed by staging API smoke tests;
+  - REFERENCE: `docs/sprint-2-1-enforcement-layer.md`;
+
+- P0 IMPLEMENTED: Sprint 2 admin moderation gate:
   - DONE: separate request lifecycle status from publication moderation status;
   - DONE: new requests and request images default to `pending_review`;
   - DONE: worker feeds/map and public request media expose only approved content;

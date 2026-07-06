@@ -8,10 +8,11 @@ import { WorkersService } from './workers.service';
 import { WorkersController } from './workers.controller';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
+import { UserEntity } from '../users/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Worker, WorkerGalleryImage, RequestEntity, RequestImageEntity]),
+    TypeOrmModule.forFeature([Worker, WorkerGalleryImage, RequestEntity, RequestImageEntity, UserEntity]),
     UsersModule,
     MailModule,
   ],

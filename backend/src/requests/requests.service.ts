@@ -24,6 +24,8 @@ import {
 } from './repair-catalog';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UserEntity } from '../users/user.entity';
+import { Worker } from '../workers/worker.entity';
 
 
 function extractResponseText(data: any): string {
@@ -89,9 +91,45 @@ export class RequestsService {
     private readonly applicationsRepo: Repository<RequestApplicationEntity>,
     @InjectRepository(RequestImageEntity)
     private readonly imagesRepo: Repository<RequestImageEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
+    @InjectRepository(Worker)
+    private readonly workersRepo: Repository<Worker>,
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  private async assertActiveAccount(userId: number, expectedRole?: 'client' | 'worker') {
+    const user = await this.usersRepo.findOne({ where: { id: Number(userId) } });
+    if (!user || user.accountStatus !== 'active' || (expectedRole && user.role !== expectedRole)) {
+      throw new ForbiddenException('Account is unavailable');
+    }
+    return user;
+  }
+
+  private async assertEligibleWorker(userId: number) {
+    await this.assertActiveAccount(userId, 'worker');
+    const worker = await this.workersRepo.findOne({ where: { userId: Number(userId) } });
+    if (!worker || worker.moderationStatus !== 'approved') {
+      throw new ForbiddenException('Worker is not available');
+    }
+    return worker;
+  }
+
+  private isCompleted(request: RequestEntity) {
+    const status = String(request.status || '').toLowerCase();
+    return Boolean(request.completedAt) || status === 'completed' || status.includes('завършен');
+  }
+
+  private isCanceled(request: RequestEntity) {
+    const status = String(request.status || '').toLowerCase();
+    return status === 'canceled' || status === 'cancelled' || status.includes('отказан');
+  }
+
+  private assertApprovedOpenRequest(request: RequestEntity) {
+    if (request.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
+    if (this.isCompleted(request) || this.isCanceled(request)) throw new BadRequestException('Request is closed');
+  }
 
   private async saveRequestImages(
     requestId: number,
@@ -174,6 +212,7 @@ export class RequestsService {
     kind: 'before' | 'after',
     photos: any[],
   ) {
+    await this.assertActiveAccount(actorUserId, actorRole === 'worker' ? 'worker' : 'client');
     const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!request) throw new NotFoundException('Request not found');
 
@@ -194,6 +233,7 @@ export class RequestsService {
     kind: 'before' | 'after',
     files: any[],
   ) {
+    await this.assertActiveAccount(actorUserId, actorRole === 'worker' ? 'worker' : 'client');
     const list = Array.isArray(files) ? files : [];
     if (!list.length) throw new BadRequestException('No images');
 
@@ -232,6 +272,7 @@ export class RequestsService {
   }
 
   async deleteUploadedImage(requestId: number, imageId: number, actorUserId: number, actorRole: string) {
+    await this.assertActiveAccount(actorUserId, actorRole === 'worker' ? 'worker' : 'client');
     const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!request) throw new NotFoundException('Request not found');
 
@@ -278,6 +319,7 @@ export class RequestsService {
     if (actorRole !== 'worker' || Number(request.assignedWorkerId) !== actorUserId) {
       throw new ForbiddenException('Only the assigned worker can upload after images');
     }
+    this.assertApprovedOpenRequest(request);
   }
 
   private async ensureApplication(requestId: number, workerUserId: number, status: 'applied' | 'assigned') {
@@ -380,6 +422,7 @@ export class RequestsService {
   }
   async create(dto: CreateRequestDto, clientUserId: number) {
     if (!clientUserId) throw new UnauthorizedException('Not logged in');
+    await this.assertActiveAccount(clientUserId, 'client');
     const categoryKey = dto.categoryKey
       ? normalizeRepairCategoryKey(dto.categoryKey)
       : getRepairCategoryByLabel(dto.category).key;
@@ -435,6 +478,7 @@ export class RequestsService {
   }
 
   async resubmitRequest(requestId: number, clientUserId: number, patch: Record<string, unknown>) {
+    await this.assertActiveAccount(clientUserId, 'client');
     const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!request) throw new NotFoundException('Request not found');
     if (Number(request.client?.id) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
@@ -519,12 +563,11 @@ export class RequestsService {
   }
 
   async applyToRequest(requestId: number, workerUserId: number) {
+    await this.assertEligibleWorker(workerUserId);
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
-    if (req.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
-
+    this.assertApprovedOpenRequest(req);
     if (req.assignedWorkerId) throw new BadRequestException('Request already has assigned worker');
-    if (req.status === 'завършена' || req.status === 'отказана') throw new BadRequestException('Request is closed');
 
     const applied = normalizeNumberArray(req.appliedWorkers);
 
@@ -542,6 +585,8 @@ export class RequestsService {
   }
 
   async assignWorker(requestId: number, clientUserId: number, workerUserId: number) {
+    await this.assertActiveAccount(clientUserId, 'client');
+    await this.assertEligibleWorker(workerUserId);
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
 
@@ -549,9 +594,8 @@ export class RequestsService {
       throw new ForbiddenException('Not your request');
     }
 
-    if (req.status === 'завършена' || req.status === 'отказана') {
-      throw new BadRequestException('Request is closed');
-    }
+    this.assertApprovedOpenRequest(req);
+    if (req.assignedWorkerId) throw new BadRequestException('Request already has assigned worker');
 
     const applied = normalizeNumberArray(req.appliedWorkers);
     const hasApplication = await this.hasActiveApplication(requestId, workerUserId);
@@ -579,6 +623,7 @@ export class RequestsService {
   }
 
   async unassignWorker(requestId: number, clientUserId: number) {
+    await this.assertActiveAccount(clientUserId, 'client');
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
 
@@ -586,7 +631,7 @@ export class RequestsService {
       throw new ForbiddenException('Not your request');
     }
 
-    if (req.status === 'завършена') throw new BadRequestException('Already completed');
+    if (this.isCompleted(req)) throw new BadRequestException('Already completed');
 
     const assignedWorkerId = Number(req.assignedWorkerId);
     req.assignedWorkerId = null;
@@ -614,6 +659,7 @@ export class RequestsService {
     if (!requestId) throw new BadRequestException('Missing request id');
     if (!workerUserId) throw new BadRequestException('Missing worker id');
 
+    await this.assertEligibleWorker(workerUserId);
     const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
 
@@ -621,8 +667,7 @@ export class RequestsService {
       throw new ForbiddenException('Not your job');
     }
 
-    if (req.status === 'завършена') return req;
-    if (req.status === 'отказана') throw new BadRequestException('Request canceled');
+    this.assertApprovedOpenRequest(req);
 
     const completedAt = new Date();
     const normalizedAfterPhotos = normalizePhotos(afterPhotos);

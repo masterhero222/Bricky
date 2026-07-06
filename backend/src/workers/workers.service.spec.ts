@@ -62,6 +62,7 @@ describe('WorkersService request history media', () => {
       {} as any,
       requestRepo as any,
       requestImageRepo as any,
+      { find: jest.fn().mockResolvedValue([{ id: 7, role: 'worker', accountStatus: 'active' }]) } as any,
     );
 
     const history = await service.getHistoryByUserId(7);
@@ -97,5 +98,31 @@ describe('WorkersService request history media', () => {
         url: '/uploads/requests/after-2.jpg',
       }),
     ]);
+  });
+
+  it('removes suspended workers from the public list', async () => {
+    const workerRepository = {
+      find: jest.fn().mockResolvedValue([
+        { id: 1, userId: 201, moderationStatus: 'approved' },
+        { id: 2, userId: 202, moderationStatus: 'approved' },
+      ]),
+    };
+    const galleryRepo = { find: jest.fn().mockResolvedValue([]) };
+    const requestRepo = { find: jest.fn().mockResolvedValue([]) };
+    const requestImageRepo = { find: jest.fn().mockResolvedValue([]) };
+    const usersRepo = {
+      find: jest.fn().mockResolvedValue([{ id: 201, role: 'worker', accountStatus: 'active' }]),
+    };
+    const service = new WorkersService(
+      workerRepository as any,
+      galleryRepo as any,
+      requestRepo as any,
+      requestImageRepo as any,
+      usersRepo as any,
+    );
+
+    const result = await service.getAll();
+
+    expect(result.map((worker) => worker.userId)).toEqual([201]);
   });
 });
