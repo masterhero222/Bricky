@@ -119,6 +119,16 @@ describe('RequestsService', () => {
     expect(result).toEqual([{ id: 3, appliedWorkers: [] }]);
   });
 
+  it('allows only workers to use the request map service', async () => {
+    const feed = jest.spyOn(service, 'getForWorkersFeed').mockResolvedValue([{ id: 4 }] as any);
+
+    await expect(service.getMapRequests({ id: 201, role: 'worker' })).resolves.toEqual([{ id: 4 }]);
+    await expect(service.getMapRequests({ id: 101, role: 'client' })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(feed).toHaveBeenCalledTimes(1);
+  });
+
   it('stores uploaded before images only for the owning client', async () => {
     requestsRepo.findOne.mockResolvedValue({ id: 9, client: { id: 101 }, appliedWorkers: [] });
     const photos = [
@@ -156,6 +166,16 @@ describe('RequestsService', () => {
     expect(requestsRepo.createQueryBuilder).toHaveBeenCalledWith('r');
     expect(queryBuilder.getMany).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ id: 4, appliedWorkers: [] }]);
+  });
+
+  it('loads only approved completed requests for worker history', async () => {
+    requestsRepo.find.mockResolvedValue([]);
+
+    await service.getCompletedForWorker(201);
+
+    expect(requestsRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: { assignedWorkerId: 201, status: 'завършена', moderationStatus: 'approved' },
+    }));
   });
 
   it('keeps duplicate applications idempotent in legacy and normalized storage', async () => {

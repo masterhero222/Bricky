@@ -375,6 +375,12 @@ function normalizeMockEnforcementState(db) {
         ...image,
         moderationStatus: image.moderationStatus || "approved",
       })),
+      completedJobs: (worker.completedJobs || []).map((job) => ({
+        ...job,
+        moderationStatus: job.moderationStatus || "approved",
+        beforePhotos: (job.beforePhotos || []).map((image) => ({ ...image, moderationStatus: image.moderationStatus || "approved" })),
+        afterPhotos: (job.afterPhotos || []).map((image) => ({ ...image, moderationStatus: image.moderationStatus || "approved" })),
+      })),
     })),
     requests: (db.requests || []).map((request, index) => {
       const moderationStatus = request.moderationStatus || (index === 0 ? "pending_review" : "approved");
@@ -483,6 +489,25 @@ function publicRequest(request) {
     photos: approvedImages(request.photos),
     beforePhotos: approvedImages(request.beforePhotos),
     afterPhotos: approvedImages(request.afterPhotos),
+  };
+}
+
+function publicCompletedJob(job) {
+  const approvedImages = (images) => (Array.isArray(images) ? images : [])
+    .filter((image) => image.moderationStatus === "approved");
+  return {
+    ...job,
+    beforePhotos: approvedImages(job.beforePhotos),
+    afterPhotos: approvedImages(job.afterPhotos),
+  };
+}
+
+function publicWorker(worker) {
+  const result = publicUser(worker);
+  return {
+    ...result,
+    avatarUrl: worker.avatarModerationStatus === "approved" ? result.avatarUrl : "",
+    completedJobs: (result.completedJobs || []).map(publicCompletedJob),
   };
 }
 
@@ -648,6 +673,7 @@ function ensureWorkerJobHistory(worker, req) {
     startedAt: req.created_at,
     completedAt: req.completedAt,
     durationDays: req.durationDays,
+    moderationStatus: req.moderationStatus,
     beforePhotos: normalizePhotos(req.beforePhotos || req.photos),
     afterPhotos: normalizePhotos(req.afterPhotos),
     created_at: existing?.created_at || nowIso(),
@@ -966,16 +992,16 @@ export async function mockRequest(method, url, data) {
     return response({ token: localStorage.getItem("token"), user: publicUser(first) });
   }
 
-  if (method === "get" && path === "/client/me") return response(publicUser(user));
+  if (method === "get" && path === "/client/me") return role === "client" ? response(publicUser(user)) : fail("Client only", 403);
   if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
-  if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId)));
-  if (method === "get" && path === "/workers") return response(db.workers.filter(isEligibleWorker).map(publicUser));
+  if (method === "get" && path === "/workers/me") return role === "worker" ? response(publicUser(db.workers.find((w) => Number(w.userId) === userId))) : fail("Worker only", 403);
+  if (method === "get" && path === "/workers") return response(db.workers.filter(isEligibleWorker).map(publicWorker));
 
   const workerById = path.match(/^\/workers\/(\d+)$/);
   if (method === "get" && workerById) {
     const id = Number(workerById[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return isEligibleWorker(worker) ? response(publicUser(worker)) : fail("Worker not found", 404);
+    return isEligibleWorker(worker) ? response(publicWorker(worker)) : fail("Worker not found", 404);
   }
 
   if (method === "get" && /^\/workers\/\d+\/gallery$/.test(path)) {
@@ -986,15 +1012,16 @@ export async function mockRequest(method, url, data) {
       : fail("Worker not found", 404);
   }
   if (method === "get" && path === "/workers/me/gallery") {
+    if (role !== "worker") return fail("Worker only", 403);
     const worker = currentWorker(db);
     return response(Array.isArray(worker?.gallery) ? worker.gallery : []);
   }
 
   if (method === "get" && path === "/workers/me/history") {
+    if (role !== "worker") return fail("Worker only", 403);
     const worker = currentWorker(db);
-    return isEligibleWorker(worker)
-      ? response(sortNewest(Array.isArray(worker.completedJobs) ? worker.completedJobs : []))
-      : fail("Worker not found", 404);
+    const jobs = Array.isArray(worker?.completedJobs) ? worker.completedJobs : [];
+    return response(sortNewest(jobs.filter((job) => job.moderationStatus === "approved").map(publicCompletedJob)));
   }
 
   const workerHistory = path.match(/^\/workers\/(\d+)\/history$/);
@@ -1002,26 +1029,30 @@ export async function mockRequest(method, url, data) {
     const id = Number(workerHistory[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
     return isEligibleWorker(worker)
-      ? response(sortNewest(Array.isArray(worker.completedJobs) ? worker.completedJobs : []))
+      ? response(sortNewest(Array.isArray(worker.completedJobs) ? worker.completedJobs.map(publicCompletedJob) : []))
       : fail("Worker not found", 404);
   }
 
   
   const galleryDeleteMatch = path.match(/^\/workers\/me\/gallery\/(.+)\/delete$/);
   if (method === "post" && galleryDeleteMatch) {
+    if (role !== "worker") return fail("Worker only", 403);
     return response(deleteDevWorkerGalleryImage(galleryDeleteMatch[1]));
   }
-  if (method === "post" && path === "/requests/draft") return response(draftRequest(data));
+  if (method === "post" && path === "/requests/draft") return role === "client" ? response(draftRequest(data)) : fail("Client only", 403);
 
   if (method === "get" && path === "/requests/client") {
+    if (role !== "client") return fail("Client only", 403);
     return response(sortNewest(db.requests.filter((r) => Number(r.clientUserId) === userId)));
   }
 
   if (method === "get" && path === "/requests/map") {
+    if (role !== "worker") return fail("Worker only", 403);
     return response(sortNewest(db.requests.filter(isOpenApprovedRequest).map(publicRequest)));
   }
 
   if (method === "get" && path === "/requests/worker") {
+    if (role !== "worker") return fail("Worker only", 403);
     const items = db.requests.filter((r) => {
       const assigned = Number(r.assignedWorkerId || 0);
       const closed = ["завършена", "отказана"].includes(String(r.status || "").toLowerCase());
@@ -1031,6 +1062,7 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/requests/worker/completed") {
+    if (role !== "worker") return fail("Worker only", 403);
     return response(sortNewest(db.requests.filter((r) =>
       Number(r.assignedWorkerId) === userId && isApprovedRequest(r) && isCompletedRequest(r)
     ).map(publicRequest)));
@@ -1112,6 +1144,7 @@ export async function mockRequest(method, url, data) {
     const workerUserId = Number(data?.workerUserId);
     if (!workerUserId) return fail("Missing workerUserId", 400);
     if (!isOpenApprovedRequest(req)) return fail("Request is not approved or is closed", 403);
+    if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
     if (!requireEligibleMockWorker(db, workerUserId)) return fail("Worker is not available", 403);
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
@@ -1148,6 +1181,7 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/reviews/client") {
+    if (role !== "client") return fail("Client only", 403);
     return response(db.reviews.filter((r) => Number(r.clientUserId) === userId));
   }
 

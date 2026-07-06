@@ -60,7 +60,7 @@ This prevents a suspended worker from remaining visible through an alternate pub
 Local verification on 2026-07-06:
 
 - backend production build: passed;
-- backend unit tests: 53 passed across 12 suites;
+- backend unit tests: 63 passed across 13 suites;
 - unit coverage includes request moderation boundaries, worker suspension, public worker filtering, review prerequisites, and suspended review targets.
 
 Mock-environment hardening on 2026-07-06:
@@ -71,6 +71,8 @@ Mock-environment hardening on 2026-07-06:
 - public mock worker pages exclude suspended or unapproved workers;
 - request, gallery, and avatar media share the mock admin moderation queue;
 - new mock requests, uploads, profile changes, and reviews enter `pending_review`;
+- client mock sessions cannot access the worker map or worker-only endpoints;
+- hidden completed requests and pending avatar/job media are excluded from public and worker history views;
 - `npm run test:mock-moderation` proves pending/rejected publication boundaries plus suspend/reactivate behavior;
 - the flow was manually reproduced against the local mock UI at `http://127.0.0.1:5175`.
 

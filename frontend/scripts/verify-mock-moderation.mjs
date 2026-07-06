@@ -33,6 +33,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function expectStatus(promise, status, message) {
+  try {
+    await promise;
+  } catch (error) {
+    assert(error?.response?.status === status, message);
+    return;
+  }
+  throw new Error(message);
+}
+
 resetDevDb();
 
 assert(setDevIdentity("client", 101), "Active client should be selectable");
@@ -42,6 +52,7 @@ const created = await mockRequest("post", "/requests", {
   address: "София, тестов адрес 1",
 });
 assert(created.data.moderationStatus === "pending_review", "New request must enter pending review");
+await expectStatus(mockRequest("get", "/requests/map"), 403, "Client gained access to the worker request map");
 
 assert(setDevIdentity("worker", 201), "Active worker should be selectable");
 let workerFeed = await mockRequest("get", "/requests/worker");
@@ -95,6 +106,11 @@ const mediaDb = JSON.parse(localStorage.getItem("bricky.dev.db"));
 const mediaWorker = mediaDb.workers.find((worker) => worker.userId === 201);
 mediaWorker.avatarUrl = "data:image/png;base64,mock-avatar";
 mediaWorker.avatarModerationStatus = "pending_review";
+mediaWorker.completedJobs[0].afterPhotos.push({
+  id: "pending-history-image",
+  url: "data:image/png;base64,pending-history",
+  moderationStatus: "pending_review",
+});
 mediaWorker.gallery.push({
   id: "mock-gallery-pending",
   userId: 201,
@@ -109,5 +125,10 @@ assert(setDevIdentity("admin", 999), "Admin should be selectable for media verif
 const pendingMedia = await mockRequest("get", "/admin/media?status=pending_review&page=1&limit=100");
 assert(pendingMedia.data.some((item) => item.source === "gallery" && item.id === "mock-gallery-pending"), "Pending gallery image is missing from admin media queue");
 assert(pendingMedia.data.some((item) => item.source === "avatar" && item.workerId === mediaWorker.id), "Pending avatar is missing from admin media queue");
+
+const publicWorker = await mockRequest("get", "/workers/201");
+assert(publicWorker.data.avatarUrl === "", "Pending avatar leaked through public worker profile");
+const publicHistory = await mockRequest("get", "/workers/201/history");
+assert(!publicHistory.data.flatMap((job) => job.afterPhotos || []).some((image) => image.id === "pending-history-image"), "Pending job image leaked through public worker history");
 
 console.log("Mock moderation verified: publication, suspension, and reactivation gates pass.");

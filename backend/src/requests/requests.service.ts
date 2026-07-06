@@ -507,15 +507,8 @@ export class RequestsService {
     const userId = Number(user?.id);
     if (!userId) throw new BadRequestException('Missing user id');
 
-    if (role === 'client') {
-      return this.getByClientUserId(userId);
-    }
-
-    if (role === 'worker') {
-      return this.getForWorkersFeed(userId);
-    }
-
-    throw new BadRequestException('Unsupported role');
+    if (role !== 'worker') throw new ForbiddenException('Worker only');
+    return this.getForWorkersFeed(userId);
   }
 
   /**
@@ -554,7 +547,7 @@ export class RequestsService {
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
     const requests = await this.repo.find({
-      where: { assignedWorkerId: workerUserId, status: 'завършена' },
+      where: { assignedWorkerId: workerUserId, status: 'завършена', moderationStatus: 'approved' },
       relations: ['client'],
       order: { created_at: 'DESC' },
     });

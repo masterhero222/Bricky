@@ -16,7 +16,8 @@ Implemented locally:
 - pending, rejected, and hidden requests cannot receive applications, assignment, completion, after-photos, or reviews;
 - review creation requires an approved completed request and active participants;
 - reactivation restores permissions without altering history;
-- backend build and 53 unit tests pass.
+- backend build and 63 unit tests pass across 13 suites.
+- client map access, cross-role worker endpoints, hidden completed history, and pending public-media leakage are explicitly blocked.
 
 The expanded MySQL lifecycle E2E suite passed in GitHub Actions run `28759468108` for commit `3c1f6bf`. See `docs/sprint-2-1-enforcement-layer.md`.
 

@@ -2,7 +2,7 @@
 
 ## Highest Priority
 
-- P0 IN PROGRESS: Sprint 2.1 admin enforcement layer:
+- P0 DONE IN CODE: Sprint 2.1 admin enforcement layer:
   - DONE: suspended accounts are reloaded from the database and rejected on every protected request, including with existing JWTs;
   - DONE: suspended workers are blocked from applications, assignment, completion, uploads, gallery deletion, profile changes, and reviews;
   - DONE: suspended clients are blocked from request creation/resubmission, uploads, assignment, and reviews;
@@ -12,7 +12,9 @@
   - DONE: reactivation restores normal permissions without changing historical data;
   - DONE: mock admin decisions now enforce the same request/account/media visibility rules across client and worker mock screens;
   - DONE: automated mock moderation contract test covers pending, approval, rejection, suspension, public visibility, and reactivation;
-  - DONE locally: backend build and 53 unit tests pass;
+  - DONE: clients cannot access the worker request map or worker-only profile/gallery/history endpoints;
+  - DONE: hidden completed requests and pending avatar/job media stay out of worker/public history surfaces;
+  - DONE locally: backend build and 63 unit tests pass;
   - DONE: expanded MySQL lifecycle E2E passed in GitHub Actions run `28759468108`;
   - NEXT RELEASE GATE: staging API/UI smoke tests and the production backup/deployment checklist;
   - REFERENCE: `docs/sprint-2-1-enforcement-layer.md`;

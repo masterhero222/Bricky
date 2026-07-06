@@ -359,6 +359,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(200);
     expect(workerMap.body.map((item: any) => item.id)).toContain(requestId);
+    await request(app.getHttpServer())
+      .get('/requests/map')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .expect(400);
   });
 
   it('applies idempotently and allows the owning client to assign', async () => {
@@ -539,6 +543,27 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(completedRequest.afterPhotos).toHaveLength(1);
     expect(completedRequest.beforePhotos[0].url).toBe(persistentBeforePhotoUrl);
     expect(completedRequest.afterPhotos[0].url).toBe(persistentAfterPhotoUrl);
+
+    await request(app.getHttpServer())
+      .post(`/admin/requests/${requestId}/hide`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Completed history visibility check' })
+      .expect(201);
+    const hiddenCompleted = await request(app.getHttpServer())
+      .get('/requests/worker/completed')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(hiddenCompleted.body.map((item: any) => item.id)).not.toContain(requestId);
+    const hiddenWorkerHistory = await request(app.getHttpServer())
+      .get('/workers/me/history')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .expect(200);
+    expect(hiddenWorkerHistory.body.map((item: any) => item.id)).not.toContain(requestId);
+    await request(app.getHttpServer())
+      .post(`/admin/requests/${requestId}/approve`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(201);
   });
 
   it('allows an admin to correct and delete a spam request with an audit trail', async () => {

@@ -38,6 +38,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Req() req: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
 
     let worker = await this.workersService.findByUserId(userId);
@@ -51,6 +52,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Put('me')
   async updateMe(@Req() req: any, @Body() data: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
     return this.workersService.updateProfileByUserId(userId, data);
   }
@@ -80,6 +82,7 @@ export class WorkersController {
     }),
   )
   async uploadAvatar(@Req() req: any, @UploadedFile() file: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
     if (!file?.filename) {
       return this.workersService.findByUserId(userId);
@@ -95,6 +98,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me/gallery')
   async myGallery(@Req() req: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
     return this.workersService.getGalleryByUserId(userId, true);
   }
@@ -124,6 +128,7 @@ export class WorkersController {
     }),
   )
   async uploadGallery(@Req() req: any, @UploadedFiles() files: any[]) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
 
     const list = Array.isArray(files) ? files : [];
@@ -140,6 +145,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Post('me/gallery/:id/delete')
   async deleteGallery(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
     const imageId = Number(id);
     return this.workersService.deleteGalleryImage(userId, imageId);
@@ -148,8 +154,9 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me/history')
   async myHistory(@Req() req: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
-    return this.workersService.getHistoryByUserId(userId, true);
+    return this.workersService.getHistoryByUserId(userId);
   }
 
   @Get(':userId/gallery')

@@ -62,6 +62,13 @@ describe('RequestsController', () => {
     expect(service.getMapRequests).toHaveBeenCalledWith(actor);
   });
 
+  it('rejects map access for clients', async () => {
+    await expect(
+      controller.mapRequests({ user: { id: 101, role: 'client' } }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.getMapRequests).not.toHaveBeenCalled();
+  });
+
   it('allows only workers to load the worker feed', async () => {
     service.getForWorkersFeed.mockResolvedValue([{ id: 4 }]);
 
