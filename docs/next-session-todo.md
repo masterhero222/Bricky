@@ -11,7 +11,8 @@
   - DONE: review creation requires an approved completed request and active client/worker accounts;
   - DONE: reactivation restores normal permissions without changing historical data;
   - DONE locally: backend build and 53 unit tests pass;
-  - NEXT RELEASE GATE: expanded MySQL E2E must pass in GitHub Actions, followed by staging API smoke tests;
+  - DONE: expanded MySQL lifecycle E2E passed in GitHub Actions run `28759468108`;
+  - NEXT RELEASE GATE: staging API/UI smoke tests and the production backup/deployment checklist;
   - REFERENCE: `docs/sprint-2-1-enforcement-layer.md`;
 
 - P0 IMPLEMENTED: Sprint 2 admin moderation gate:

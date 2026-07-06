@@ -18,7 +18,7 @@ Implemented locally:
 - reactivation restores permissions without altering history;
 - backend build and 53 unit tests pass.
 
-The expanded MySQL E2E suite is awaiting CI verification. See `docs/sprint-2-1-enforcement-layer.md`.
+The expanded MySQL lifecycle E2E suite passed in GitHub Actions run `28759468108` for commit `3c1f6bf`. See `docs/sprint-2-1-enforcement-layer.md`.
 
 ## Sprint Objective
 
@@ -116,7 +116,7 @@ Every administrative mutation records:
 - [x] Frontend has no direct database access and no raw SQL is exposed.
 - [x] Payments, credits, subscriptions, messaging, and AI moderation were not added in this sprint.
 
-Sprint 2 admin functionality is complete at baseline level. Sprint 2.1 enforcement is implemented locally but is not production-ready until its expanded MySQL E2E suite passes and the staging acceptance gate is completed.
+Sprint 2 admin functionality and the Sprint 2.1 backend enforcement layer are code-complete with green local and MySQL CI verification. Production readiness still requires the staging acceptance gate and controlled deployment checklist.
 
 ## Next Sprint 2 Steps
 

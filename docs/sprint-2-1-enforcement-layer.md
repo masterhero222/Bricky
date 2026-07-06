@@ -73,13 +73,12 @@ The MySQL lifecycle E2E suite now covers:
 - hidden request removal from the map and assignment rejection;
 - review rejection while the assigned worker is suspended.
 
-The expanded E2E suite must pass in the repository MySQL GitHub Actions job before staging or production rollout.
+The expanded MySQL E2E suite passed in GitHub Actions run `28759468108` for commit `3c1f6bf`.
 
 ## Production gate
 
 Sprint 2 moderation is production-ready only after:
 
-1. the expanded MySQL E2E workflow passes;
-2. staging receives the migrations and the release-candidate build;
-3. the enforcement acceptance cases are smoke-tested through both UI and direct API calls;
-4. production backup and rollback prerequisites in `docs/sprint-2-staging-deployment-checklist.md` are satisfied.
+1. staging receives the migrations and the release-candidate build;
+2. the enforcement acceptance cases are smoke-tested through both UI and direct API calls;
+3. production backup and rollback prerequisites in `docs/sprint-2-staging-deployment-checklist.md` are satisfied.
