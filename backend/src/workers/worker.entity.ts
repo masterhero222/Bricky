@@ -42,6 +42,9 @@ export class Worker {
   @Column({ nullable: true })
   avatarUrl: string;
 
+  @Column({ nullable: true })
+  avatarThumbnailUrl: string;
+
   @Column({ default: false })
   isApproved: boolean;
 

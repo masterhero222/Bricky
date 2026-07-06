@@ -104,16 +104,15 @@ describe('RequestsController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('passes completion photos only for a worker', async () => {
-    const afterPhotos = [{ url: '/uploads/after.jpg' }];
+  it('allows only a worker to close a client-confirmed request', async () => {
     service.completeRequest.mockResolvedValue({ id: 9 });
 
     await expect(
-      controller.complete({ user: { id: 201, role: 'worker' } }, '9', { afterPhotos }),
+      controller.complete({ user: { id: 201, role: 'worker' } }, '9'),
     ).resolves.toEqual({ id: 9 });
-    expect(service.completeRequest).toHaveBeenCalledWith(9, 201, afterPhotos);
+    expect(service.completeRequest).toHaveBeenCalledWith(9, 201);
     await expect(
-      controller.complete({ user: { id: 101, role: 'client' } }, '9', { afterPhotos }),
+      controller.complete({ user: { id: 101, role: 'client' } }, '9'),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 

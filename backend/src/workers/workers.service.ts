@@ -233,18 +233,19 @@ export class WorkersService {
     }));
   }
 
-  async addGalleryImages(userId: number, urls: string[]) {
+  async addGalleryImages(userId: number, images: Array<string | { url: string; thumbnailUrl?: string; storageKey?: string; thumbnailStorageKey?: string }>) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
-    const clean = (Array.isArray(urls) ? urls : [])
-      .map((u) => String(u || '').trim())
-      .filter(Boolean);
+    const clean = (Array.isArray(images) ? images : []).map((image) => typeof image === 'string' ? { url: image } : image)
+      .filter((image) => Boolean(String(image?.url || '').trim()));
 
     if (clean.length === 0) throw new BadRequestException('No images');
 
-    const rows = clean.map((url) => this.galleryRepo.create({
-      userId: uid, url, moderationStatus: 'pending_review', moderationReason: null,
+    const rows = clean.map((image) => this.galleryRepo.create({
+      userId: uid, url: image.url, thumbnailUrl: image.thumbnailUrl || null,
+      storageKey: image.storageKey || null, thumbnailStorageKey: image.thumbnailStorageKey || null,
+      moderationStatus: 'pending_review', moderationReason: null,
       moderatedByUserId: null, moderatedAt: null,
     }));
     await this.galleryRepo.save(rows);

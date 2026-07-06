@@ -140,9 +140,44 @@ export class RequestsController {
   // ? worker ������� ������
   @UseGuards(JwtAuthGuard)
   @Post(':id/complete')
-  async complete(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  async complete(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.completeRequest(Number(id), Number(req.user.id), body?.afterPhotos || []);
+    return this.requests.completeRequest(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/arrive')
+  async arrive(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.markWorkerArrived(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/start')
+  async start(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.startWork(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/ready')
+  async ready(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.markWorkReady(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/confirm')
+  async confirm(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.confirmWork(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/dispute')
+  async dispute(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.disputeWork(Number(id), Number(req.user.id), body?.reason);
   }
 
   @UseGuards(JwtAuthGuard)

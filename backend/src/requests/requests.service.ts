@@ -8,9 +8,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { mkdir, unlink, writeFile } from 'fs/promises';
-import { extname, join, normalize, sep } from 'path';
+import { join, normalize, sep } from 'path';
 import { randomUUID } from 'crypto';
 import { getUploadPath, getUploadsRoot } from '../common/storage-paths';
+import { processUploadedImage } from '../common/image-processing';
 import { RequestEntity } from './entities/request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestImageEntity, RequestImageKind } from './entities/request-image.entity';
@@ -26,6 +27,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserEntity } from '../users/user.entity';
 import { Worker } from '../workers/worker.entity';
+import { CLOSED_REQUEST_STATUSES, REQUEST_STATUSES, RequestStatus } from './request-lifecycle';
 
 
 function extractResponseText(data: any): string {
@@ -117,18 +119,22 @@ export class RequestsService {
   }
 
   private isCompleted(request: RequestEntity) {
-    const status = String(request.status || '').toLowerCase();
-    return Boolean(request.completedAt) || status === 'completed' || status.includes('завършен');
+    return Boolean(request.completedAt) || request.status === REQUEST_STATUSES.COMPLETED;
   }
 
   private isCanceled(request: RequestEntity) {
-    const status = String(request.status || '').toLowerCase();
-    return status === 'canceled' || status === 'cancelled' || status.includes('отказан');
+    return request.status === REQUEST_STATUSES.CANCELED;
   }
 
   private assertApprovedOpenRequest(request: RequestEntity) {
     if (request.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
-    if (this.isCompleted(request) || this.isCanceled(request)) throw new BadRequestException('Request is closed');
+    if (CLOSED_REQUEST_STATUSES.has(request.status as RequestStatus)) throw new BadRequestException('Request is closed');
+  }
+
+  private assertStatus(request: RequestEntity, expected: RequestStatus) {
+    if (request.status !== expected) {
+      throw new BadRequestException(`Invalid request transition from ${request.status} (expected ${expected})`);
+    }
   }
 
   private async saveRequestImages(
@@ -147,7 +153,9 @@ export class RequestsService {
         kind,
         name: photo.name || null,
         url: photo.url,
+        thumbnailUrl: photo.thumbnailUrl || null,
         storageKey: photo.storageKey || null,
+        thumbnailStorageKey: photo.thumbnailStorageKey || null,
         mimeType: photo.mimeType || null,
         sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
         sortOrder: index,
@@ -167,7 +175,9 @@ export class RequestsService {
       id: row.id,
       name: row.name || 'Снимка',
       url: row.url,
+      thumbnailUrl: row.thumbnailUrl,
       storageKey: row.storageKey,
+      thumbnailStorageKey: row.thumbnailStorageKey,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
       kind: row.kind,
@@ -248,18 +258,24 @@ export class RequestsService {
 
     try {
       for (const file of list) {
-        const extension = extname(file.originalname || '').toLowerCase();
-        const safeExtension = ['.jpg', '.jpeg', '.png', '.webp'].includes(extension) ? extension : '.jpg';
-        const filename = `request_${requestId}_${actorUserId}_${randomUUID()}${safeExtension}`;
+        const optimized = await processUploadedImage(file.buffer);
+        const stem = `request_${requestId}_${actorUserId}_${randomUUID()}`;
+        const filename = `${stem}.webp`;
+        const thumbnailFilename = `${stem}_thumb.webp`;
         const absolutePath = join(targetDir, filename);
-        await writeFile(absolutePath, file.buffer);
+        const thumbnailPath = join(targetDir, thumbnailFilename);
+        await writeFile(absolutePath, optimized.photo);
+        await writeFile(thumbnailPath, optimized.thumbnail);
         storedPaths.push(absolutePath);
+        storedPaths.push(thumbnailPath);
         photos.push({
           name: file.originalname,
           url: `/uploads/requests/${filename}`,
+          thumbnailUrl: `/uploads/requests/${thumbnailFilename}`,
           storageKey: `requests/${filename}`,
-          mimeType: file.mimetype,
-          sizeBytes: file.size,
+          thumbnailStorageKey: `requests/${thumbnailFilename}`,
+          mimeType: optimized.mimeType,
+          sizeBytes: optimized.photo.length,
         });
       }
 
@@ -290,6 +306,7 @@ export class RequestsService {
 
     await this.imagesRepo.delete({ id: image.id });
     await this.deleteStoredFile(image.storageKey);
+    await this.deleteStoredFile(image.thumbnailStorageKey);
     return { ok: true, imageId: image.id };
   }
 
@@ -446,7 +463,7 @@ export class RequestsService {
       photos,
       beforePhotos: photos,
       afterPhotos: [],
-      status: 'нова',
+      status: REQUEST_STATUSES.OPEN,
       appliedWorkers: [],
       assignedWorkerId: null,
       completedAt: null,
@@ -526,16 +543,14 @@ export class RequestsService {
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId IS NULL')
             .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
-            .andWhere('r.status != :done', { done: 'завършена' })
-            .andWhere('r.status != :canceled', { canceled: 'отказана' });
+            .andWhere('r.status NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
         }),
       )
       .orWhere(
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId = :wid', { wid: workerUserId })
             .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
-            .andWhere('r.status != :done', { done: 'завършена' })
-            .andWhere('r.status != :canceled', { canceled: 'отказана' });
+            .andWhere('r.status NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
         }),
       )
       .orderBy('r.created_at', 'DESC')
@@ -547,7 +562,7 @@ export class RequestsService {
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
     const requests = await this.repo.find({
-      where: { assignedWorkerId: workerUserId, status: 'завършена', moderationStatus: 'approved' },
+      where: { assignedWorkerId: workerUserId, status: REQUEST_STATUSES.COMPLETED, moderationStatus: 'approved' },
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
@@ -568,8 +583,6 @@ export class RequestsService {
       applied.push(workerUserId);
     }
     req.appliedWorkers = applied;
-
-    if ((req.status || '').toLowerCase() === 'нова') req.status = 'кандидатствана';
 
     const saved = await this.repo.save(req);
     await this.ensureApplication(requestId, workerUserId, 'applied');
@@ -602,7 +615,13 @@ export class RequestsService {
     }
 
     req.assignedWorkerId = workerUserId;
-    req.status = 'в процес';
+    req.status = REQUEST_STATUSES.ASSIGNED;
+    req.workerArrivedAt = null;
+    req.workStartedAt = null;
+    req.workReadyAt = null;
+    req.clientConfirmedAt = null;
+    req.disputedAt = null;
+    req.disputeReason = null;
     req.completedAt = null;
     req.completedByWorkerId = null;
 
@@ -630,7 +649,7 @@ export class RequestsService {
     req.assignedWorkerId = null;
 
     const applied = normalizeNumberArray(req.appliedWorkers);
-    req.status = applied.length > 0 ? 'кандидатствана' : 'нова';
+    req.status = REQUEST_STATUSES.OPEN;
 
     const saved = await this.repo.save(req);
 
@@ -647,33 +666,80 @@ export class RequestsService {
     return this.hydrateRequestImages(saved, true);
   }
 
-  // completion info
-  async completeRequest(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
-    if (!requestId) throw new BadRequestException('Missing request id');
-    if (!workerUserId) throw new BadRequestException('Missing worker id');
-
+  private async assignedWorkerRequest(requestId: number, workerUserId: number) {
     await this.assertEligibleWorker(workerUserId);
-    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
-    if (!req) throw new NotFoundException('Request not found');
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+    if (Number(request.assignedWorkerId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    this.assertApprovedOpenRequest(request);
+    return request;
+  }
 
-    if (Number(req.assignedWorkerId) !== Number(workerUserId)) {
-      throw new ForbiddenException('Not your job');
-    }
+  async markWorkerArrived(requestId: number, workerUserId: number) {
+    const request = await this.assignedWorkerRequest(requestId, workerUserId);
+    this.assertStatus(request, REQUEST_STATUSES.ASSIGNED);
+    request.status = REQUEST_STATUSES.WORKER_ARRIVED;
+    request.workerArrivedAt = new Date();
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
 
-    this.assertApprovedOpenRequest(req);
+  async startWork(requestId: number, workerUserId: number) {
+    const request = await this.assignedWorkerRequest(requestId, workerUserId);
+    this.assertStatus(request, REQUEST_STATUSES.WORKER_ARRIVED);
+    request.status = REQUEST_STATUSES.IN_PROGRESS;
+    request.workStartedAt = new Date();
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
 
+  async markWorkReady(requestId: number, workerUserId: number) {
+    const request = await this.assignedWorkerRequest(requestId, workerUserId);
+    this.assertStatus(request, REQUEST_STATUSES.IN_PROGRESS);
+    const completionPhotoCount = await this.imagesRepo.count({
+      where: { requestId, uploaderUserId: workerUserId, kind: 'after' },
+    });
+    if (completionPhotoCount < 1) throw new BadRequestException('At least one completion photo is required');
+    request.status = REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION;
+    request.workReadyAt = new Date();
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
+
+  private async ownedClientRequest(requestId: number, clientUserId: number) {
+    await this.assertActiveAccount(clientUserId, 'client');
+    const request = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!request) throw new NotFoundException('Request not found');
+    if (Number(request.client?.id) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (request.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
+    return request;
+  }
+
+  async confirmWork(requestId: number, clientUserId: number) {
+    const request = await this.ownedClientRequest(requestId, clientUserId);
+    this.assertStatus(request, REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION);
+    request.status = REQUEST_STATUSES.CLIENT_CONFIRMED;
+    request.clientConfirmedAt = new Date();
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
+
+  async disputeWork(requestId: number, clientUserId: number, reason: string) {
+    const request = await this.ownedClientRequest(requestId, clientUserId);
+    this.assertStatus(request, REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION);
+    const cleanReason = String(reason || '').trim();
+    if (cleanReason.length < 5) throw new BadRequestException('Dispute reason is required');
+    request.status = REQUEST_STATUSES.DISPUTED;
+    request.disputedAt = new Date();
+    request.disputeReason = cleanReason;
+    return this.hydrateRequestImages(await this.repo.save(request), true);
+  }
+
+  async completeRequest(requestId: number, workerUserId: number) {
+    const request = await this.assignedWorkerRequest(requestId, workerUserId);
+    this.assertStatus(request, REQUEST_STATUSES.CLIENT_CONFIRMED);
     const completedAt = new Date();
-    const normalizedAfterPhotos = normalizePhotos(afterPhotos);
-    req.status = 'завършена';
-    req.completedAt = completedAt;
-    req.completedByWorkerId = workerUserId;
-    req.afterPhotos = normalizedAfterPhotos;
-    req.durationDays = completionDurationDays(req.created_at, completedAt);
-
-    const saved = await this.repo.save(req);
-    await this.saveRequestImages(requestId, workerUserId, 'after', normalizedAfterPhotos);
-
-    return this.hydrateRequestImages(saved, true);
+    request.status = REQUEST_STATUSES.COMPLETED;
+    request.completedAt = completedAt;
+    request.completedByWorkerId = workerUserId;
+    request.durationDays = completionDurationDays(request.workStartedAt || request.created_at, completedAt);
+    return this.hydrateRequestImages(await this.repo.save(request), true);
   }
   private buildLocalDraft(prompt: string, address?: string) {
     const categoryKey = this.guessCategoryKey(prompt);

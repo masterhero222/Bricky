@@ -30,8 +30,14 @@ export class RequestImageEntity {
   @Column({ type: 'longtext' })
   url: string;
 
+  @Column({ type: 'longtext', nullable: true })
+  thumbnailUrl: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   storageKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  thumbnailStorageKey: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })
   mimeType: string | null;

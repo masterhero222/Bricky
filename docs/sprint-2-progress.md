@@ -1,5 +1,37 @@
 # Bricky Sprint 2 Progress
 
+## Controlled Lifecycle Completion Pass (2026-07-06)
+
+The Sprint 2 definition of done was expanded after the original moderation gate. Sprint 3 remains blocked until the controlled lifecycle and unified media acceptance checks pass.
+
+Implemented in the current branch:
+
+- canonical request states: `approved`, `assigned`, `worker_arrived`, `in_progress`, `waiting_client_confirmation`, `client_confirmed`, `completed`, `disputed`, `canceled`;
+- backend-validated transitions with no direct assigned-to-completed shortcut;
+- worker actions for arrival, start, ready, and final close;
+- at least one persisted completion image is required before `waiting_client_confirmation`;
+- client confirmation and dispute actions;
+- reviews remain restricted to completed, approved requests;
+- request, gallery, and avatar uploads use the shared image pipeline: rotate, max 1920 px, WebP quality 75-82, max 1 MB output, and a separate WebP thumbnail;
+- completion and other user media enter `pending_review` and public reads expose only approved media;
+- additive migration `20260706_003_controlled_request_lifecycle_up.sql` and rollback script.
+
+Automated evidence currently green:
+
+- backend build;
+- frontend build;
+- 66 backend tests across 13 suites;
+- mock moderation publication/suspension/reactivation verifier.
+
+Still required before Sprint 2 can be marked complete:
+
+- run the additive migration rehearsal against isolated MySQL;
+- expand the real MySQL E2E from the legacy direct-completion flow to every new state;
+- manually test the entire client/worker/admin flow in the mock browser;
+- verify avatar and gallery compression using real large phone images;
+- verify admin preview metadata and rejection reasons for every media type;
+- staging acceptance and rollback rehearsal.
+
 Updated: 2026-07-06
 Branch: `codex/sprint-2-foundation`
 Verified Sprint 2 baseline commit: `02b6ee4`

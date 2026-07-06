@@ -185,7 +185,8 @@ export default function ClientProfile() {
       setReviewDraft((prev) => {
         const next = { ...prev };
         reqs.forEach((r) => {
-          const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+          const status = String(r.status || "").toLowerCase();
+          const isCompleted = status === "completed" || status === "завършена";
           const assignedUserId = Number(r.assignedWorkerId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
 
@@ -382,6 +383,24 @@ export default function ClientProfile() {
     }
   }
 
+  async function respondToCompletedWork(requestId, approved) {
+    try {
+      setActionMsg("");
+      if (approved) {
+        await apiPost(`/requests/${requestId}/confirm`, {});
+        setActionMsg("Работата е потвърдена. Майсторът може да затвори заявката.");
+      } else {
+        const reason = window.prompt("Опиши проблема, за да бъде прегледан от администратор:");
+        if (!reason) return;
+        await apiPost(`/requests/${requestId}/dispute`, { reason });
+        setActionMsg("Сигналът е изпратен за администраторска намеса.");
+      }
+      await loadData();
+    } catch (err) {
+      setActionMsg(err?.response?.data?.message || "Неуспешно обновяване на заявката.");
+    }
+  }
+
   // ✅ Create review (request must be completed; backend checks ownership + status + duplicates)
   async function submitReview(requestId) {
     try {
@@ -491,7 +510,8 @@ export default function ClientProfile() {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
-                  const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+                  const normalizedStatus = String(r.status || "").toLowerCase();
+                  const isCompleted = normalizedStatus === "completed" || normalizedStatus === "завършена";
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem;
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
@@ -528,6 +548,17 @@ export default function ClientProfile() {
                           <p className="font-extrabold text-white">{r.moderationStatus === "rejected" ? "Заявката е върната за корекция." : r.moderationStatus === "hidden" ? "Заявката е скрита от Bricky." : "Заявката чака преглед от Bricky."}</p>
                           {r.moderationReason && <p className="mt-2 text-sm text-slate-200"><strong>Причина:</strong> {r.moderationReason}</p>}
                           {["rejected", "hidden"].includes(r.moderationStatus) && <button onClick={() => editAndResubmit(r)} className="mt-3 rounded-lg bg-white/10 px-4 py-2 font-bold text-white hover:bg-white/15">Редактирай и изпрати отново</button>}
+                        </div>
+                      )}
+
+                      {normalizedStatus === "waiting_client_confirmation" && (
+                        <div className="mt-5 rounded-xl border border-cyan-400/25 bg-cyan-400/10 p-4">
+                          <p className="font-extrabold text-white">Майсторът отбеляза работата като готова.</p>
+                          <p className="mt-1 text-sm text-slate-300">Прегледай снимките след ремонта и потвърди резултата или изпрати проблем към администратор.</p>
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <button onClick={() => respondToCompletedWork(r.id, true)} className="rounded-xl bg-green-500 px-5 py-3 font-extrabold text-white hover:bg-green-400">Потвърди</button>
+                            <button onClick={() => respondToCompletedWork(r.id, false)} className="rounded-xl bg-red-500 px-5 py-3 font-extrabold text-white hover:bg-red-400">Има проблем</button>
+                          </div>
                         </div>
                       )}
 

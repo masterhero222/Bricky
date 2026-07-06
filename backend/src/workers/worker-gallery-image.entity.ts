@@ -15,6 +15,15 @@ export class WorkerGalleryImage {
   @Column({ type: 'varchar', length: 255, nullable: false })
   url: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  thumbnailUrl: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  storageKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  thumbnailStorageKey: string | null;
+
   @Column({ type: 'varchar', length: 30, default: 'pending_review' })
   moderationStatus: ModerationStatus;
 

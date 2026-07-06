@@ -15,10 +15,11 @@ import {
 import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { mkdir, writeFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { getUploadPath } from '../common/storage-paths';
+import { processUploadedImage } from '../common/image-processing';
 
 @Controller('workers')
 export class WorkersController {
@@ -61,19 +62,6 @@ export class WorkersController {
   @Post('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const dir = getUploadPath('workers');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (req: any, file, cb) => {
-          const userId = req?.user?.id ?? 'unknown';
-          const safeExt = extname(file.originalname || '').toLowerCase() || '.jpg';
-          const name = `worker_${userId}_${Date.now()}${safeExt}`;
-          cb(null, name);
-        },
-      }),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
@@ -84,11 +72,21 @@ export class WorkersController {
   async uploadAvatar(@Req() req: any, @UploadedFile() file: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     const userId = Number(req.user.id);
-    if (!file?.filename) {
+    if (!file?.buffer) {
       return this.workersService.findByUserId(userId);
     }
-    const avatarUrl = `/uploads/workers/${file.filename}`;
-    return this.workersService.updateProfileByUserId(userId, { avatarUrl });
+    const optimized = await processUploadedImage(file.buffer);
+    const dir = getUploadPath('workers');
+    await mkdir(dir, { recursive: true });
+    const stem = `worker_${userId}_${randomUUID()}`;
+    await Promise.all([
+      writeFile(join(dir, `${stem}.webp`), optimized.photo),
+      writeFile(join(dir, `${stem}_thumb.webp`), optimized.thumbnail),
+    ]);
+    return this.workersService.updateProfileByUserId(userId, {
+      avatarUrl: `/uploads/workers/${stem}.webp`,
+      avatarThumbnailUrl: `/uploads/workers/${stem}_thumb.webp`,
+    });
   }
 
   // =========================
@@ -107,19 +105,6 @@ export class WorkersController {
   @Post('me/gallery')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const dir = getUploadPath('workers', 'gallery');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (req: any, file, cb) => {
-          const userId = req?.user?.id ?? 'unknown';
-          const safeExt = extname(file.originalname || '').toLowerCase() || '.jpg';
-          const name = `gallery_${userId}_${Date.now()}_${Math.floor(Math.random() * 999999)}${safeExt}`;
-          cb(null, name);
-        },
-      }),
       limits: { fileSize: 8 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
@@ -134,11 +119,24 @@ export class WorkersController {
     const list = Array.isArray(files) ? files : [];
     if (!list.length) throw new BadRequestException('No images');
 
-    const urls = list
-      .map((f) => (f?.filename ? `/uploads/workers/gallery/${f.filename}` : null))
-      .filter(Boolean);
-
-    return this.workersService.addGalleryImages(userId, urls as string[]);
+    const dir = getUploadPath('workers', 'gallery');
+    await mkdir(dir, { recursive: true });
+    const images: Array<{ url: string; thumbnailUrl: string; storageKey: string; thumbnailStorageKey: string }> = [];
+    for (const file of list) {
+      const optimized = await processUploadedImage(file.buffer);
+      const stem = `gallery_${userId}_${randomUUID()}`;
+      await Promise.all([
+        writeFile(join(dir, `${stem}.webp`), optimized.photo),
+        writeFile(join(dir, `${stem}_thumb.webp`), optimized.thumbnail),
+      ]);
+      images.push({
+        url: `/uploads/workers/gallery/${stem}.webp`,
+        thumbnailUrl: `/uploads/workers/gallery/${stem}_thumb.webp`,
+        storageKey: `workers/gallery/${stem}.webp`,
+        thumbnailStorageKey: `workers/gallery/${stem}_thumb.webp`,
+      });
+    }
+    return this.workersService.addGalleryImages(userId, images);
   }
 
   // за да работи с твоя apiPost(.../delete)

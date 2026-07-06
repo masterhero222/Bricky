@@ -43,6 +43,7 @@ describe('RequestsService', () => {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      count: jest.fn().mockResolvedValue(0),
     };
 
     usersRepo = {
@@ -174,7 +175,7 @@ describe('RequestsService', () => {
     await service.getCompletedForWorker(201);
 
     expect(requestsRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-      where: { assignedWorkerId: 201, status: 'завършена', moderationStatus: 'approved' },
+      where: { assignedWorkerId: 201, status: 'completed', moderationStatus: 'approved' },
     }));
   });
 
@@ -274,26 +275,63 @@ describe('RequestsService', () => {
     await expect(service.completeRequest(9, 202)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('completes an assigned request and stores after photos', async () => {
+  it('completes only after the client has confirmed the work', async () => {
     const request = {
       id: 9,
       assignedWorkerId: 201,
-      status: 'в процес',
+      status: 'client_confirmed',
       moderationStatus: 'approved',
       client: { id: 101 },
+      workStartedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     };
     requestsRepo.findOne.mockResolvedValue(request);
 
-    const result = await service.completeRequest(9, 201, [
-      { name: 'after.jpg', url: '/uploads/after.jpg' },
-    ]);
+    const result = await service.completeRequest(9, 201);
 
     expect(result.completedByWorkerId).toBe(201);
+    expect(result.status).toBe('completed');
     expect(result.durationDays).toBeGreaterThanOrEqual(1);
-    expect(imagesRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 9, uploaderUserId: 201, kind: 'after' }),
-    );
+  });
+
+  it('requires a persisted completion photo before marking work ready', async () => {
+    requestsRepo.findOne.mockResolvedValue({
+      id: 9, assignedWorkerId: 201, status: 'in_progress', moderationStatus: 'approved', client: { id: 101 },
+    });
+    await expect(service.markWorkReady(9, 201)).rejects.toBeInstanceOf(BadRequestException);
+    imagesRepo.count.mockResolvedValue(1);
+    await expect(service.markWorkReady(9, 201)).resolves.toEqual(expect.objectContaining({ status: 'waiting_client_confirmation' }));
+  });
+
+  it('enforces the complete worker and client lifecycle in order', async () => {
+    const request: any = {
+      id: 9, assignedWorkerId: 201, status: 'assigned', moderationStatus: 'approved',
+      client: { id: 101 }, created_at: new Date(),
+    };
+    requestsRepo.findOne.mockImplementation(async () => request);
+    imagesRepo.count.mockResolvedValue(1);
+
+    await service.markWorkerArrived(9, 201);
+    expect(request.status).toBe('worker_arrived');
+    await service.startWork(9, 201);
+    expect(request.status).toBe('in_progress');
+    await service.markWorkReady(9, 201);
+    expect(request.status).toBe('waiting_client_confirmation');
+    await service.confirmWork(9, 101);
+    expect(request.status).toBe('client_confirmed');
+    await service.completeRequest(9, 201);
+    expect(request.status).toBe('completed');
+  });
+
+  it('moves a client problem report to disputed and blocks completion', async () => {
+    const request: any = {
+      id: 9, assignedWorkerId: 201, status: 'waiting_client_confirmation',
+      moderationStatus: 'approved', client: { id: 101 }, created_at: new Date(),
+    };
+    requestsRepo.findOne.mockImplementation(async () => request);
+    await service.disputeWork(9, 101, 'Работата не е довършена');
+    expect(request.status).toBe('disputed');
+    await expect(service.completeRequest(9, 201)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('blocks completion when an assigned request is hidden', async () => {

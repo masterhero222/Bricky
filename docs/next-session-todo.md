@@ -1,5 +1,20 @@
 # Next Session TODO
 
+## P0 - Sprint 2 Controlled Request Lifecycle (Sprint 3 blocker)
+
+- [x] Replace direct assigned-to-completed behavior with backend-enforced states.
+- [x] Add worker arrival, start, ready, and close actions.
+- [x] Require a persisted completion photo before work can be marked ready.
+- [x] Add client confirmation and dispute actions.
+- [x] Keep completion photos pending moderation until approved.
+- [x] Add shared WebP compression, 1920 px cap, 1 MB output cap, and thumbnails for request/gallery/avatar uploads.
+- [x] Add additive SQL migration and rollback for lifecycle timestamps and thumbnails.
+- [ ] Expand isolated-MySQL lifecycle E2E to cover every transition and invalid jump.
+- [ ] Add real multipart image assertions for request, completion, gallery, and avatar thumbnails.
+- [ ] Complete manual mock acceptance for approval, rejection/resubmit, hide, suspension/reactivation, dispute, and review moderation.
+- [ ] Run staging migration/rollback rehearsal and acceptance checks.
+- [ ] Start Sprint 3 only after every item above is green.
+
 ## Highest Priority
 
 - P0 DONE IN CODE: Sprint 2.1 admin enforcement layer:

@@ -384,12 +384,18 @@ function normalizeMockEnforcementState(db) {
     })),
     requests: (db.requests || []).map((request, index) => {
       const moderationStatus = request.moderationStatus || (index === 0 ? "pending_review" : "approved");
+      const legacyStatus = String(request.status || "").toLowerCase();
+      const status = request.completedAt || legacyStatus.includes("завършен") ? "completed"
+        : legacyStatus.includes("отказ") ? "canceled"
+          : ["assigned", "worker_arrived", "in_progress", "waiting_client_confirmation", "client_confirmed", "disputed"].includes(legacyStatus) ? legacyStatus
+            : request.assignedWorkerId ? "assigned" : "approved";
       const normalizeImage = (image) => ({
         ...image,
         moderationStatus: image.moderationStatus || moderationStatus,
       });
       return {
         ...request,
+        status,
         moderationStatus,
         photos: (request.photos || []).map(normalizeImage),
         beforePhotos: (request.beforePhotos || []).map(normalizeImage),
@@ -1088,7 +1094,7 @@ export async function mockRequest(method, url, data) {
       estimateMax: Number.isFinite(Number(data.estimateMax)) ? Number(data.estimateMax) : null,
       estimateCurrency: data.estimateCurrency || null,
       pricingSnapshot: data.pricingSnapshot || null,
-      status: "нова",
+      status: "approved",
       photos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
       beforePhotos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
       afterPhotos: [],
@@ -1130,7 +1136,6 @@ export async function mockRequest(method, url, data) {
     if (!isOpenApprovedRequest(req)) return fail("Request is not approved or is closed", 403);
     if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
     req.appliedWorkers = Array.from(new Set([...(req.appliedWorkers || []), userId]));
-    req.status = "кандидатствана";
     writeDb(db);
     return response(req);
   }
@@ -1148,7 +1153,52 @@ export async function mockRequest(method, url, data) {
     if (!requireEligibleMockWorker(db, workerUserId)) return fail("Worker is not available", 403);
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
-    req.status = "в процес";
+    req.status = "assigned";
+    req.workerArrivedAt = null;
+    req.workStartedAt = null;
+    req.workReadyAt = null;
+    req.clientConfirmedAt = null;
+    req.disputedAt = null;
+    req.disputeReason = null;
+    writeDb(db);
+    return response(req);
+  }
+
+  const lifecycleMatch = path.match(/^\/requests\/(\d+)\/(arrive|start|ready|confirm|dispute)$/);
+  if (method === "post" && lifecycleMatch) {
+    const req = db.requests.find((r) => Number(r.id) === Number(lifecycleMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (!isApprovedRequest(req)) return fail("Request is not approved", 403);
+    const action = lifecycleMatch[2];
+    const workerActions = { arrive: ["assigned", "worker_arrived"], start: ["worker_arrived", "in_progress"], ready: ["in_progress", "waiting_client_confirmation"] };
+    if (workerActions[action]) {
+      if (role !== "worker" || !requireEligibleMockWorker(db, userId)) return fail("Worker only", 403);
+      if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
+      const [expected, next] = workerActions[action];
+      if (req.status !== expected) return fail(`Invalid transition from ${req.status}`, 400);
+      if (action === "ready") {
+        const photos = normalizePhotos(data?.afterPhotos).map((photo) => ({ ...photo, moderationStatus: "pending_review" }));
+        if (photos.length) req.afterPhotos = [...(req.afterPhotos || []), ...photos];
+        if (!(req.afterPhotos || []).length) return fail("At least one completion photo is required", 400);
+        req.workReadyAt = nowIso();
+      }
+      if (action === "arrive") req.workerArrivedAt = nowIso();
+      if (action === "start") req.workStartedAt = nowIso();
+      req.status = next;
+    } else {
+      if (role !== "client" || Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+      if (req.status !== "waiting_client_confirmation") return fail(`Invalid transition from ${req.status}`, 400);
+      if (action === "confirm") {
+        req.status = "client_confirmed";
+        req.clientConfirmedAt = nowIso();
+      } else {
+        const reason = String(data?.reason || "").trim();
+        if (reason.length < 5) return fail("Dispute reason is required", 400);
+        req.status = "disputed";
+        req.disputedAt = nowIso();
+        req.disputeReason = reason;
+      }
+    }
     writeDb(db);
     return response(req);
   }
@@ -1159,15 +1209,14 @@ export async function mockRequest(method, url, data) {
     if (!requireEligibleMockWorker(db, userId)) return fail("Worker is not available", 403);
     const req = db.requests.find((r) => Number(r.id) === Number(completeMatch[1]));
     if (!req) return fail("Request not found", 404);
-    if (!isOpenApprovedRequest(req)) return fail("Request is not approved or is closed", 403);
+    if (!isApprovedRequest(req)) return fail("Request is not approved", 403);
     if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
+    if (req.status !== "client_confirmed") return fail(`Invalid transition from ${req.status}`, 400);
 
     const completedAt = nowIso();
-    req.status = "завършена";
+    req.status = "completed";
     req.completedAt = completedAt;
     req.completedByWorkerId = userId;
-    req.afterPhotos = normalizePhotos(data?.afterPhotos)
-      .map((photo) => ({ ...photo, moderationStatus: "pending_review" }));
     req.durationDays = completionDurationDays(req, completedAt);
 
     const worker = db.workers.find((w) => Number(w.userId) === userId);

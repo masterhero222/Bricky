@@ -69,12 +69,26 @@ export class RequestEntity {
   @Column({ type: 'simple-json', nullable: true })
   afterPhotos: any[] | null;
 
-  @Column({
-    type: 'enum',
-    enum: ['нова', 'кандидатствана', 'назначена', 'в процес', 'завършена', 'отказана'],
-    default: 'нова',
-  })
+  @Column({ type: 'varchar', length: 40, default: 'approved' })
   status: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  workerArrivedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  workStartedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  workReadyAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  clientConfirmedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  disputedAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  disputeReason: string | null;
 
   @Column('simple-array', { nullable: true })
   appliedWorkers: number[];

@@ -285,7 +285,7 @@ export default function WorkerProfile() {
 
   function isClosed(req) {
     const st = String(req.status || "").toLowerCase();
-    return st.includes("завърш") || st.includes("отказ");
+    return ["completed", "canceled", "disputed"].includes(st) || st.includes("завърш") || st.includes("отказ");
   }
 
   function isAssignedToMe(req) {
@@ -294,8 +294,7 @@ export default function WorkerProfile() {
   }
 
   function canComplete(req) {
-    const st = String(req.status || "").toLowerCase();
-    return isAssignedToMe(req) && (st === "в процес" || st === "назначена");
+    return isAssignedToMe(req) && String(req.status || "").toLowerCase() === "in_progress";
   }
 
   async function handleCompletionPhotos(requestId, files) {
@@ -316,27 +315,30 @@ export default function WorkerProfile() {
     }));
   }
 
-  async function completeRequest(requestId) {
+  async function advanceRequest(req) {
     try {
       setApplyMsg("");
-      setCompletingId(requestId);
+      setCompletingId(req.id);
+
+      const status = String(req.status || "").toLowerCase();
+      const endpoint = status === "assigned" ? "arrive" : status === "worker_arrived" ? "start" : status === "in_progress" ? "ready" : status === "client_confirmed" ? "complete" : null;
+      if (!endpoint) throw new Error("Няма позволена следваща стъпка.");
 
       const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
-      const photos = completionPhotos[requestId] || [];
-      if (!isDevMock) {
+      const photos = completionPhotos[req.id] || [];
+      if (endpoint === "ready" && !isDevMock) {
         const files = photos.map((photo) => photo.file).filter(Boolean);
-        if (files.length) {
-          const data = new FormData();
-          files.forEach((file) => data.append("images", file));
-          await apiPost(`/requests/${requestId}/images/after`, data);
-        }
+        if (!files.length) throw new Error("Добави поне една снимка след ремонта.");
+        const data = new FormData();
+        files.forEach((file) => data.append("images", file));
+        await apiPost(`/requests/${req.id}/images/after`, data);
       }
 
-      await apiPost(`/requests/${requestId}/complete`, {
-        afterPhotos: isDevMock ? photos.map(({ file: _file, ...photo }) => photo) : [],
+      await apiPost(`/requests/${req.id}/${endpoint}`, {
+        afterPhotos: endpoint === "ready" && isDevMock ? photos.map(({ file: _file, ...photo }) => photo) : [],
       });
 
-      setApplyMsg(`Заявка #${requestId} е затворена ✅`);
+      setApplyMsg(`Статусът на заявка #${req.id} е обновен.`);
       await loadRequests();
     } catch (err) {
       console.error("completeRequest error:", err);
@@ -344,10 +346,15 @@ export default function WorkerProfile() {
 
       if (status === 401) setApplyMsg("401: Нямаш валиден токен. Логни се пак.");
       else if (status === 403) setApplyMsg("403: Нямаш права (трябва worker).");
-      else setApplyMsg(err?.response?.data?.message || "Неуспешно затваряне. Виж конзолата.");
+      else setApplyMsg(err?.response?.data?.message || err?.message || "Неуспешна промяна на статуса.");
     } finally {
       setCompletingId(null);
     }
+  }
+
+  function lifecycleLabel(req) {
+    const status = String(req.status || "").toLowerCase();
+    return ({ assigned: "Пристигнах на адрес", worker_arrived: "Започнах работа", in_progress: "Работата е готова", client_confirmed: "Затвори заявката" })[status] || "";
   }
 
   async function applyToRequest(requestId) {
@@ -889,6 +896,7 @@ export default function WorkerProfile() {
                       const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
                       const showContact = assignedToMe;
                       const showComplete = canComplete(r);
+                      const lifecycleAction = assignedToMe ? lifecycleLabel(r) : "";
                       const beforePhotos = requestPhotos(r);
 
                       return (
@@ -970,9 +978,9 @@ export default function WorkerProfile() {
                             </div>
                           )}
 
-                          {showComplete && (
+                          {lifecycleAction && (
                             <button
-                              onClick={() => completeRequest(r.id)}
+                              onClick={() => advanceRequest(r)}
                               disabled={completingId === r.id}
                               className={
                                 completingId === r.id
@@ -980,7 +988,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === r.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === r.id ? "Обновявам..." : lifecycleAction}
                             </button>
                           )}
 
@@ -1076,6 +1084,7 @@ export default function WorkerProfile() {
                   const disabledApply = applied || closed || hasAssigned || applyingId === req.id;
                   const showContact = assignedToMe;
                   const showComplete = canComplete(req);
+                  const lifecycleAction = assignedToMe ? lifecycleLabel(req) : "";
                   const beforePhotos = requestPhotos(req);
 
                   return (
@@ -1180,9 +1189,9 @@ export default function WorkerProfile() {
                             </div>
                           )}
 
-                          {showComplete && (
+                          {lifecycleAction && (
                             <button
-                              onClick={() => completeRequest(req.id)}
+                              onClick={() => advanceRequest(req)}
                               disabled={completingId === req.id}
                               className={
                                 completingId === req.id
@@ -1190,7 +1199,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === req.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === req.id ? "Обновявам..." : lifecycleAction}
                             </button>
                           )}
 

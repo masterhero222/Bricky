@@ -240,10 +240,11 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(uploaded.body.beforePhotos).toHaveLength(2);
     for (const photo of uploaded.body.beforePhotos) {
       expect(photo.storageKey).toMatch(/^requests\/request_/);
-      expect(photo.mimeType).toBe('image/png');
+      expect(photo.mimeType).toBe('image/webp');
+      expect(photo.thumbnailUrl).toMatch(/_thumb\.webp$/);
       expect(photo.sizeBytes).toBe(png.length);
       storedKeys.add(photo.storageKey);
-      await request(app.getHttpServer()).get(photo.url).expect(200).expect('Content-Type', /image\/png/);
+      await request(app.getHttpServer()).get(photo.url).expect(200).expect('Content-Type', /image\/webp/);
     }
     persistentBeforePhotoUrl = uploaded.body.beforePhotos.find((photo: any) => photo.name === 'before.png').url;
 
@@ -453,7 +454,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     expect(assigned.body.assignedWorkerId).toBe(workerUserId);
   });
 
-  it('rejects completion by another worker and completes for the assigned worker', async () => {
+  it('enforces arrival, start, completion photos, client confirmation, and worker close', async () => {
     await request(app.getHttpServer())
       .post(`/requests/${requestId}/images/after`)
       .set('Authorization', `Bearer ${otherWorkerToken}`)
@@ -473,7 +474,6 @@ describe('Request lifecycle (MySQL e2e)', () => {
     await request(app.getHttpServer())
       .post(`/requests/${requestId}/complete`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .send({ afterPhotos: [] })
       .expect(401);
     await request(app.getHttpServer())
       .post(`/admin/users/${workerUserId}/activate`)
@@ -487,21 +487,38 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .attach('images', png, { filename: 'after.png', contentType: 'image/png' })
       .expect(201);
     expect(uploaded.body.afterPhotos).toHaveLength(1);
-    expect(uploaded.body.afterPhotos[0].mimeType).toBe('image/png');
+    expect(uploaded.body.afterPhotos[0].mimeType).toBe('image/webp');
+    expect(uploaded.body.afterPhotos[0].thumbnailUrl).toMatch(/_thumb\.webp$/);
     persistentAfterPhotoUrl = uploaded.body.afterPhotos[0].url;
     storedKeys.add(uploaded.body.afterPhotos[0].storageKey);
     await request(app.getHttpServer()).get(uploaded.body.afterPhotos[0].url).expect(200);
 
     await request(app.getHttpServer())
-      .post(`/requests/${requestId}/complete`)
+      .post(`/requests/${requestId}/ready`)
       .set('Authorization', `Bearer ${otherWorkerToken}`)
-      .send({ afterPhotos: [] })
       .expect(403);
+
+    await request(app.getHttpServer()).post(`/requests/${requestId}/ready`)
+      .set('Authorization', `Bearer ${workerToken}`).send({}).expect(400);
+    await request(app.getHttpServer()).post(`/requests/${requestId}/arrive`)
+      .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
+      .expect((response) => expect(response.body.status).toBe('worker_arrived'));
+    await request(app.getHttpServer()).post(`/requests/${requestId}/start`)
+      .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
+      .expect((response) => expect(response.body.status).toBe('in_progress'));
+    await request(app.getHttpServer()).post(`/requests/${requestId}/ready`)
+      .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
+      .expect((response) => expect(response.body.status).toBe('waiting_client_confirmation'));
+    await request(app.getHttpServer()).post(`/requests/${requestId}/complete`)
+      .set('Authorization', `Bearer ${workerToken}`).send({}).expect(400);
+    await request(app.getHttpServer()).post(`/requests/${requestId}/confirm`)
+      .set('Authorization', `Bearer ${clientToken}`).send({}).expect(201)
+      .expect((response) => expect(response.body.status).toBe('client_confirmed'));
 
     const completed = await request(app.getHttpServer())
       .post(`/requests/${requestId}/complete`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .send({ afterPhotos: [] })
+      .send({})
       .expect(201);
 
     expect(completed.body.completedByWorkerId).toBe(workerUserId);
@@ -531,8 +548,8 @@ describe('Request lifecycle (MySQL e2e)', () => {
     await app.close();
     app = await createApp();
 
-    await request(app.getHttpServer()).get(persistentBeforePhotoUrl).expect(200).expect('Content-Type', /image\/png/);
-    await request(app.getHttpServer()).get(persistentAfterPhotoUrl).expect(200).expect('Content-Type', /image\/png/);
+    await request(app.getHttpServer()).get(persistentBeforePhotoUrl).expect(200).expect('Content-Type', /image\/webp/);
+    await request(app.getHttpServer()).get(persistentAfterPhotoUrl).expect(200).expect('Content-Type', /image\/webp/);
 
     const history = await request(app.getHttpServer())
       .get('/workers/me/history')
