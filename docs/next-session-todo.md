@@ -10,6 +10,8 @@
   - DONE: non-approved requests cannot receive applications, assignment, completion, after-photos, or reviews;
   - DONE: review creation requires an approved completed request and active client/worker accounts;
   - DONE: reactivation restores normal permissions without changing historical data;
+  - DONE: mock admin decisions now enforce the same request/account/media visibility rules across client and worker mock screens;
+  - DONE: automated mock moderation contract test covers pending, approval, rejection, suspension, public visibility, and reactivation;
   - DONE locally: backend build and 53 unit tests pass;
   - DONE: expanded MySQL lifecycle E2E passed in GitHub Actions run `28759468108`;
   - NEXT RELEASE GATE: staging API/UI smoke tests and the production backup/deployment checklist;

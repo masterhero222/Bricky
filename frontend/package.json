@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:pricing": "node scripts/verify-pricing-config.mjs",
+    "test:mock-moderation": "node scripts/verify-mock-moderation.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

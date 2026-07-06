@@ -63,6 +63,17 @@ Local verification on 2026-07-06:
 - backend unit tests: 53 passed across 12 suites;
 - unit coverage includes request moderation boundaries, worker suspension, public worker filtering, review prerequisites, and suspended review targets.
 
+Mock-environment hardening on 2026-07-06:
+
+- the mock worker feed and map now expose only approved, open requests;
+- rejected, hidden, and pending requests cannot receive mock applications, assignment, completion, or reviews;
+- mock account suspension blocks existing sessions and direct profile/gallery/avatar helpers;
+- public mock worker pages exclude suspended or unapproved workers;
+- request, gallery, and avatar media share the mock admin moderation queue;
+- new mock requests, uploads, profile changes, and reviews enter `pending_review`;
+- `npm run test:mock-moderation` proves pending/rejected publication boundaries plus suspend/reactivate behavior;
+- the flow was manually reproduced against the local mock UI at `http://127.0.0.1:5175`.
+
 The MySQL lifecycle E2E suite now covers:
 
 - existing JWT rejection after worker suspension;

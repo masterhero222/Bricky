@@ -10,6 +10,7 @@ const checks = [
   { name: "Sprint 2 migration contract", cwd: ".", command: "node", args: ["scripts/verify-sprint2-migration.mjs"] },
   { name: "Moderation migration contract", cwd: ".", command: "node", args: ["scripts/verify-moderation-migration.mjs"] },
   { name: "Frontend pricing verification", cwd: "frontend", args: ["run", "test:pricing"] },
+  { name: "Mock moderation enforcement", cwd: "frontend", args: ["run", "test:mock-moderation"] },
   { name: "Frontend production build", cwd: "frontend", args: ["run", "build"] },
   { name: "Backend production build", cwd: "backend", args: ["run", "build"] },
   { name: "Backend tests", cwd: "backend", args: ["test", "--", "--runInBand"] },

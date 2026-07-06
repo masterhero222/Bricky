@@ -4,6 +4,7 @@ import { getDevIdentities, isDevMockToken, resetDevDb, setDevIdentity } from "..
 export default function DevTestPanel() {
   const [visible, setVisible] = useState(false);
   const [tick, setTick] = useState(0);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const refresh = () => setTick((x) => x + 1);
@@ -25,7 +26,12 @@ export default function DevTestPanel() {
   const activeMock = isDevMockToken();
 
   const login = (role, id) => {
-    setDevIdentity(role, id);
+    setError("");
+    const selected = setDevIdentity(role, id);
+    if (!selected) {
+      setError("Този акаунт е спрян. Активирай го от Admin → Акаунти.");
+      return;
+    }
     window.location.href = role === "admin" ? "/admin" : role === "worker" ? "/worker/profile" : "/client/profile";
   };
 
@@ -55,9 +61,10 @@ export default function DevTestPanel() {
                     key={c.id}
                     type="button"
                     onClick={() => login("client", c.id)}
-                    className="w-full rounded bg-emerald-700 px-3 py-2 text-left text-xs font-semibold hover:bg-emerald-600"
+                    disabled={c.accountStatus === "suspended"}
+                    className="w-full rounded bg-emerald-700 px-3 py-2 text-left text-xs font-semibold hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                   >
-                    {c.name}
+                    {c.name}{c.accountStatus === "suspended" ? " (спрян)" : ""}
                   </button>
                 ))}
               </div>
@@ -71,14 +78,16 @@ export default function DevTestPanel() {
                     key={w.userId}
                     type="button"
                     onClick={() => login("worker", w.userId)}
-                    className="w-full rounded bg-amber-700 px-3 py-2 text-left text-xs font-semibold hover:bg-amber-600"
+                    disabled={w.accountStatus === "suspended"}
+                    className="w-full rounded bg-amber-700 px-3 py-2 text-left text-xs font-semibold hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                   >
-                    {w.fullName}
+                    {w.fullName}{w.accountStatus === "suspended" ? " (спрян)" : ""}
                   </button>
                 ))}
               </div>
             </div>
           </div>
+          {error && <p className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{error}</p>}
 
           <div className="mt-3">
             {admins.map((admin) => <button key={admin.id} type="button" onClick={() => login("admin", admin.id)} className="w-full rounded bg-cyan-700 px-3 py-2 text-sm font-bold hover:bg-cyan-600">Вход като администратор</button>)}
