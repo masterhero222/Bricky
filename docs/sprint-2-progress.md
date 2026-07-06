@@ -173,6 +173,20 @@ Every administrative mutation records:
 
 Sprint 2 admin functionality and the Sprint 2.1 backend enforcement layer are code-complete with green local and MySQL CI verification. Production readiness still requires the staging acceptance gate and controlled deployment checklist.
 
+## Final Stabilization Evidence - 2026-07-07
+
+- Release candidate SHA: `a0b7bb0b6700d7c9a45e122600a6e5c511c10222` on `codex/sprint-2-foundation`.
+- GitHub Actions run `28828356248` passed, including MySQL 8.4 migration rehearsal, repeated UP, reverse DOWN, migration-created schema, and lifecycle E2E with `TYPEORM_SYNCHRONIZE=false`.
+- Isolated VPS staging uses `/var/www/Bricky-staging`, database `bricky_sprint2_staging`, `/var/www/Bricky-staging-uploads`, PM2 process `bricky-staging`, and port `3100` restricted by firewall.
+- A sanitized production backup was restored; migrations `001`, `002`, and `003` are recorded and no orphan request clients were found.
+- Staging happy path passed through approved request, approved media, application, assignment, arrival, work start, completion media, client confirmation, close, review, and review approval.
+- Reject/reason/resubmit/approve and dispute/blocked-completion flows passed.
+- Existing JWT invalidation and reactivation passed for both worker and client accounts.
+- Full and thumbnail WebP URLs remained available after a staging PM2 restart.
+- Browser acceptance found and fixed the admin-login redirect; `/admin` now opens without console errors.
+
+Sprint 2 remains **OPEN** pending the real-phone image test, complete client/worker browser passes, mobile navigation/logout acceptance, staging rollback demonstration, PR review, and controlled production verification.
+
 ## Next Sprint 2 Steps
 
 1. Execute `docs/sprint-2-staging-deployment-checklist.md` against an isolated staging copy.
