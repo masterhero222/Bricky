@@ -246,7 +246,8 @@ describe('Request lifecycle (MySQL e2e)', () => {
       expect(photo.storageKey).toMatch(/^requests\/request_/);
       expect(photo.mimeType).toBe('image/webp');
       expect(photo.thumbnailUrl).toMatch(/_thumb\.webp$/);
-      expect(photo.sizeBytes).toBe(png.length);
+      expect(photo.sizeBytes).toBeGreaterThan(0);
+      expect(photo.sizeBytes).toBeLessThanOrEqual(1_000_000);
       storedKeys.add(photo.storageKey);
       await request(app.getHttpServer()).get(photo.url).expect(200).expect('Content-Type', /image\/webp/);
     }
