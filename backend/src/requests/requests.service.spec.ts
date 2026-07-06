@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { RequestsService } from './requests.service';
+import { RequestLifecycleService } from './request-lifecycle.service';
 
 describe('RequestsService', () => {
   let service: RequestsService;
@@ -66,7 +67,8 @@ describe('RequestsService', () => {
       usersRepo,
       workersRepo,
       { sendRequestConfirmation: jest.fn() } as any,
-      { notifyWorkerAssigned: jest.fn() } as any,
+      { create: jest.fn().mockResolvedValue({ id: 1 }) } as any,
+      new RequestLifecycleService(),
     );
   });
 
@@ -175,7 +177,7 @@ describe('RequestsService', () => {
     await service.getCompletedForWorker(201);
 
     expect(requestsRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-      where: { assignedWorkerId: 201, status: 'completed', moderationStatus: 'approved' },
+      where: { assignedWorkerId: 201, statusKey: 'completed', moderationStatus: 'approved' },
     }));
   });
 
@@ -290,7 +292,7 @@ describe('RequestsService', () => {
     const result = await service.completeRequest(9, 201);
 
     expect(result.completedByWorkerId).toBe(201);
-    expect(result.status).toBe('completed');
+    expect(result.statusKey).toBe('completed');
     expect(result.durationDays).toBeGreaterThanOrEqual(1);
   });
 
@@ -300,7 +302,7 @@ describe('RequestsService', () => {
     });
     await expect(service.markWorkReady(9, 201)).rejects.toBeInstanceOf(BadRequestException);
     imagesRepo.count.mockResolvedValue(1);
-    await expect(service.markWorkReady(9, 201)).resolves.toEqual(expect.objectContaining({ status: 'waiting_client_confirmation' }));
+    await expect(service.markWorkReady(9, 201)).resolves.toEqual(expect.objectContaining({ statusKey: 'waiting_client_confirmation' }));
   });
 
   it('enforces the complete worker and client lifecycle in order', async () => {
@@ -312,15 +314,15 @@ describe('RequestsService', () => {
     imagesRepo.count.mockResolvedValue(1);
 
     await service.markWorkerArrived(9, 201);
-    expect(request.status).toBe('worker_arrived');
+    expect(request.statusKey).toBe('worker_arrived');
     await service.startWork(9, 201);
-    expect(request.status).toBe('in_progress');
+    expect(request.statusKey).toBe('in_progress');
     await service.markWorkReady(9, 201);
-    expect(request.status).toBe('waiting_client_confirmation');
+    expect(request.statusKey).toBe('waiting_client_confirmation');
     await service.confirmWork(9, 101);
-    expect(request.status).toBe('client_confirmed');
+    expect(request.statusKey).toBe('client_confirmed');
     await service.completeRequest(9, 201);
-    expect(request.status).toBe('completed');
+    expect(request.statusKey).toBe('completed');
   });
 
   it('moves a client problem report to disputed and blocks completion', async () => {
@@ -330,7 +332,7 @@ describe('RequestsService', () => {
     };
     requestsRepo.findOne.mockImplementation(async () => request);
     await service.disputeWork(9, 101, 'Работата не е довършена');
-    expect(request.status).toBe('disputed');
+    expect(request.statusKey).toBe('disputed');
     await expect(service.completeRequest(9, 201)).rejects.toBeInstanceOf(BadRequestException);
   });
 

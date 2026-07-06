@@ -94,7 +94,12 @@ jobs:
       - name: Create isolated lifecycle database
         env:
           MYSQL_PWD: root
-        run: mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        run: |
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260704_000_legacy_baseline.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_001_sprint2_foundation_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_002_moderation_gate_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
 
       - name: Run MySQL request lifecycle E2E
         working-directory: backend
@@ -105,7 +110,7 @@ jobs:
           DB_USER: root
           DB_PASS: root
           DB_NAME: bricky_sprint1_e2e
-          TYPEORM_SYNCHRONIZE: "true"
+          TYPEORM_SYNCHRONIZE: "false"
           JWT_SECRET: sprint2-ci-only-secret
           UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
           MAIL_HOST: 127.0.0.1

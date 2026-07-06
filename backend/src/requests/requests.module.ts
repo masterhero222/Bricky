@@ -12,6 +12,7 @@ import { WorkersModule } from '../workers/workers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UserEntity } from '../users/user.entity';
 import { Worker } from '../workers/worker.entity';
+import { RequestLifecycleService } from './request-lifecycle.service';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { Worker } from '../workers/worker.entity';
     NotificationsModule, // ✅ важно
   ],
   controllers: [RequestsController],
-  providers: [RequestsService],
+  providers: [RequestsService, RequestLifecycleService],
 })
 export class RequestsModule {}

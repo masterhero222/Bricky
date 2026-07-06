@@ -7,11 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { mkdir, unlink, writeFile } from 'fs/promises';
-import { join, normalize, sep } from 'path';
-import { randomUUID } from 'crypto';
-import { getUploadPath, getUploadsRoot } from '../common/storage-paths';
-import { processUploadedImage } from '../common/image-processing';
+import { deleteStoredMedia, storeUploadedImage } from '../common/media-storage';
 import { RequestEntity } from './entities/request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestImageEntity, RequestImageKind } from './entities/request-image.entity';
@@ -27,7 +23,8 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserEntity } from '../users/user.entity';
 import { Worker } from '../workers/worker.entity';
-import { CLOSED_REQUEST_STATUSES, REQUEST_STATUSES, RequestStatus } from './request-lifecycle';
+import { LEGACY_STATUS_BY_KEY, REQUEST_STATUSES, RequestStatus } from './request-lifecycle';
+import { RequestLifecycleService } from './request-lifecycle.service';
 
 
 function extractResponseText(data: any): string {
@@ -99,6 +96,7 @@ export class RequestsService {
     private readonly workersRepo: Repository<Worker>,
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
+    private readonly lifecycle: RequestLifecycleService,
   ) {}
 
   private async assertActiveAccount(userId: number, expectedRole?: 'client' | 'worker') {
@@ -119,22 +117,28 @@ export class RequestsService {
   }
 
   private isCompleted(request: RequestEntity) {
-    return Boolean(request.completedAt) || request.status === REQUEST_STATUSES.COMPLETED;
+    return Boolean(request.completedAt) || this.requestStatus(request) === REQUEST_STATUSES.COMPLETED;
   }
 
   private isCanceled(request: RequestEntity) {
-    return request.status === REQUEST_STATUSES.CANCELED;
+    return this.requestStatus(request) === REQUEST_STATUSES.CANCELED;
   }
 
   private assertApprovedOpenRequest(request: RequestEntity) {
     if (request.moderationStatus !== 'approved') throw new ForbiddenException('Request is not approved');
-    if (CLOSED_REQUEST_STATUSES.has(request.status as RequestStatus)) throw new BadRequestException('Request is closed');
+    if (this.lifecycle.isClosed(request)) throw new BadRequestException('Request is closed');
   }
 
   private assertStatus(request: RequestEntity, expected: RequestStatus) {
-    if (request.status !== expected) {
-      throw new BadRequestException(`Invalid request transition from ${request.status} (expected ${expected})`);
-    }
+    this.lifecycle.assertCurrent(request, expected);
+  }
+
+  private requestStatus(request: RequestEntity) {
+    return this.lifecycle.current(request);
+  }
+
+  private transition(request: RequestEntity, next: RequestStatus) {
+    this.lifecycle.transition(request, next);
   }
 
   private async saveRequestImages(
@@ -251,38 +255,23 @@ export class RequestsService {
     if (!request) throw new NotFoundException('Request not found');
     this.assertImageUploadAccess(request, actorUserId, actorRole, kind);
 
-    const targetDir = getUploadPath('requests');
-    await mkdir(targetDir, { recursive: true });
-    const storedPaths: string[] = [];
     const photos: any[] = [];
 
     try {
       for (const file of list) {
-        const optimized = await processUploadedImage(file.buffer);
-        const stem = `request_${requestId}_${actorUserId}_${randomUUID()}`;
-        const filename = `${stem}.webp`;
-        const thumbnailFilename = `${stem}_thumb.webp`;
-        const absolutePath = join(targetDir, filename);
-        const thumbnailPath = join(targetDir, thumbnailFilename);
-        await writeFile(absolutePath, optimized.photo);
-        await writeFile(thumbnailPath, optimized.thumbnail);
-        storedPaths.push(absolutePath);
-        storedPaths.push(thumbnailPath);
+        const stored = await storeUploadedImage(
+          file.buffer, ['requests'], '/uploads/requests', `request_${requestId}_${actorUserId}`,
+        );
         photos.push({
           name: file.originalname,
-          url: `/uploads/requests/${filename}`,
-          thumbnailUrl: `/uploads/requests/${thumbnailFilename}`,
-          storageKey: `requests/${filename}`,
-          thumbnailStorageKey: `requests/${thumbnailFilename}`,
-          mimeType: optimized.mimeType,
-          sizeBytes: optimized.photo.length,
+          ...stored,
         });
       }
 
       await this.saveRequestImages(requestId, actorUserId, kind, photos);
       return this.hydrateRequestImages(request, true);
     } catch (error) {
-      await Promise.all(storedPaths.map((path) => unlink(path).catch(() => undefined)));
+      await Promise.all(photos.map((photo) => deleteStoredMedia(photo.storageKey, photo.thumbnailStorageKey)));
       throw error;
     }
   }
@@ -305,19 +294,8 @@ export class RequestsService {
     }
 
     await this.imagesRepo.delete({ id: image.id });
-    await this.deleteStoredFile(image.storageKey);
-    await this.deleteStoredFile(image.thumbnailStorageKey);
+    await deleteStoredMedia(image.storageKey, image.thumbnailStorageKey);
     return { ok: true, imageId: image.id };
-  }
-
-  private async deleteStoredFile(storageKey: string | null) {
-    if (!storageKey) return;
-    const uploadsRoot = normalize(getUploadsRoot());
-    const target = normalize(join(uploadsRoot, storageKey));
-    if (target !== uploadsRoot && !target.startsWith(`${uploadsRoot}${sep}`)) return;
-    await unlink(target).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT') throw error;
-    });
   }
 
   private assertImageUploadAccess(
@@ -463,7 +441,8 @@ export class RequestsService {
       photos,
       beforePhotos: photos,
       afterPhotos: [],
-      status: REQUEST_STATUSES.OPEN,
+      status: LEGACY_STATUS_BY_KEY[REQUEST_STATUSES.OPEN],
+      statusKey: REQUEST_STATUSES.OPEN,
       appliedWorkers: [],
       assignedWorkerId: null,
       completedAt: null,
@@ -543,14 +522,14 @@ export class RequestsService {
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId IS NULL')
             .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
-            .andWhere('r.status NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
+            .andWhere('r.statusKey NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
         }),
       )
       .orWhere(
         new Brackets((qb) => {
           qb.where('r.assignedWorkerId = :wid', { wid: workerUserId })
             .andWhere('r.moderationStatus = :approved', { approved: 'approved' })
-            .andWhere('r.status NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
+            .andWhere('r.statusKey NOT IN (:...closed)', { closed: ['completed', 'canceled', 'disputed'] });
         }),
       )
       .orderBy('r.created_at', 'DESC')
@@ -562,7 +541,7 @@ export class RequestsService {
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
     const requests = await this.repo.find({
-      where: { assignedWorkerId: workerUserId, status: REQUEST_STATUSES.COMPLETED, moderationStatus: 'approved' },
+      where: { assignedWorkerId: workerUserId, statusKey: REQUEST_STATUSES.COMPLETED, moderationStatus: 'approved' },
       relations: ['client'],
       order: { created_at: 'DESC' },
     });
@@ -615,7 +594,7 @@ export class RequestsService {
     }
 
     req.assignedWorkerId = workerUserId;
-    req.status = REQUEST_STATUSES.ASSIGNED;
+    this.transition(req, REQUEST_STATUSES.ASSIGNED);
     req.workerArrivedAt = null;
     req.workStartedAt = null;
     req.workReadyAt = null;
@@ -630,6 +609,9 @@ export class RequestsService {
 
     const saved = await this.repo.save(req);
     await this.ensureApplication(requestId, workerUserId, 'assigned');
+    await this.notifications.create(workerUserId, {
+      type: 'request_assigned', message: `Назначен си за заявка #${requestId}.`, requestId,
+    });
 
     return this.hydrateRequestImages(saved, true);
   }
@@ -649,7 +631,7 @@ export class RequestsService {
     req.assignedWorkerId = null;
 
     const applied = normalizeNumberArray(req.appliedWorkers);
-    req.status = REQUEST_STATUSES.OPEN;
+    this.transition(req, REQUEST_STATUSES.OPEN);
 
     const saved = await this.repo.save(req);
 
@@ -678,7 +660,7 @@ export class RequestsService {
   async markWorkerArrived(requestId: number, workerUserId: number) {
     const request = await this.assignedWorkerRequest(requestId, workerUserId);
     this.assertStatus(request, REQUEST_STATUSES.ASSIGNED);
-    request.status = REQUEST_STATUSES.WORKER_ARRIVED;
+    this.transition(request, REQUEST_STATUSES.WORKER_ARRIVED);
     request.workerArrivedAt = new Date();
     return this.hydrateRequestImages(await this.repo.save(request), true);
   }
@@ -686,7 +668,7 @@ export class RequestsService {
   async startWork(requestId: number, workerUserId: number) {
     const request = await this.assignedWorkerRequest(requestId, workerUserId);
     this.assertStatus(request, REQUEST_STATUSES.WORKER_ARRIVED);
-    request.status = REQUEST_STATUSES.IN_PROGRESS;
+    this.transition(request, REQUEST_STATUSES.IN_PROGRESS);
     request.workStartedAt = new Date();
     return this.hydrateRequestImages(await this.repo.save(request), true);
   }
@@ -698,9 +680,15 @@ export class RequestsService {
       where: { requestId, uploaderUserId: workerUserId, kind: 'after' },
     });
     if (completionPhotoCount < 1) throw new BadRequestException('At least one completion photo is required');
-    request.status = REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION;
+    this.transition(request, REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION);
     request.workReadyAt = new Date();
-    return this.hydrateRequestImages(await this.repo.save(request), true);
+    const saved = await this.repo.save(request);
+    if (request.client?.id) {
+      await this.notifications.create(Number(request.client.id), {
+        type: 'work_ready', message: `Майсторът отбеляза заявка #${requestId} като готова за потвърждение.`, requestId,
+      });
+    }
+    return this.hydrateRequestImages(saved, true);
   }
 
   private async ownedClientRequest(requestId: number, clientUserId: number) {
@@ -715,7 +703,7 @@ export class RequestsService {
   async confirmWork(requestId: number, clientUserId: number) {
     const request = await this.ownedClientRequest(requestId, clientUserId);
     this.assertStatus(request, REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION);
-    request.status = REQUEST_STATUSES.CLIENT_CONFIRMED;
+    this.transition(request, REQUEST_STATUSES.CLIENT_CONFIRMED);
     request.clientConfirmedAt = new Date();
     return this.hydrateRequestImages(await this.repo.save(request), true);
   }
@@ -725,21 +713,33 @@ export class RequestsService {
     this.assertStatus(request, REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION);
     const cleanReason = String(reason || '').trim();
     if (cleanReason.length < 5) throw new BadRequestException('Dispute reason is required');
-    request.status = REQUEST_STATUSES.DISPUTED;
+    this.transition(request, REQUEST_STATUSES.DISPUTED);
     request.disputedAt = new Date();
     request.disputeReason = cleanReason;
-    return this.hydrateRequestImages(await this.repo.save(request), true);
+    const saved = await this.repo.save(request);
+    if (request.assignedWorkerId) {
+      await this.notifications.create(Number(request.assignedWorkerId), {
+        type: 'request_disputed', message: `Клиентът сигнализира проблем по заявка #${requestId}.`, requestId,
+      });
+    }
+    return this.hydrateRequestImages(saved, true);
   }
 
   async completeRequest(requestId: number, workerUserId: number) {
     const request = await this.assignedWorkerRequest(requestId, workerUserId);
     this.assertStatus(request, REQUEST_STATUSES.CLIENT_CONFIRMED);
     const completedAt = new Date();
-    request.status = REQUEST_STATUSES.COMPLETED;
+    this.transition(request, REQUEST_STATUSES.COMPLETED);
     request.completedAt = completedAt;
     request.completedByWorkerId = workerUserId;
     request.durationDays = completionDurationDays(request.workStartedAt || request.created_at, completedAt);
-    return this.hydrateRequestImages(await this.repo.save(request), true);
+    const saved = await this.repo.save(request);
+    if (request.client?.id) {
+      await this.notifications.create(Number(request.client.id), {
+        type: 'request_completed', message: `Заявка #${requestId} е затворена. Можеш да оставиш отзив.`, requestId,
+      });
+    }
+    return this.hydrateRequestImages(saved, true);
   }
   private buildLocalDraft(prompt: string, address?: string) {
     const categoryKey = this.guessCategoryKey(prompt);

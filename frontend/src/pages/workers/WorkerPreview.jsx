@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { PhoneCall, CheckCircle, XCircle, Star } from "lucide-react";
 import { apiGet, apiPost } from "../../services/api";
-import { mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
+import { mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
 
 function StarsRow({ value = 0 }) {
   const v = Number(value);
@@ -124,7 +124,7 @@ export default function WorkerPreview() {
   }
 
   const avatarSrc = useMemo(() => {
-    const url = worker?.avatarUrl ? mediaUrl(worker.avatarUrl) : "";
+    const url = worker?.avatarThumbnailUrl || worker?.avatarUrl ? mediaUrl(worker.avatarThumbnailUrl || worker.avatarUrl) : "";
     return url || "/media_files/Snejan.jpg";
   }, [worker]);
 
@@ -139,6 +139,7 @@ export default function WorkerPreview() {
         .map((photo) => ({
           ...(typeof photo === "object" && photo ? photo : {}),
           url: photoMediaUrl(photo),
+          thumbnailUrl: photoThumbnailUrl(photo),
         }))
         .filter((photo) => !!photo.url);
 
@@ -313,7 +314,7 @@ export default function WorkerPreview() {
                       <div className="grid grid-cols-2 gap-2 w-36 h-24 shrink-0">
                         <div className="overflow-hidden rounded-lg bg-gray-200">
                           <img
-                            src={album.cover.url}
+                            src={album.cover.thumbnailUrl || album.cover.url}
                             alt={album.title}
                             className="h-full w-full object-cover"
                             loading="lazy"
@@ -324,7 +325,7 @@ export default function WorkerPreview() {
                         </div>
                         <div className="relative overflow-hidden rounded-lg bg-gray-200">
                           <img
-                            src={(album.photos[1] || album.cover).url}
+                            src={(album.photos[1] || album.cover).thumbnailUrl || (album.photos[1] || album.cover).url}
                             alt={album.title}
                             className="h-full w-full object-cover"
                             loading="lazy"

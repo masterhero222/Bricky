@@ -8,7 +8,7 @@ export async function processUploadedImage(buffer: Buffer) {
 
   let photo: Buffer | null = null;
   for (const quality of [82, 78, 75]) {
-    photo = await sharp(buffer, { failOn: 'error' })
+    photo = await sharp(buffer, { failOn: 'error', limitInputPixels: 100_000_000 })
       .rotate()
       .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
       .webp({ quality })
@@ -24,5 +24,5 @@ export async function processUploadedImage(buffer: Buffer) {
     .webp({ quality: 78 })
     .toBuffer();
 
-  return { photo, thumbnail, mimeType: 'image/webp' };
+  return { photo, thumbnail, mimeType: 'image/webp' as const };
 }

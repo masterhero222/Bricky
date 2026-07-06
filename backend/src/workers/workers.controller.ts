@@ -15,11 +15,7 @@ import {
 import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
-import { randomUUID } from 'crypto';
-import { getUploadPath } from '../common/storage-paths';
-import { processUploadedImage } from '../common/image-processing';
+import { deleteStoredMedia, storeUploadedImage } from '../common/media-storage';
 
 @Controller('workers')
 export class WorkersController {
@@ -62,7 +58,7 @@ export class WorkersController {
   @Post('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: 25 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
         cb(ok ? null : new Error('Invalid file type'), ok);
@@ -75,18 +71,22 @@ export class WorkersController {
     if (!file?.buffer) {
       return this.workersService.findByUserId(userId);
     }
-    const optimized = await processUploadedImage(file.buffer);
-    const dir = getUploadPath('workers');
-    await mkdir(dir, { recursive: true });
-    const stem = `worker_${userId}_${randomUUID()}`;
-    await Promise.all([
-      writeFile(join(dir, `${stem}.webp`), optimized.photo),
-      writeFile(join(dir, `${stem}_thumb.webp`), optimized.thumbnail),
-    ]);
-    return this.workersService.updateProfileByUserId(userId, {
-      avatarUrl: `/uploads/workers/${stem}.webp`,
-      avatarThumbnailUrl: `/uploads/workers/${stem}_thumb.webp`,
-    });
+    const previous = await this.workersService.findByUserId(userId);
+    const stored = await storeUploadedImage(file.buffer, ['workers'], '/uploads/workers', `worker_${userId}`);
+    try {
+      const updated = await this.workersService.updateProfileByUserId(userId, {
+        avatarUrl: stored.url,
+        avatarThumbnailUrl: stored.thumbnailUrl,
+      });
+      await deleteStoredMedia(
+        this.workersService.storageKeyFromUploadUrl(previous?.avatarUrl),
+        this.workersService.storageKeyFromUploadUrl(previous?.avatarThumbnailUrl),
+      );
+      return updated;
+    } catch (error) {
+      await deleteStoredMedia(stored.storageKey, stored.thumbnailStorageKey);
+      throw error;
+    }
   }
 
   // =========================
@@ -105,7 +105,7 @@ export class WorkersController {
   @Post('me/gallery')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
-      limits: { fileSize: 8 * 1024 * 1024 },
+      limits: { fileSize: 25 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
         cb(ok ? null : new Error('Invalid file type'), ok);
@@ -119,24 +119,18 @@ export class WorkersController {
     const list = Array.isArray(files) ? files : [];
     if (!list.length) throw new BadRequestException('No images');
 
-    const dir = getUploadPath('workers', 'gallery');
-    await mkdir(dir, { recursive: true });
     const images: Array<{ url: string; thumbnailUrl: string; storageKey: string; thumbnailStorageKey: string }> = [];
-    for (const file of list) {
-      const optimized = await processUploadedImage(file.buffer);
-      const stem = `gallery_${userId}_${randomUUID()}`;
-      await Promise.all([
-        writeFile(join(dir, `${stem}.webp`), optimized.photo),
-        writeFile(join(dir, `${stem}_thumb.webp`), optimized.thumbnail),
-      ]);
-      images.push({
-        url: `/uploads/workers/gallery/${stem}.webp`,
-        thumbnailUrl: `/uploads/workers/gallery/${stem}_thumb.webp`,
-        storageKey: `workers/gallery/${stem}.webp`,
-        thumbnailStorageKey: `workers/gallery/${stem}_thumb.webp`,
-      });
+    try {
+      for (const file of list) {
+        images.push(await storeUploadedImage(
+          file.buffer, ['workers', 'gallery'], '/uploads/workers/gallery', `gallery_${userId}`,
+        ));
+      }
+      return await this.workersService.addGalleryImages(userId, images);
+    } catch (error) {
+      await Promise.all(images.map((image) => deleteStoredMedia(image.storageKey, image.thumbnailStorageKey)));
+      throw error;
     }
-    return this.workersService.addGalleryImages(userId, images);
   }
 
   // за да работи с твоя apiPost(.../delete)

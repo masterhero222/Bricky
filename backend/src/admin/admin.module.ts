@@ -10,12 +10,14 @@ import { Worker } from '../workers/worker.entity';
 import { WorkerGalleryImage } from '../workers/worker-gallery-image.entity';
 import { ReviewEntity } from '../reviews/entities/review.entity';
 import { UserEntity } from '../users/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { MediaModerationService } from './media-moderation.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
+  imports: [NotificationsModule, TypeOrmModule.forFeature([
     RequestEntity, RequestImageEntity, Worker, WorkerGalleryImage, ReviewEntity, UserEntity, AdminAuditLogEntity,
   ])],
   controllers: [AdminController],
-  providers: [AdminService, AdminRoleGuard],
+  providers: [AdminService, AdminRoleGuard, MediaModerationService],
 })
 export class AdminModule {}

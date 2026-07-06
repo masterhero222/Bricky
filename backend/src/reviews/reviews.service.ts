@@ -31,7 +31,7 @@ export class ReviewsService {
   }
 
   private isCompletedRequest(request: RequestEntity) {
-    const status = String(request.status || '').toLowerCase();
+    const status = String(request.statusKey || request.status || '').toLowerCase();
     return Boolean(request.completedAt) || status === 'completed' || status.includes('завършен');
   }
 

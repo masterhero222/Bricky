@@ -17,10 +17,12 @@ Deploy Sprint 2 to staging first. Do not deploy the canonical media proposal wit
 ## Staging Migration
 
 1. Restore a recent production backup into an isolated staging database.
-2. Apply `20260705_001_sprint2_foundation_up.sql`.
-3. Apply `20260705_002_moderation_gate_up.sql`.
-4. Re-run both scripts to verify idempotency.
-5. Confirm `bricky_schema_migrations` contains both versions.
+2. For an empty database, apply `20260704_000_legacy_baseline.sql` first.
+3. Apply `20260705_001_sprint2_foundation_up.sql`.
+4. Apply `20260705_002_moderation_gate_up.sql`.
+5. Apply `20260706_003_controlled_request_lifecycle_up.sql`.
+6. Re-run all UP scripts to verify idempotency.
+7. Confirm `bricky_schema_migrations` contains all three Sprint 2 versions.
 6. Confirm existing rows are approved and newly created rows default to `pending_review`.
 7. Confirm `admin_audit_logs` includes old/new/IP columns.
 
@@ -32,9 +34,11 @@ Deploy Sprint 2 to staging first. Do not deploy the canonical media proposal wit
 - Reject it with a reason; confirm the client sees the reason.
 - Correct and resubmit; confirm it returns to `pending_review`.
 - Approve request and images; confirm they appear in worker feed/map.
-- Apply, assign, upload after images, complete, and review.
+- Apply, assign, mark arrived, start work, upload completion images, request client confirmation, confirm, close, and review.
+- Repeat the ready state with a client dispute and confirm completion/review remain blocked.
 - Approve the review and confirm the public rating changes.
-- Upload worker avatar/gallery media and confirm public visibility only after approval.
+- Upload 10/15/20 MB request/completion/gallery/avatar fixtures and one supplied real phone photo; verify EXIF rotation, WebP output, max 1920 px, output <=1 MB, and thumbnails.
+- Upload worker avatar/gallery media and confirm public visibility only after approval and uploader notification after rejection.
 - Suspend a test user and confirm both login and existing JWT access fail.
 - Reactivate the user with a reason.
 - Inspect the audit tab for actor, target, reason, IP, and old/new values.
@@ -48,7 +52,7 @@ Deploy Sprint 2 to staging first. Do not deploy the canonical media proposal wit
 3. Fetch the exact tested commit; do not merge on the server.
 4. Install dependencies with lockfiles.
 5. Build frontend and backend.
-6. Apply the two reviewed UP migrations once.
+6. Apply the three reviewed Sprint 2 UP migrations once; use the baseline only for an empty database.
 7. Deploy frontend assets atomically.
 8. Restart the backend with PM2 and save the process list.
 9. Check PM2 logs for startup, DB, and storage errors.
@@ -79,4 +83,3 @@ Rollback immediately for login failure, widespread 5xx responses, missing existi
 5. Restore the uploads snapshot only if files were changed or removed.
 6. Restart PM2, verify nginx, and repeat the public smoke checks.
 7. Preserve failure logs and DB evidence for diagnosis.
-

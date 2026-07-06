@@ -25,6 +25,10 @@ describe('Request lifecycle (MySQL e2e)', () => {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64',
   );
+  const paddedImage = (megabytes: number) => Buffer.concat([
+    png,
+    Buffer.alloc(Math.max(0, megabytes * 1024 * 1024 - png.length)),
+  ]);
 
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const password = 'Sprint1-Test-Password';
@@ -233,7 +237,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     const uploaded = await request(app.getHttpServer())
       .post(`/requests/${requestId}/images/before`)
       .set('Authorization', `Bearer ${clientToken}`)
-      .attach('images', png, { filename: 'before.png', contentType: 'image/png' })
+      .attach('images', paddedImage(10), { filename: 'before.png', contentType: 'image/png' })
       .attach('images', png, { filename: 'delete-me.png', contentType: 'image/png' })
       .expect(201);
 
@@ -386,7 +390,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     const galleryUpload = await request(app.getHttpServer())
       .post('/workers/me/gallery')
       .set('Authorization', `Bearer ${workerToken}`)
-      .attach('images', png, { filename: 'gallery-delete-check.png', contentType: 'image/png' })
+      .attach('images', paddedImage(15), { filename: 'gallery-delete-check.png', contentType: 'image/png' })
       .expect(201);
     const galleryImage = galleryUpload.body.find((image: any) =>
       String(image.url || '').includes('/uploads/workers/gallery/'),
@@ -441,6 +445,13 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .get('/workers/me')
       .set('Authorization', `Bearer ${workerToken}`)
       .expect(200);
+    const avatarUpload = await request(app.getHttpServer())
+      .post('/workers/me/avatar')
+      .set('Authorization', `Bearer ${workerToken}`)
+      .attach('avatar', paddedImage(20), { filename: 'phone-avatar.png', contentType: 'image/png' })
+      .expect(201);
+    expect(avatarUpload.body.avatarUrl).toMatch(/\.webp$/);
+    expect(avatarUpload.body.avatarThumbnailUrl).toMatch(/_thumb\.webp$/);
     await request(app.getHttpServer())
       .post(`/workers/me/gallery/${galleryImage.id}/delete`)
       .set('Authorization', `Bearer ${workerToken}`)
@@ -484,7 +495,7 @@ describe('Request lifecycle (MySQL e2e)', () => {
     const uploaded = await request(app.getHttpServer())
       .post(`/requests/${requestId}/images/after`)
       .set('Authorization', `Bearer ${workerToken}`)
-      .attach('images', png, { filename: 'after.png', contentType: 'image/png' })
+      .attach('images', paddedImage(10), { filename: 'after.png', contentType: 'image/png' })
       .expect(201);
     expect(uploaded.body.afterPhotos).toHaveLength(1);
     expect(uploaded.body.afterPhotos[0].mimeType).toBe('image/webp');
@@ -502,18 +513,18 @@ describe('Request lifecycle (MySQL e2e)', () => {
       .set('Authorization', `Bearer ${workerToken}`).send({}).expect(400);
     await request(app.getHttpServer()).post(`/requests/${requestId}/arrive`)
       .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
-      .expect((response) => expect(response.body.status).toBe('worker_arrived'));
+      .expect((response) => expect(response.body.statusKey).toBe('worker_arrived'));
     await request(app.getHttpServer()).post(`/requests/${requestId}/start`)
       .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
-      .expect((response) => expect(response.body.status).toBe('in_progress'));
+      .expect((response) => expect(response.body.statusKey).toBe('in_progress'));
     await request(app.getHttpServer()).post(`/requests/${requestId}/ready`)
       .set('Authorization', `Bearer ${workerToken}`).send({}).expect(201)
-      .expect((response) => expect(response.body.status).toBe('waiting_client_confirmation'));
+      .expect((response) => expect(response.body.statusKey).toBe('waiting_client_confirmation'));
     await request(app.getHttpServer()).post(`/requests/${requestId}/complete`)
       .set('Authorization', `Bearer ${workerToken}`).send({}).expect(400);
     await request(app.getHttpServer()).post(`/requests/${requestId}/confirm`)
       .set('Authorization', `Bearer ${clientToken}`).send({}).expect(201)
-      .expect((response) => expect(response.body.status).toBe('client_confirmed'));
+      .expect((response) => expect(response.body.statusKey).toBe('client_confirmed'));
 
     const completed = await request(app.getHttpServer())
       .post(`/requests/${requestId}/complete`)

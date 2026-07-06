@@ -9,6 +9,7 @@ const checks = [
   { name: "Database preflight safety", cwd: ".", command: "node", args: ["scripts/verify-db-preflight.mjs"] },
   { name: "Sprint 2 migration contract", cwd: ".", command: "node", args: ["scripts/verify-sprint2-migration.mjs"] },
   { name: "Moderation migration contract", cwd: ".", command: "node", args: ["scripts/verify-moderation-migration.mjs"] },
+  { name: "Controlled lifecycle migration contract", cwd: ".", command: "node", args: ["scripts/verify-controlled-lifecycle-migration.mjs"] },
   { name: "Frontend pricing verification", cwd: "frontend", args: ["run", "test:pricing"] },
   { name: "Mock moderation enforcement", cwd: "frontend", args: ["run", "test:mock-moderation"] },
   { name: "Frontend production build", cwd: "frontend", args: ["run", "build"] },

@@ -5,6 +5,7 @@ import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { RequestEntity } from '../requests/entities/request.entity';
 import { RequestImageEntity } from '../requests/entities/request-image.entity';
+import { deleteStoredMedia } from '../common/media-storage';
 import { UserEntity } from '../users/user.entity';
 import * as bcrypt from 'bcrypt';
 
@@ -230,6 +231,7 @@ export class WorkersService {
     return rows.map((row) => ({
       ...row,
       url: this.normalizeUploadUrl(row.url),
+      thumbnailUrl: this.normalizeUploadUrl(row.thumbnailUrl),
     }));
   }
 
@@ -265,7 +267,15 @@ export class WorkersService {
     if (Number(img.userId) !== uid) throw new BadRequestException('Not your image');
 
     await this.galleryRepo.delete({ id });
+    await deleteStoredMedia(img.storageKey, img.thumbnailStorageKey);
     return { ok: true };
+  }
+
+  storageKeyFromUploadUrl(url?: string | null) {
+    const value = String(url || '');
+    const marker = '/uploads/';
+    const index = value.indexOf(marker);
+    return index >= 0 ? value.slice(index + marker.length) : null;
   }
 
   async getHistoryByUserId(userId: number, includeUnapproved = false) {
@@ -313,6 +323,7 @@ export class WorkersService {
             id: row.id,
             name: row.name || 'Photo',
             url: this.normalizeUploadUrl(row.url),
+            thumbnailUrl: this.normalizeUploadUrl(row.thumbnailUrl),
             storageKey: row.storageKey,
             mimeType: row.mimeType,
             sizeBytes: row.sizeBytes,
@@ -345,6 +356,9 @@ export class WorkersService {
       avatarUrl: includeUnapproved || worker.avatarModerationStatus === 'approved'
         ? this.normalizeUploadUrl(worker.avatarUrl)
         : '',
+      avatarThumbnailUrl: includeUnapproved || worker.avatarModerationStatus === 'approved'
+        ? this.normalizeUploadUrl(worker.avatarThumbnailUrl)
+        : '',
       gallery,
       completedJobs,
     };
@@ -363,7 +377,7 @@ export class WorkersService {
   }
 
   private isCompletedRequest(request: RequestEntity, userId: number): boolean {
-    const status = String(request?.status || '').toLowerCase();
+    const status = String(request?.statusKey || request?.status || '').toLowerCase();
     return (
       Number(request?.completedByWorkerId) === Number(userId) ||
       !!request?.completedAt ||

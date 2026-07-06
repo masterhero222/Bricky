@@ -69,8 +69,15 @@ export class RequestEntity {
   @Column({ type: 'simple-json', nullable: true })
   afterPhotos: any[] | null;
 
-  @Column({ type: 'varchar', length: 40, default: 'approved' })
+  @Column({
+    type: 'enum',
+    enum: ['нова', 'кандидатствана', 'назначена', 'в процес', 'завършена', 'отказана'],
+    default: 'нова',
+  })
   status: string;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  statusKey: string | null;
 
   @Column({ type: 'datetime', nullable: true })
   workerArrivedAt: Date | null;

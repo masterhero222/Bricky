@@ -4,7 +4,7 @@ import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
-import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
+import { getApiBase, mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
 import { getPricingActivity } from "../../constants/repairPricingConfig";
@@ -284,7 +284,7 @@ export default function WorkerProfile() {
   }
 
   function isClosed(req) {
-    const st = String(req.status || "").toLowerCase();
+    const st = String(req.statusKey || req.status || "").toLowerCase();
     return ["completed", "canceled", "disputed"].includes(st) || st.includes("завърш") || st.includes("отказ");
   }
 
@@ -294,7 +294,7 @@ export default function WorkerProfile() {
   }
 
   function canComplete(req) {
-    return isAssignedToMe(req) && String(req.status || "").toLowerCase() === "in_progress";
+    return isAssignedToMe(req) && String(req.statusKey || req.status || "").toLowerCase() === "in_progress";
   }
 
   async function handleCompletionPhotos(requestId, files) {
@@ -320,7 +320,7 @@ export default function WorkerProfile() {
       setApplyMsg("");
       setCompletingId(req.id);
 
-      const status = String(req.status || "").toLowerCase();
+      const status = String(req.statusKey || req.status || "").toLowerCase();
       const endpoint = status === "assigned" ? "arrive" : status === "worker_arrived" ? "start" : status === "in_progress" ? "ready" : status === "client_confirmed" ? "complete" : null;
       if (!endpoint) throw new Error("Няма позволена следваща стъпка.");
 
@@ -353,7 +353,7 @@ export default function WorkerProfile() {
   }
 
   function lifecycleLabel(req) {
-    const status = String(req.status || "").toLowerCase();
+    const status = String(req.statusKey || req.status || "").toLowerCase();
     return ({ assigned: "Пристигнах на адрес", worker_arrived: "Започнах работа", in_progress: "Работата е готова", client_confirmed: "Затвори заявката" })[status] || "";
   }
 
@@ -612,7 +612,7 @@ export default function WorkerProfile() {
     const total = requests.length;
 
     const byStatus = requests.reduce((acc, r) => {
-      const s = (r.status || "—").toLowerCase();
+      const s = (r.statusKey || r.status || "—").toLowerCase();
       acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
@@ -635,7 +635,7 @@ export default function WorkerProfile() {
 
     return requests.filter((r) => {
       const catOk = categoryFilter === "all" ? true : r.category === categoryFilter;
-      const st = (r.status || "").toLowerCase();
+      const st = (r.statusKey || r.status || "").toLowerCase();
       const statusOk = statusFilter === "all" ? true : st === statusFilter;
 
       if (!catOk || !statusOk) return false;
@@ -656,7 +656,7 @@ export default function WorkerProfile() {
   }, [requests]);
 
   const statuses = useMemo(() => {
-    const set = new Set(requests.map((r) => (r.status || "").toLowerCase()).filter(Boolean));
+    const set = new Set(requests.map((r) => (r.statusKey || r.status || "").toLowerCase()).filter(Boolean));
     return ["all", ...Array.from(set)];
   }, [requests]);
 
@@ -666,6 +666,7 @@ export default function WorkerProfile() {
         .map((photo) => ({
           ...(typeof photo === "object" && photo ? photo : {}),
           url: photoUrl(photo),
+          thumbnailUrl: photoThumbnailUrl(photo),
         }))
         .filter((photo) => !!photo.url);
 
@@ -924,7 +925,7 @@ export default function WorkerProfile() {
                                   rel="noreferrer"
                                   className="block h-20 w-20 overflow-hidden rounded-lg border border-gray-700 bg-gray-950"
                                 >
-                                  <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
+                                  <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
                                 </a>
                               ))}
                             </div>
@@ -1134,7 +1135,7 @@ export default function WorkerProfile() {
                                 rel="noreferrer"
                                 className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
                               >
-                                <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
+                                <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
                               </a>
                             ))}
                           </div>
@@ -1260,8 +1261,8 @@ export default function WorkerProfile() {
                         </p>
                       )}
                       <div className="grid md:grid-cols-2 gap-4 mt-5">
-                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
-                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
                       </div>
                     </div>
                   );
@@ -1475,7 +1476,7 @@ export default function WorkerProfile() {
                         <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
                           <div className="overflow-hidden rounded-lg bg-gray-900">
                             <img
-                              src={album.cover.url}
+                              src={album.cover.thumbnailUrl || album.cover.url}
                               alt={album.title}
                               className="w-full h-full object-cover"
                               loading="lazy"
@@ -1486,7 +1487,7 @@ export default function WorkerProfile() {
                           </div>
                           <div className="relative overflow-hidden rounded-lg bg-gray-900">
                             <img
-                              src={(album.photos[1] || album.cover).url}
+                              src={(album.photos[1] || album.cover).thumbnailUrl || (album.photos[1] || album.cover).url}
                               alt={album.title}
                               className="w-full h-full object-cover"
                               loading="lazy"

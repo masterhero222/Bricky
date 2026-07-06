@@ -18,7 +18,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestDraftDto } from './dto/request-draft.dto';
 
 const requestImageUpload = FilesInterceptor('images', 10, {
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
     const ok = allowed.has(String(file.mimetype || '').toLowerCase());

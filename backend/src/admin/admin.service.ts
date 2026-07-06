@@ -9,8 +9,9 @@ import { Worker } from '../workers/worker.entity';
 import { WorkerGalleryImage } from '../workers/worker-gallery-image.entity';
 import { ReviewEntity } from '../reviews/entities/review.entity';
 import { UserEntity } from '../users/user.entity';
-import { unlink } from 'fs/promises';
-import { getUploadPath } from '../common/storage-paths';
+import { deleteStoredMedia } from '../common/media-storage';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MediaModerationService } from './media-moderation.service';
 
 @Injectable()
 export class AdminService {
@@ -22,6 +23,8 @@ export class AdminService {
     @InjectRepository(ReviewEntity) private readonly reviews: Repository<ReviewEntity>,
     @InjectRepository(UserEntity) private readonly users: Repository<UserEntity>,
     @InjectRepository(AdminAuditLogEntity) private readonly audit: Repository<AdminAuditLogEntity>,
+    private readonly notifications: NotificationsService,
+    private readonly mediaModeration: MediaModerationService,
   ) {}
 
   dashboard() {
@@ -145,7 +148,7 @@ export class AdminService {
   async moderateRequest(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
     this.assertStatus(status);
     this.assertReason(status, reason);
-    const entity = await this.requests.findOne({ where: { id } });
+    const entity = await this.requests.findOne({ where: { id }, relations: ['client'] });
     if (!entity) throw new NotFoundException('Request not found');
     const oldValue = this.moderationSnapshot(entity);
     entity.moderationStatus = status;
@@ -154,6 +157,9 @@ export class AdminService {
     entity.moderatedAt = new Date();
     await this.requests.save(entity);
     await this.writeAudit(adminUserId, 'request', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
+    if (status === 'rejected' && entity.client?.id) {
+      await this.notifyRejection(Number(entity.client.id), 'request_rejected', `Заявка #${id} е отхвърлена`, entity.moderationReason, id);
+    }
     return entity;
   }
 
@@ -185,56 +191,33 @@ export class AdminService {
     await this.writeAudit(adminUserId, 'request', id, 'deleted', reason?.trim() || null, this.requestSnapshot(entity), null, ipAddress);
     await this.media.delete({ requestId: id });
     await this.requests.delete({ id });
-    await Promise.all(images.map((image) => image.storageKey ? unlink(getUploadPath(image.storageKey)).catch(() => undefined) : undefined));
+    await Promise.all(images.map((image) => deleteStoredMedia(image.storageKey, image.thumbnailStorageKey)));
     return { ok: true, id };
   }
 
   async moderateMedia(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    this.assertStatus(status);
-    this.assertReason(status, reason);
-    const entity = await this.media.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Media not found');
-    const oldValue = this.moderationSnapshot(entity);
-    entity.moderationStatus = status;
-    entity.isApproved = status === 'approved';
-    entity.moderationReason = reason?.trim() || null;
-    entity.moderatedByUserId = adminUserId;
-    entity.moderatedAt = new Date();
-    await this.media.save(entity);
-    await this.writeAudit(adminUserId, 'request_media', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
-    return entity;
+    return this.mediaModeration.moderateRequestImage(id, status, adminUserId, reason, ipAddress);
   }
 
   async moderateGallery(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    this.assertStatus(status);
-    this.assertReason(status, reason);
-    const entity = await this.gallery.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Gallery media not found');
-    const oldValue = this.moderationSnapshot(entity);
-    this.applyModeration(entity, status, adminUserId, reason);
-    await this.gallery.save(entity);
-    await this.writeAudit(adminUserId, 'worker_gallery', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
-    return entity;
+    return this.mediaModeration.moderateGalleryImage(id, status, adminUserId, reason, ipAddress);
   }
 
   async moderateWorker(id: number, target: 'profile' | 'avatar', status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
+    if (target === 'avatar') return this.mediaModeration.moderateAvatar(id, status, adminUserId, reason, ipAddress);
     this.assertStatus(status);
     this.assertReason(status, reason);
     const entity = await this.workers.findOne({ where: { id } });
     if (!entity) throw new NotFoundException('Worker not found');
-    const oldValue = target === 'avatar' ? this.avatarSnapshot(entity) : this.moderationSnapshot(entity);
+    const oldValue = this.moderationSnapshot(entity);
     const value = reason?.trim() || null;
-    if (target === 'avatar') {
-      entity.avatarModerationStatus = status; entity.avatarModerationReason = value;
-      entity.avatarModeratedByUserId = adminUserId; entity.avatarModeratedAt = new Date();
-    } else {
-      entity.moderationStatus = status; entity.moderationReason = value;
-      entity.moderatedByUserId = adminUserId; entity.moderatedAt = new Date();
-      entity.isApproved = status === 'approved';
-    }
+    entity.moderationStatus = status; entity.moderationReason = value;
+    entity.moderatedByUserId = adminUserId; entity.moderatedAt = new Date();
+    entity.isApproved = status === 'approved';
     await this.workers.save(entity);
-    const newValue = target === 'avatar' ? this.avatarSnapshot(entity) : this.moderationSnapshot(entity);
+    const newValue = this.moderationSnapshot(entity);
     await this.writeAudit(adminUserId, `worker_${target}`, id, status, value, oldValue, newValue, ipAddress);
+    if (status === 'rejected') await this.notifyRejection(entity.userId, 'worker_profile_rejected', 'Профилът е отхвърлен', value);
     return entity;
   }
 
@@ -247,6 +230,9 @@ export class AdminService {
     this.applyModeration(entity, status, adminUserId, reason);
     await this.reviews.save(entity);
     await this.writeAudit(adminUserId, 'review', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
+    if (status === 'rejected') {
+      await this.notifyRejection(entity.clientUserId, 'review_rejected', `Отзив #${id} е отхвърлен`, entity.moderationReason, entity.requestId);
+    }
     return entity;
   }
 
@@ -304,7 +290,7 @@ export class AdminService {
     return {
       id: entity.id, category: entity.category, categoryKey: entity.categoryKey,
       description: entity.description, address: entity.address,
-      status: entity.status, moderationStatus: entity.moderationStatus,
+      status: entity.status, statusKey: entity.statusKey, moderationStatus: entity.moderationStatus,
     };
   }
 
@@ -316,5 +302,10 @@ export class AdminService {
     return this.audit.save(this.audit.create({
       adminUserId, entityType, entityId, action, reason, metadata: null, oldValue, newValue, ipAddress,
     }));
+  }
+
+  private notifyRejection(userId: number, type: string, prefix: string, reason?: string | null, requestId?: number) {
+    const suffix = reason ? ` Причина: ${reason}` : '';
+    return this.notifications.create(userId, { type, message: `${prefix}.${suffix}`, requestId: requestId ?? null });
   }
 }

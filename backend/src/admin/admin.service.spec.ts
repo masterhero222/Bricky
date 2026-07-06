@@ -8,7 +8,9 @@ describe('AdminService', () => {
   const reviews: any = { findOne: jest.fn(), save: jest.fn(), count: jest.fn(), find: jest.fn() };
   const users: any = { findOne: jest.fn(), save: jest.fn(), find: jest.fn() };
   const audit: any = { create: jest.fn((value) => value), save: jest.fn(), find: jest.fn() };
-  const service = new AdminService(requests, media, workers, gallery, reviews, users, audit);
+  const notifications: any = { create: jest.fn().mockResolvedValue({ id: 1 }) };
+  const mediaModeration: any = { moderateRequestImage: jest.fn(), moderateGalleryImage: jest.fn(), moderateAvatar: jest.fn() };
+  const service = new AdminService(requests, media, workers, gallery, reviews, users, audit, notifications, mediaModeration);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -42,14 +44,11 @@ describe('AdminService', () => {
 
   it('keeps media approval compatibility in sync', async () => {
     const image: any = { id: 12, moderationStatus: 'pending_review', isApproved: false };
-    media.findOne.mockResolvedValue(image);
-    media.save.mockImplementation((value) => value);
-    audit.save.mockImplementation((value) => value);
+    mediaModeration.moderateRequestImage.mockResolvedValue(image);
 
     await service.moderateMedia(12, 'approved', 99);
 
-    expect(image.isApproved).toBe(true);
-    expect(audit.save).toHaveBeenCalled();
+    expect(mediaModeration.moderateRequestImage).toHaveBeenCalledWith(12, 'approved', 99, undefined, undefined);
   });
 
   it('requires a reason for non-approval moderation actions', async () => {

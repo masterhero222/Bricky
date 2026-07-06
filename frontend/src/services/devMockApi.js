@@ -396,6 +396,7 @@ function normalizeMockEnforcementState(db) {
       return {
         ...request,
         status,
+        statusKey: status,
         moderationStatus,
         photos: (request.photos || []).map(normalizeImage),
         beforePhotos: (request.beforePhotos || []).map(normalizeImage),
@@ -471,6 +472,11 @@ function isEligibleWorker(worker) {
 
 function isApprovedRequest(request) {
   return request?.moderationStatus === "approved";
+}
+
+function setRequestStatus(request, statusKey) {
+  request.statusKey = statusKey;
+  request.status = statusKey;
 }
 
 function isCompletedRequest(request) {
@@ -1095,6 +1101,7 @@ export async function mockRequest(method, url, data) {
       estimateCurrency: data.estimateCurrency || null,
       pricingSnapshot: data.pricingSnapshot || null,
       status: "approved",
+      statusKey: "approved",
       photos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
       beforePhotos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
       afterPhotos: [],
@@ -1153,7 +1160,7 @@ export async function mockRequest(method, url, data) {
     if (!requireEligibleMockWorker(db, workerUserId)) return fail("Worker is not available", 403);
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
-    req.status = "assigned";
+    setRequestStatus(req, "assigned");
     req.workerArrivedAt = null;
     req.workStartedAt = null;
     req.workReadyAt = null;
@@ -1184,17 +1191,17 @@ export async function mockRequest(method, url, data) {
       }
       if (action === "arrive") req.workerArrivedAt = nowIso();
       if (action === "start") req.workStartedAt = nowIso();
-      req.status = next;
+      setRequestStatus(req, next);
     } else {
       if (role !== "client" || Number(req.clientUserId) !== userId) return fail("Not your request", 403);
       if (req.status !== "waiting_client_confirmation") return fail(`Invalid transition from ${req.status}`, 400);
       if (action === "confirm") {
-        req.status = "client_confirmed";
+        setRequestStatus(req, "client_confirmed");
         req.clientConfirmedAt = nowIso();
       } else {
         const reason = String(data?.reason || "").trim();
         if (reason.length < 5) return fail("Dispute reason is required", 400);
-        req.status = "disputed";
+        setRequestStatus(req, "disputed");
         req.disputedAt = nowIso();
         req.disputeReason = reason;
       }
@@ -1214,7 +1221,7 @@ export async function mockRequest(method, url, data) {
     if (req.status !== "client_confirmed") return fail(`Invalid transition from ${req.status}`, 400);
 
     const completedAt = nowIso();
-    req.status = "completed";
+    setRequestStatus(req, "completed");
     req.completedAt = completedAt;
     req.completedByWorkerId = userId;
     req.durationDays = completionDurationDays(req, completedAt);

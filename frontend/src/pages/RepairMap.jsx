@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../services/api";
-import { photoMediaUrl } from "../utils/mediaUrls";
+import { photoMediaUrl, photoThumbnailUrl } from "../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 
 const TILE_SIZE = 256;
@@ -428,7 +428,7 @@ export default function RepairMap() {
             ) : (
               <div key={activeRequest.id} aria-live="polite" data-request-id={activeRequest.id} className="space-y-4">
                 <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeRequest.status)}`}>
-                  {activeRequest.status || "нова"}
+                  {activeRequest.statusKey || activeRequest.status || "нова"}
                 </div>
 
                 <div>
@@ -461,7 +461,7 @@ export default function RepairMap() {
                     <div className="grid grid-cols-2 gap-3">
                       {activePhotos.slice(0, 4).map((photo) => (
                         <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                          <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover hover:scale-105 transition-transform" />
+                          <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover hover:scale-105 transition-transform" />
                         </a>
                       ))}
                     </div>

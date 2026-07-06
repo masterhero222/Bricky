@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { Box, LogOut, Menu, UserRound, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Bell, Box, LogOut, Menu, UserRound, X } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { apiGet, apiPost } from "../../services/api";
 
 const navClass = ({ isActive }) =>
   `relative flex min-h-[78px] items-center px-4 font-bold transition-colors ${
@@ -14,9 +15,25 @@ const mobileLinkClass =
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
   const profilePath = role === "admin" ? "/admin" : role === "client" ? "/client/profile" : "/worker/profile";
+  const unreadCount = notifications.filter((item) => !item.isRead).length;
+
+  useEffect(() => {
+    if (!role || role === "admin") return;
+    apiGet("/notifications/me")
+      .then((response) => setNotifications(Array.isArray(response.data) ? response.data : []))
+      .catch(() => setNotifications([]));
+  }, [role]);
+
+  const markNotificationRead = async (item) => {
+    if (item.isRead) return;
+    await apiPost(`/notifications/${item.id}/read`, {}).catch(() => null);
+    setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -50,9 +67,22 @@ export default function Navbar() {
               <button onClick={() => navigate("/auth/register")} className="bricky-button-secondary !min-h-11">Регистрация</button>
             </>
           ) : (
-            <Link className="bricky-button-primary !min-h-11" to={profilePath}>
-              <UserRound size={19} /> Моят профил
-            </Link>
+            <>
+              {role !== "admin" && <div className="relative">
+                <button onClick={() => setNotificationsOpen((value) => !value)} className="relative grid h-11 w-11 place-items-center rounded-xl border border-slate-400/15 bg-slate-800/70 text-slate-100" aria-label="Известия">
+                  <Bell size={19} />
+                  {unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1 text-center text-xs font-black text-white">{unreadCount}</span>}
+                </button>
+                {notificationsOpen && <div className="absolute right-0 top-14 w-96 overflow-hidden rounded-xl border border-slate-600/40 bg-[#101b2d] shadow-2xl">
+                  <p className="border-b border-slate-600/40 px-4 py-3 font-extrabold text-white">Известия</p>
+                  <div className="max-h-80 overflow-y-auto">{notifications.length ? notifications.slice(0, 10).map((item) => <button key={item.id} onClick={() => markNotificationRead(item)} className={`block w-full border-b border-slate-700/50 px-4 py-3 text-left text-sm ${item.isRead ? "text-slate-400" : "bg-cyan-400/5 text-slate-100"}`}>{item.message}</button>) : <p className="px-4 py-5 text-sm text-slate-400">Няма известия.</p>}</div>
+                </div>}
+              </div>}
+              <Link className="bricky-button-primary !min-h-11" to={profilePath}>
+                <UserRound size={19} /> Моят профил
+              </Link>
+              <button onClick={handleLogout} className="grid h-11 w-11 place-items-center rounded-xl border border-red-400/25 bg-red-500/10 text-red-200" aria-label="Изход"><LogOut size={19} /></button>
+            </>
           )}
         </div>
 

@@ -17,6 +17,7 @@ test "${before_count}" = "2"
 
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_001_sprint2_foundation_up.sql
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_002_moderation_gate_up.sql
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
 
 tables_after_up="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}' AND table_name IN ('request_activities','request_calculations','request_events');")"
 test "${tables_after_up}" = "3"
@@ -25,7 +26,7 @@ columns_after_up="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT
 test "${columns_after_up}" = "6"
 
 status_mapping="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT GROUP_CONCAT(CONCAT(id, ':', statusKey) ORDER BY id SEPARATOR ',') FROM requests;")"
-test "${status_mapping}" = "1:new,2:in_progress"
+test "${status_mapping}" = "1:approved,2:in_progress"
 
 migration_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM bricky_schema_migrations WHERE version='20260705_001_sprint2_foundation';")"
 test "${migration_count}" = "1"
@@ -39,6 +40,21 @@ moderation_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT
 test "${moderation_count}" = "1"
 moderation_tables="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}' AND table_name='admin_audit_logs';")"
 test "${moderation_tables}" = "1"
+
+lifecycle_columns="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${MYSQL_DATABASE}' AND ((table_name='requests' AND column_name IN ('workerArrivedAt','workStartedAt','workReadyAt','clientConfirmedAt','disputedAt','disputeReason')) OR (table_name='request_images' AND column_name IN ('thumbnailUrl','thumbnailStorageKey')) OR (table_name='worker_gallery_images' AND column_name IN ('thumbnailUrl','storageKey','thumbnailStorageKey')) OR (table_name='worker' AND column_name='avatarThumbnailUrl'));")"
+test "${lifecycle_columns}" = "12"
+lifecycle_mapping="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT GROUP_CONCAT(CONCAT(id, ':', statusKey) ORDER BY id SEPARATOR ',') FROM requests;")"
+test "${lifecycle_mapping}" = "1:approved,2:in_progress"
+lifecycle_count="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM bricky_schema_migrations WHERE version='20260706_003_controlled_request_lifecycle';")"
+test "${lifecycle_count}" = "1"
+
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
+test "$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM bricky_schema_migrations WHERE version='20260706_003_controlled_request_lifecycle';")" = "1"
+test "$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM requests;")" = "${before_count}"
+
+"${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260706_003_controlled_request_lifecycle_down.sql
+lifecycle_columns_after_down="$("${mysql_cmd[@]}" -N -B "${MYSQL_DATABASE}" -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${MYSQL_DATABASE}' AND ((table_name='requests' AND column_name IN ('workerArrivedAt','workStartedAt','workReadyAt','clientConfirmedAt','disputedAt','disputeReason')) OR (table_name='request_images' AND column_name IN ('thumbnailUrl','thumbnailStorageKey')) OR (table_name='worker_gallery_images' AND column_name IN ('thumbnailUrl','storageKey','thumbnailStorageKey')) OR (table_name='worker' AND column_name='avatarThumbnailUrl'));")"
+test "${lifecycle_columns_after_down}" = "0"
 
 "${mysql_cmd[@]}" "${MYSQL_DATABASE}" < scripts/migrations/20260705_002_moderation_gate_down.sql
 

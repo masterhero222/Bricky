@@ -32,6 +32,28 @@ Still required before Sprint 2 can be marked complete:
 - verify admin preview metadata and rejection reasons for every media type;
 - staging acceptance and rollback rehearsal.
 
+## Final Stabilization Pass (2026-07-07)
+
+Sprint 2 remains **OPEN**. Current local evidence:
+
+- `statusKey` is the canonical lifecycle field; legacy `status` remains synchronized for compatibility;
+- one `RequestLifecycleService` validates every transition and rejects invalid jumps;
+- assignment, ready, dispute, completion, and moderation rejection create persisted notifications;
+- request, completion, gallery, and avatar uploads share one storage/processing pipeline;
+- source uploads up to 25 MB are rotated, resized to max 1920 px, converted to WebP, limited to 1 MB output, and given a WebP thumbnail;
+- request/gallery/avatar moderation shares one media policy service with audit and uploader notification;
+- migration `003` is additive/idempotent and does not rewrite the legacy status enum;
+- CI is configured to build the E2E database from versioned SQL with `TYPEORM_SYNCHRONIZE=false`;
+- local verification passed: frontend/backend builds, migration contracts, pricing verification, mock moderation, and 81 tests across 16 suites.
+
+Open release gates:
+
+- GitHub MySQL 8.4 migration rehearsal and full lifecycle E2E for the current commit;
+- supplied real phone-photo acceptance;
+- isolated VPS staging deployment, three manual flows, restart persistence, and rollback rehearsal;
+- PR review/merge and controlled production deployment;
+- disposable production lifecycle and cleanup evidence.
+
 Updated: 2026-07-06
 Branch: `codex/sprint-2-foundation`
 Verified Sprint 2 baseline commit: `02b6ee4`

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPut } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
-import { photoMediaUrl } from "../utils/mediaUrls";
+import { photoMediaUrl, photoThumbnailUrl } from "../utils/mediaUrls";
 import {
   CalendarDays,
   FileText,
@@ -185,7 +185,7 @@ export default function ClientProfile() {
       setReviewDraft((prev) => {
         const next = { ...prev };
         reqs.forEach((r) => {
-          const status = String(r.status || "").toLowerCase();
+          const status = String(r.statusKey || r.status || "").toLowerCase();
           const isCompleted = status === "completed" || status === "завършена";
           const assignedUserId = Number(r.assignedWorkerId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
@@ -510,7 +510,7 @@ export default function ClientProfile() {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
-                  const normalizedStatus = String(r.status || "").toLowerCase();
+                  const normalizedStatus = String(r.statusKey || r.status || "").toLowerCase();
                   const isCompleted = normalizedStatus === "completed" || normalizedStatus === "завършена";
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem;
@@ -571,7 +571,7 @@ export default function ClientProfile() {
 
                         <div className="min-w-0">
                           <div className="mb-4 flex items-center gap-2 font-extrabold text-slate-100"><FileText size={19} className="text-slate-400" /> Снимки към заявката</div>
-                          <RequestPhotoCarousel photos={r.photos || []} getUrl={photoUrl} />
+                          <RequestPhotoCarousel photos={r.photos || []} getUrl={photoUrl} getThumbnailUrl={photoThumbnailUrl} />
                         </div>
                       </div>
 
