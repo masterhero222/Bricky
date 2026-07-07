@@ -13,7 +13,6 @@ Updated: 2026-07-07
 
 ## Blocking Production
 
-- Complete staging browser acceptance and rollback evidence.
 - Real phone-image acceptance.
 - Backup paths and exact release SHA recording.
 - Public HTTPS disposable lifecycle and static media verification.
@@ -27,3 +26,5 @@ Production deployment is forbidden until every blocking item is green.
 - Staging readiness: database and storage report `ok`.
 - Staging media: request before/after full WebP and thumbnails returned HTTP 200 after PM2 restart.
 - Production nginx, production checkout, production database, and production PM2 process were not modified.
+- Desktop admin/client/worker and mobile navigation/logout acceptance passed.
+- Disposable staging DOWN/UP rehearsal preserved user, request, media, and review row counts.

@@ -185,7 +185,20 @@ Sprint 2 admin functionality and the Sprint 2.1 backend enforcement layer are co
 - Full and thumbnail WebP URLs remained available after a staging PM2 restart.
 - Browser acceptance found and fixed the admin-login redirect; `/admin` now opens without console errors.
 
-Sprint 2 remains **OPEN** pending the real-phone image test, complete client/worker browser passes, mobile navigation/logout acceptance, staging rollback demonstration, PR review, and controlled production verification.
+At this checkpoint Sprint 2 remained open; the continuation below records the browser and rollback gates completed afterward.
+
+## Acceptance Continuation - 2026-07-07
+
+- Current release candidate and staging SHA: `b8cbb09615d8b9b6ee361b12261ffae60d17f61f`.
+- GitHub Actions run `28865620651` passed for that SHA.
+- Desktop browser acceptance passed for admin, client, and worker profiles with no captured console errors.
+- Client request history displayed the completed, disputed, and reject/resubmit staging records correctly.
+- Worker dashboard displayed the approved worker feed and completed review data correctly.
+- Mobile navigation and logout passed at 390x844. A fixed-sidebar horizontal overflow was found, fixed, and verified at `scrollWidth == clientWidth`.
+- Disposable staging rollback rehearsal passed: reverse `003 -> 002 -> 001`, then forward `001 -> 002 -> 003`; row counts stayed `13:28:5:13` and all three migration records were restored.
+- Direct staging firewall access was removed after acceptance; port `3100` is tunnel-only again.
+
+Sprint 2 remains **OPEN** only for the missing original phone image over 10 MB and the subsequent PR/production gates.
 
 ## Next Sprint 2 Steps
 

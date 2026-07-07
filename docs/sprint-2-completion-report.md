@@ -16,12 +16,13 @@ Updated: 2026-07-07
 - Three staging API role flows passed: happy path, reject/resubmit, and dispute with suspension/reactivation.
 - Full and thumbnail media URLs survived a backend restart.
 - Admin browser login and moderation dashboard passed without console errors.
+- Client and worker desktop browser acceptance passed without captured console errors.
+- Mobile navigation/logout passed after fixing worker-dashboard horizontal overflow.
+- Disposable staging rollback and forward reapplication preserved all tested rows.
 
 ## Pending Evidence
 
 - Real phone photo with EXIF.
-- Complete client and worker browser acceptance, including mobile navigation/logout.
-- Staging rollback demonstration.
 - PR review and exact-SHA production deployment.
 - Disposable production flow and cleanup.
 
