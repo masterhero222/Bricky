@@ -204,3 +204,16 @@ Sprint 2 remains **OPEN** only for the missing original phone image over 10 MB a
 
 1. Execute `docs/sprint-2-staging-deployment-checklist.md` against an isolated staging copy.
 2. Implement canonical media consolidation only as a separately approved later migration.
+
+## Production Release - 2026-07-07
+
+- PR `#5` was reviewed through green CI and merged into `main`.
+- Exact production SHA: `5a941fc6dd19c91685662a6e94d008130646d5c3`.
+- The sanitized Sprint 2 mock/staging database was promoted to production by explicit owner instruction; there were no real users to preserve.
+- A dedicated administrator account was created without recording its password in source control.
+- Production backend, frontend, media storage, thumbnails, role logins, worker/request data, admin dashboard, and mobile admin layout passed smoke verification.
+- Production backup: `/var/www/Bricky/backups/production_20260707_125029`.
+- `TYPEORM_SYNCHRONIZE=false` is confirmed in the production PM2 environment.
+- The unavailable original phone image over 10 MB remains an accepted P1 follow-up. Generated exact-size fixtures passed.
+
+Sprint 2 is now released with the documented residual risk. No Sprint 3 marketplace or payment feature was added as part of this release.

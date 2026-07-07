@@ -4,6 +4,5 @@ Updated: 2026-07-07
 
 | Priority | Issue | Reproduction / Evidence | Next action |
 | --- | --- | --- | --- |
-| P0 | Real phone photo is not attached | Generated 10/15/20 MB fixtures pass, but real EXIF file is pending | Test the user-supplied file through all upload types |
-| P0 | Production is not validated on this release | Production remains untouched before staging | Merge via PR only after staging, then run disposable flow |
-| P1 | GitHub CLI is unavailable locally | Branch can be pushed, but the required publish workflow cannot open the PR through `gh` | Install and authenticate GitHub CLI before the release PR |
+| P1 | Original large phone photo remains untested | Generated exact 10/15/20 MB EXIF fixtures pass; no original phone image over 10 MB was supplied | Test one real phone image through request, completion, gallery, and avatar uploads |
+| P1 | Dependency audit findings remain | Install reports include vulnerable transitive packages; no forced breaking upgrade was applied during release | Triage and upgrade dependencies in a separate tested maintenance branch |
