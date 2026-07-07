@@ -13,6 +13,7 @@ import Register from "./pages/Register";
 
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
+import RepairMap from "./pages/RepairMap";
 
 // WORKER (REAL PAGES THAT EXIST)
 import WorkerLogin from "./pages/workers/WorkerLogin";
@@ -23,8 +24,8 @@ import Workers from "./pages/workers/Workers";
 
 // REQUESTS
 import Requests from "./pages/Requests";
+import AdminPanel from "./pages/AdminPanel";
 
-import WorkerPage from "./pages/WorkerPage";
 import DevTestPanel from "./components/DevTestPanel";
 
 export default function App() {
@@ -42,6 +43,14 @@ export default function App() {
 
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
+          <Route
+            path="/repair-map"
+            element={
+              <RequireWorker>
+                <RepairMap />
+              </RequireWorker>
+            }
+          />
 
           {/* CLIENT PROFILE */}
           <Route
@@ -73,9 +82,10 @@ export default function App() {
 
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
+          <Route path="/admin" element={<RequireAdmin><AdminPanel /></RequireAdmin>} />
 
-            <Route path="/worker/:userId" element={<WorkerPage />} />
-            <Route path="/workers/:id" element={<WorkerPage />} />
+            <Route path="/worker/:userId" element={<WorkerPreview />} />
+            <Route path="/workers/:id" element={<WorkerPreview />} />
         </Route>
       </Routes>
     </Router>
@@ -92,6 +102,10 @@ function RequireWorker({ children }) {
   return localStorage.getItem("role") === "worker"
     ? children
     : (window.location.href = "/auth");
+}
+
+function RequireAdmin({ children }) {
+  return localStorage.getItem("role") === "admin" ? children : <Navigate to="/auth/login" replace />;
 }
 
 

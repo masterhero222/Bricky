@@ -4,14 +4,11 @@ import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
-
-const PRICE_TABLE = {
-  Баня: { material: 140 },
-  "Шпакловка и боя": { material: 18 },
-  Плочки: { material: 40 },
-  ВиК: { material: 55 },
-  Електро: { material: 35 },
-};
+import { getApiBase, mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
+import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
+import { getPricingActivity } from "../../constants/repairPricingConfig";
+import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../../utils/repairPriceCalculator";
 
 function formatBG(dateStr) {
   try {
@@ -26,23 +23,11 @@ function getToken() {
 }
 
 function absUrl(url) {
-  if (!url) return "";
-  const raw = String(url);
-  const dataIndex = raw.indexOf("data:image/");
-  if (dataIndex > 0) return raw.slice(dataIndex);
-  if (/^(data:|blob:)/i.test(raw)) return raw;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${url}`;
-  return url;
+  return mediaUrl(url);
 }
 
 function photoUrl(photo) {
-  const raw =
-    typeof photo === "string"
-      ? photo
-      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
-
-  return absUrl(raw);
+  return photoMediaUrl(photo);
 }
 
 function requestPhotos(req) {
@@ -114,6 +99,12 @@ function toNum(x) {
   return Number.isFinite(n) ? n : null;
 }
 
+function formatEuroRange(min, max) {
+  const safeMin = Number(min) || 0;
+  const safeMax = Number(max) || 0;
+  return `${safeMin.toLocaleString("bg-BG")}–${safeMax.toLocaleString("bg-BG")} EUR`;
+}
+
 export default function WorkerProfile() {
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -151,13 +142,34 @@ export default function WorkerProfile() {
   const [ratingError, setRatingError] = useState("");
 
   const [calc, setCalc] = useState({
-    type: "",
-    area: "",
-    laborPerM2: "",
-    materials: 0,
-    labor: 0,
-    total: 0,
+    categoryKey: "bathroom_renovation",
+    activities: [],
+    sizeOption: "",
+    exactAreaM2: "",
+    pricingMode: "labor_plus_materials",
   });
+
+  const calcCategory = useMemo(
+    () => REPAIR_CATEGORY_OPTIONS.find((item) => item.key === calc.categoryKey) || REPAIR_CATEGORY_OPTIONS[0],
+    [calc.categoryKey]
+  );
+  const calcFlow = REPAIR_CATEGORY_FLOW[calcCategory.key] || { activities: [], quantityOptions: [] };
+  const calcPricingActivities = useMemo(
+    () => calc.activities.map((item) => getPricingActivity(calcCategory.key, item)).filter(Boolean),
+    [calc.activities, calcCategory.key]
+  );
+  const calcAsksForArea = calcPricingActivities.some((item) => item.areaBased);
+  const calcEstimate = useMemo(
+    () => calculateRepairEstimate({
+      categoryKey: calcCategory.key,
+      selectedActivities: calc.activities,
+      sizeOption: calc.sizeOption,
+      exactAreaM2: calc.exactAreaM2,
+      pricingMode: calc.pricingMode,
+      location: "sofia_regular",
+    }),
+    [calc.activities, calc.exactAreaM2, calc.pricingMode, calc.sizeOption, calcCategory.key]
+  );
 
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -272,8 +284,8 @@ export default function WorkerProfile() {
   }
 
   function isClosed(req) {
-    const st = String(req.status || "").toLowerCase();
-    return st.includes("завърш") || st.includes("отказ");
+    const st = String(req.statusKey || req.status || "").toLowerCase();
+    return ["completed", "canceled", "disputed"].includes(st) || st.includes("завърш") || st.includes("отказ");
   }
 
   function isAssignedToMe(req) {
@@ -282,14 +294,14 @@ export default function WorkerProfile() {
   }
 
   function canComplete(req) {
-    const st = String(req.status || "").toLowerCase();
-    return isAssignedToMe(req) && (st === "в процес" || st === "назначена");
+    return isAssignedToMe(req) && String(req.statusKey || req.status || "").toLowerCase() === "in_progress";
   }
 
   async function handleCompletionPhotos(requestId, files) {
     try {
       const photos = await filesToPhotos(files);
-      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...photos] }));
+      const withFiles = photos.map((photo, index) => ({ ...photo, file: files[index] }));
+      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...withFiles] }));
     } catch (err) {
       console.error(err);
       setApplyMsg("Не успях да прочета снимките след ремонта.");
@@ -303,14 +315,30 @@ export default function WorkerProfile() {
     }));
   }
 
-  async function completeRequest(requestId) {
+  async function advanceRequest(req) {
     try {
       setApplyMsg("");
-      setCompletingId(requestId);
+      setCompletingId(req.id);
 
-      await apiPost(`/requests/${requestId}/complete`, { afterPhotos: completionPhotos[requestId] || [] });
+      const status = String(req.statusKey || req.status || "").toLowerCase();
+      const endpoint = status === "assigned" ? "arrive" : status === "worker_arrived" ? "start" : status === "in_progress" ? "ready" : status === "client_confirmed" ? "complete" : null;
+      if (!endpoint) throw new Error("Няма позволена следваща стъпка.");
 
-      setApplyMsg(`Заявка #${requestId} е затворена ✅`);
+      const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
+      const photos = completionPhotos[req.id] || [];
+      if (endpoint === "ready" && !isDevMock) {
+        const files = photos.map((photo) => photo.file).filter(Boolean);
+        if (!files.length) throw new Error("Добави поне една снимка след ремонта.");
+        const data = new FormData();
+        files.forEach((file) => data.append("images", file));
+        await apiPost(`/requests/${req.id}/images/after`, data);
+      }
+
+      await apiPost(`/requests/${req.id}/${endpoint}`, {
+        afterPhotos: endpoint === "ready" && isDevMock ? photos.map(({ file: _file, ...photo }) => photo) : [],
+      });
+
+      setApplyMsg(`Статусът на заявка #${req.id} е обновен.`);
       await loadRequests();
     } catch (err) {
       console.error("completeRequest error:", err);
@@ -318,10 +346,15 @@ export default function WorkerProfile() {
 
       if (status === 401) setApplyMsg("401: Нямаш валиден токен. Логни се пак.");
       else if (status === 403) setApplyMsg("403: Нямаш права (трябва worker).");
-      else setApplyMsg(err?.response?.data?.message || "Неуспешно затваряне. Виж конзолата.");
+      else setApplyMsg(err?.response?.data?.message || err?.message || "Неуспешна промяна на статуса.");
     } finally {
       setCompletingId(null);
     }
+  }
+
+  function lifecycleLabel(req) {
+    const status = String(req.statusKey || req.status || "").toLowerCase();
+    return ({ assigned: "Пристигнах на адрес", worker_arrived: "Започнах работа", in_progress: "Работата е готова", client_confirmed: "Затвори заявката" })[status] || "";
   }
 
   async function applyToRequest(requestId) {
@@ -376,7 +409,7 @@ export default function WorkerProfile() {
     const fd = new FormData();
     fd.append("avatar", profile.avatar);
 
-    const res = await axios.post(`${import.meta.env.VITE_API_URL}/workers/me/avatar`, fd, {
+    const res = await axios.post(`${getApiBase()}/workers/me/avatar`, fd, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
@@ -447,23 +480,24 @@ export default function WorkerProfile() {
     }
   };
 
-  const updateCalc = (field, value) => {
-    const next = { ...calc, [field]: value };
-    const areaNum = parseFloat(next.area) || 0;
-    const laborNum = parseFloat(next.laborPerM2) || 0;
-    const conf = PRICE_TABLE[next.type];
+  const selectCalcCategory = (categoryKey) => {
+    const nextFlow = REPAIR_CATEGORY_FLOW[categoryKey] || { quantityOptions: [] };
+    setCalc((prev) => ({
+      ...prev,
+      categoryKey,
+      activities: [],
+      sizeOption: nextFlow.quantityOptions?.[0] || "",
+      exactAreaM2: "",
+    }));
+  };
 
-    if (!conf || !areaNum) {
-      next.materials = 0;
-      next.labor = 0;
-      next.total = 0;
-    } else {
-      next.materials = Math.round(areaNum * conf.material);
-      next.labor = Math.round(areaNum * laborNum);
-      next.total = next.materials + next.labor;
-    }
-
-    setCalc(next);
+  const toggleCalcActivity = (activity) => {
+    setCalc((prev) => ({
+      ...prev,
+      activities: prev.activities.includes(activity)
+        ? prev.activities.filter((item) => item !== activity)
+        : [...prev.activities, activity],
+    }));
   };
 
   // =========================
@@ -529,7 +563,7 @@ export default function WorkerProfile() {
       const fd = new FormData();
       galleryFiles.forEach((f) => fd.append("images", f));
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/workers/me/gallery`, fd, {
+      await axios.post(`${getApiBase()}/workers/me/gallery`, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -578,7 +612,7 @@ export default function WorkerProfile() {
     const total = requests.length;
 
     const byStatus = requests.reduce((acc, r) => {
-      const s = (r.status || "—").toLowerCase();
+      const s = (r.statusKey || r.status || "—").toLowerCase();
       acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
@@ -601,7 +635,7 @@ export default function WorkerProfile() {
 
     return requests.filter((r) => {
       const catOk = categoryFilter === "all" ? true : r.category === categoryFilter;
-      const st = (r.status || "").toLowerCase();
+      const st = (r.statusKey || r.status || "").toLowerCase();
       const statusOk = statusFilter === "all" ? true : st === statusFilter;
 
       if (!catOk || !statusOk) return false;
@@ -622,14 +656,18 @@ export default function WorkerProfile() {
   }, [requests]);
 
   const statuses = useMemo(() => {
-    const set = new Set(requests.map((r) => (r.status || "").toLowerCase()).filter(Boolean));
+    const set = new Set(requests.map((r) => (r.statusKey || r.status || "").toLowerCase()).filter(Boolean));
     return ["all", ...Array.from(set)];
   }, [requests]);
 
   const galleryAlbums = useMemo(() => {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
-        .map((photo) => ({ ...photo, url: photoUrl(photo) }))
+        .map((photo) => ({
+          ...(typeof photo === "object" && photo ? photo : {}),
+          url: photoUrl(photo),
+          thumbnailUrl: photoThumbnailUrl(photo),
+        }))
         .filter((photo) => !!photo.url);
 
     const completedAlbums = (Array.isArray(completedRequests) ? completedRequests : [])
@@ -688,6 +726,7 @@ export default function WorkerProfile() {
     activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
       ? activeAlbum.photos[albumViewer?.photoIndex || 0]
       : null;
+  const canDeleteActivePhoto = activeAlbum?.type === "manual" && activePhoto?.id;
 
   function openAlbum(albumIndex, photoIndex = 0) {
     setAlbumViewer({ albumIndex, photoIndex });
@@ -707,16 +746,43 @@ export default function WorkerProfile() {
     });
   }
 
+  async function deleteActiveGalleryPhoto() {
+    if (!canDeleteActivePhoto) return;
+    const imageId = activePhoto.id;
+    const ok = window.confirm("Да изтрия ли тази снимка от галерията?");
+    if (!ok) return;
+
+    const currentIndex = albumViewer?.photoIndex || 0;
+    const remaining = Math.max(0, (activeAlbum?.photos?.length || 1) - 1);
+
+    await deleteGalleryImage(imageId);
+
+    if (remaining === 0) {
+      closeAlbum();
+      return;
+    }
+
+    setAlbumViewer((viewer) =>
+      viewer
+        ? {
+            ...viewer,
+            photoIndex: Math.min(currentIndex, remaining - 1),
+          }
+        : viewer
+    );
+  }
+
   const avatarSrc =
     previewAvatar || (profile.avatarUrl ? absUrl(profile.avatarUrl) : "") || "/media_files/Snejan.jpg";
 
   return (
     <div className="flex min-h-screen bg-gray-900 text-white">
-      <aside className="w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
+      <aside className="hidden md:block w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
         <nav className="flex flex-col gap-4 px-6 text-sm">
           {[
             ["dashboard", "Контрол панел"],
             ["requests", "Заявки"],
+            ["map", "Карта заявки"],
             ["profile", "Профил"],
             ["gallery", "Галерия"],
             ["calculator", "Калкулатор"],
@@ -725,7 +791,10 @@ export default function WorkerProfile() {
           ].map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
+              onClick={() => {
+                if (key === "map") window.location.href = "/repair-map";
+                else setActiveTab(key);
+              }}
               className={activeTab === key ? "text-red-400 font-bold" : "hover:text-red-300"}
             >
               {label}
@@ -738,10 +807,10 @@ export default function WorkerProfile() {
         </nav>
       </aside>
 
-      <main className="flex-1 ml-64 pt-24 px-10 pb-20">
+      <main className="min-w-0 flex-1 ml-0 md:ml-64 pt-24 px-4 sm:px-6 lg:px-10 pb-20">
         {activeTab === "dashboard" && (
           <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
               <h1 className="text-3xl font-bold">Контрол панел</h1>
 
               <button
@@ -828,6 +897,7 @@ export default function WorkerProfile() {
                       const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
                       const showContact = assignedToMe;
                       const showComplete = canComplete(r);
+                      const lifecycleAction = assignedToMe ? lifecycleLabel(r) : "";
                       const beforePhotos = requestPhotos(r);
 
                       return (
@@ -855,7 +925,7 @@ export default function WorkerProfile() {
                                   rel="noreferrer"
                                   className="block h-20 w-20 overflow-hidden rounded-lg border border-gray-700 bg-gray-950"
                                 >
-                                  <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
+                                  <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
                                 </a>
                               ))}
                             </div>
@@ -909,9 +979,9 @@ export default function WorkerProfile() {
                             </div>
                           )}
 
-                          {showComplete && (
+                          {lifecycleAction && (
                             <button
-                              onClick={() => completeRequest(r.id)}
+                              onClick={() => advanceRequest(r)}
                               disabled={completingId === r.id}
                               className={
                                 completingId === r.id
@@ -919,7 +989,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === r.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === r.id ? "Обновявам..." : lifecycleAction}
                             </button>
                           )}
 
@@ -1015,6 +1085,7 @@ export default function WorkerProfile() {
                   const disabledApply = applied || closed || hasAssigned || applyingId === req.id;
                   const showContact = assignedToMe;
                   const showComplete = canComplete(req);
+                  const lifecycleAction = assignedToMe ? lifecycleLabel(req) : "";
                   const beforePhotos = requestPhotos(req);
 
                   return (
@@ -1041,7 +1112,14 @@ export default function WorkerProfile() {
                         </p>
                       </div>
 
-                      <p className="text-gray-400 mt-3">{req.description || "Няма описание."}</p>
+                      <p className="mt-3 whitespace-pre-line text-gray-400">
+                        {cleanRequestDescription(req.description) || "Няма описание."}
+                      </p>
+                      {formatRequestExpectedRange(req) && (
+                        <p className="mt-3 text-sm font-bold text-green-300">
+                          Ориентировъчна цена: {formatRequestExpectedRange(req)}
+                        </p>
+                      )}
 
                       <p className="text-gray-500 text-sm mt-3">Създадена: {formatBG(req.created_at)}</p>
 
@@ -1057,7 +1135,7 @@ export default function WorkerProfile() {
                                 rel="noreferrer"
                                 className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
                               >
-                                <img src={photoUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
+                                <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
                               </a>
                             ))}
                           </div>
@@ -1112,9 +1190,9 @@ export default function WorkerProfile() {
                             </div>
                           )}
 
-                          {showComplete && (
+                          {lifecycleAction && (
                             <button
-                              onClick={() => completeRequest(req.id)}
+                              onClick={() => advanceRequest(req)}
                               disabled={completingId === req.id}
                               className={
                                 completingId === req.id
@@ -1122,7 +1200,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === req.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === req.id ? "Обновявам..." : lifecycleAction}
                             </button>
                           )}
 
@@ -1174,10 +1252,17 @@ export default function WorkerProfile() {
                         <div><h2 className="text-xl font-bold">#{job.requestId || job.id} • {job.category || "Ремонт"}</h2><p className="text-gray-400 text-sm mt-1">{job.address || "—"}</p></div>
                         <div className="text-right text-sm"><div className="text-green-400 font-bold">Завършена</div><div className="text-gray-400 mt-1">Време: {duration} дни</div></div>
                       </div>
-                      <p className="text-gray-300 mt-3">{job.description || "Няма описание."}</p>
+                      <p className="mt-3 whitespace-pre-line text-gray-300">
+                        {cleanRequestDescription(job.description) || "Няма описание."}
+                      </p>
+                      {formatRequestExpectedRange(job) && (
+                        <p className="mt-3 text-sm font-bold text-green-300">
+                          Ориентировъчна цена: {formatRequestExpectedRange(job)}
+                        </p>
+                      )}
                       <div className="grid md:grid-cols-2 gap-4 mt-5">
-                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
-                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
                       </div>
                     </div>
                   );
@@ -1236,7 +1321,13 @@ export default function WorkerProfile() {
             <div className="mb-8">
               <h2 className="text-xl font-semibold">Профилна снимка</h2>
               <div className="flex items-center gap-6 mt-4">
-                <img src={avatarSrc} className="w-32 h-32 rounded-full border-4 border-red-500 object-cover" />
+                <img
+                  src={avatarSrc}
+                  className="w-32 h-32 rounded-full border-4 border-red-500 object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = "/media_files/Snejan.jpg";
+                  }}
+                />
                 <input type="file" accept="image/*" onChange={handleAvatarUpload} />
               </div>
             </div>
@@ -1384,10 +1475,26 @@ export default function WorkerProfile() {
 
                         <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
                           <div className="overflow-hidden rounded-lg bg-gray-900">
-                            <img src={album.cover.url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={album.cover.thumbnailUrl || album.cover.url}
+                              alt={album.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
                           </div>
                           <div className="relative overflow-hidden rounded-lg bg-gray-900">
-                            <img src={(album.photos[1] || album.cover).url} alt={album.title} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={(album.photos[1] || album.cover).thumbnailUrl || (album.photos[1] || album.cover).url}
+                              alt={album.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
                             {album.photos.length > 2 && (
                               <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-lg font-extrabold">
                                 +{album.photos.length - 2}
@@ -1406,55 +1513,116 @@ export default function WorkerProfile() {
         )}
 
         {activeTab === "calculator" && (
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold mb-6">Калкулатор</h1>
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-6">
+              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-cyan-300">Bricky pricing engine v0.2</p>
+              <h1 className="mt-2 text-3xl font-bold">Калкулатор</h1>
+              <p className="mt-2 text-sm text-gray-300">Ориентир за труд или труд и материали по същите правила, които използва заявката.</p>
+            </div>
 
-            <div className="bg-gray-800 p-6 rounded-xl space-y-4 border border-gray-700">
-              <h2 className="text-2xl font-bold">Bricky Калкулатор</h2>
+            <div className="space-y-6 rounded-xl border border-gray-700 bg-gray-800 p-6">
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-gray-200">Тип ремонт</span>
+                <select
+                  value={calc.categoryKey}
+                  onChange={(e) => selectCalcCategory(e.target.value)}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                >
+                  {REPAIR_CATEGORY_OPTIONS.map((item) => (
+                    <option key={item.key} value={item.key}>{item.label}</option>
+                  ))}
+                </select>
+              </label>
 
-              <select
-                value={calc.type}
-                onChange={(e) => updateCalc("type", e.target.value)}
-                className="w-full p-3 rounded bg-gray-700"
-              >
-                <option value="">Тип ремонт</option>
-                {Object.keys(PRICE_TABLE).map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="number"
-                  value={calc.area}
-                  onChange={(e) => updateCalc("area", e.target.value)}
-                  placeholder="Площ (кв.м)"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
-                <input
-                  type="number"
-                  value={calc.laborPerM2}
-                  onChange={(e) => updateCalc("laborPerM2", e.target.value)}
-                  placeholder="Цена за труд / кв.м"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
+              <div>
+                <div className="mb-3 text-sm font-bold text-gray-200">Дейности</div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {calcFlow.activities.map((activity) => {
+                    const selected = calc.activities.includes(activity);
+                    return (
+                      <label
+                        key={activity}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${selected ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900 hover:border-gray-500"}`}
+                      >
+                        <input type="checkbox" checked={selected} onChange={() => toggleCalcActivity(activity)} />
+                        <span className="font-semibold">{activity}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="bg-gray-900 p-4 rounded-xl space-y-2">
-                <div className="flex justify-between">
-                  <span>Материали:</span>
-                  <span>{calc.materials} лв</span>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-bold text-gray-200">Приблизителен обхват</span>
+                  <select
+                    value={calc.sizeOption}
+                    onChange={(e) => setCalc((prev) => ({ ...prev, sizeOption: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                  >
+                    <option value="">Избери обхват</option>
+                    {calcFlow.quantityOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </label>
+
+                {calcAsksForArea && (
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-bold text-gray-200">Точна площ (кв.м)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max={MAX_EXACT_AREA_M2}
+                      step="0.1"
+                      value={calc.exactAreaM2}
+                      onChange={(e) => setCalc((prev) => ({ ...prev, exactAreaM2: e.target.value }))}
+                      placeholder="Напр. 24"
+                      className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <fieldset>
+                <legend className="mb-3 text-sm font-bold text-gray-200">Какво да включва ориентирът?</legend>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    ["labor_only", "Труд"],
+                    ["labor_plus_materials", "Труд + материали"],
+                  ].map(([value, label]) => (
+                    <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 ${calc.pricingMode === value ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900"}`}>
+                      <input
+                        type="radio"
+                        name="worker-calculator-pricing-mode"
+                        checked={calc.pricingMode === value}
+                        onChange={() => setCalc((prev) => ({ ...prev, pricingMode: value }))}
+                      />
+                      <span className="font-bold">{label}</span>
+                    </label>
+                  ))}
                 </div>
-                <div className="flex justify-between">
-                  <span>Труд:</span>
-                  <span>{calc.labor} лв</span>
+              </fieldset>
+
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-700 pb-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-gray-400">Най-вероятен ориентир</div>
+                    <div className="mt-1 text-2xl font-black text-green-400">{formatEuroRange(calcEstimate.expectedMin, calcEstimate.expectedMax)}</div>
+                  </div>
+                  <div className="text-right text-xs text-gray-400">Версия {calcEstimate.pricingVersion}</div>
                 </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span>Общо:</span>
-                  <span className="text-green-400 font-bold text-lg">{calc.total} лв</span>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div><span className="block text-gray-400">Труд</span><strong>{formatEuroRange(calcEstimate.laborMin, calcEstimate.laborMax)}</strong></div>
+                  <div><span className="block text-gray-400">Материали</span><strong>{formatEuroRange(calcEstimate.materialMin, calcEstimate.materialMax)}</strong></div>
+                  <div><span className="block text-gray-400">Технически диапазон</span><strong>{formatEuroRange(calcEstimate.possibleMin, calcEstimate.possibleMax)}</strong></div>
                 </div>
+
+                {calcEstimate.warnings?.length > 0 && (
+                  <ul className="mt-4 space-y-1 border-t border-gray-700 pt-4 text-sm text-amber-200">
+                    {calcEstimate.warnings.slice(0, 3).map((warning) => <li key={warning}>• {warning}</li>)}
+                  </ul>
+                )}
+
+                <p className="mt-4 text-xs leading-5 text-gray-400">Ориентировъчна стойност, не оферта. Крайната цена зависи от оглед, достъп, състояние на обекта и избрани материали.</p>
               </div>
             </div>
           </div>
@@ -1485,13 +1653,36 @@ export default function WorkerProfile() {
                   {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
                 </div>
               </div>
-              <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
-                Затвори
-              </button>
+              <div className="flex items-center gap-2">
+                {canDeleteActivePhoto ? (
+                  <button
+                    type="button"
+                    onClick={deleteActiveGalleryPhoto}
+                    disabled={deletingId === activePhoto.id}
+                    className={
+                      deletingId === activePhoto.id
+                        ? "rounded-lg bg-red-950 px-4 py-2 font-bold text-red-200 cursor-not-allowed"
+                        : "rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 font-bold"
+                    }
+                  >
+                    {deletingId === activePhoto.id ? "Трия..." : "Изтрий снимката"}
+                  </button>
+                ) : null}
+                <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
+                  Затвори
+                </button>
+              </div>
             </div>
 
             <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
-              <img src={activePhoto.url} alt={activePhoto.name || activeAlbum.title} className="max-h-[72vh] w-full object-contain" />
+              <img
+                src={activePhoto.url}
+                alt={activePhoto.name || activeAlbum.title}
+                className="max-h-[72vh] w-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
 
               {activeAlbum.photos.length > 1 && (
                 <>
@@ -1526,7 +1717,14 @@ export default function WorkerProfile() {
                         : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
                     }
                   >
-                    <img src={photo.url} alt={photo.name || activeAlbum.title} className="h-full w-full object-cover" />
+                    <img
+                      src={photo.url}
+                      alt={photo.name || activeAlbum.title}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
                   </button>
                 ))}
               </div>

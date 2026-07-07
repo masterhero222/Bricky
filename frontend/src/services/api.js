@@ -1,8 +1,9 @@
 ﻿// src/services/api.js
 import axios from "axios";
 import { isDevMockToken, mockRequest } from "./devMockApi";
+import { getApiBase } from "../utils/mediaUrls";
 
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = getApiBase();
 
 export function getToken() {
   return (
@@ -27,6 +28,7 @@ function shouldUseMock(url) {
     import.meta.env.DEV &&
     (isDevMockToken() ||
       path.includes("/auth/dev-login") ||
+      path === "/repair-categories" ||
       path === "/workers" ||
       /^\/workers\/\d+/.test(path))
   );
@@ -42,6 +44,6 @@ export const apiPut = (url, data, config) =>
   shouldUseMock(url) ? mockRequest("put", url, data) : api.put(url, data, config);
 
 export const apiDelete = (url, config) =>
-  shouldUseMock(url) ? mockRequest("delete", url) : api.delete(url, config);
+  shouldUseMock(url) ? mockRequest("delete", url, config?.data) : api.delete(url, config);
 
 export default api;

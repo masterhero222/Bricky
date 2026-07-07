@@ -1,6 +1,3 @@
-export enum CategoryEnum {
-  VIK = 'ВиК',
-  ELECTRO = 'Електро',
-  SHPAKLOVKA = 'Шпакловка и боя',
-  PLOCHKI = 'Плочки',
-}
+import { REPAIR_CATEGORY_BY_KEY } from '../repair-catalog';
+
+export const CategoryEnum = REPAIR_CATEGORY_BY_KEY;

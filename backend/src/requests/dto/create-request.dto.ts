@@ -1,4 +1,5 @@
-import { IsArray, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { REPAIR_CATEGORY_KEYS, REPAIR_CATEGORY_LABELS } from '../repair-catalog';
 
 export class CreateRequestDto {
   @IsNotEmpty()
@@ -18,12 +19,40 @@ export class CreateRequestDto {
   address?: string;
 
   @IsOptional()
-  @IsIn(['ВиК', 'Електро', 'Шпакловка и боя', 'Плочки', 'Ремонт на покриви', 'Ремонт на бани', 'Основен ремонт', 'Електро инсталация', 'Пребоядисване', 'Освежителен ремонт'])
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsString()
+  locationSource?: string;
+
+  @IsOptional()
+  @IsIn(REPAIR_CATEGORY_LABELS)
   category?: string;
+
+  @IsOptional()
+  @IsIn(REPAIR_CATEGORY_KEYS)
+  categoryKey?: string;
 
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  estimateMin?: number;
+
+  @IsOptional()
+  @IsNumber()
+  estimateMax?: number;
+
+  @IsOptional()
+  @IsString()
+  estimateCurrency?: string;
 
   @IsOptional()
   @IsArray()

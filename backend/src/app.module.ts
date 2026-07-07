@@ -9,6 +9,9 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReviewModule } from './reviews/review.module';
+import { HealthModule } from './health/health.module';
+import { resolveTypeOrmSynchronize } from './config/database-policy';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -25,7 +28,7 @@ import { ReviewModule } from './reviews/review.module';
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
+      synchronize: resolveTypeOrmSynchronize(),
     }),
 
     UsersModule,
@@ -35,6 +38,8 @@ import { ReviewModule } from './reviews/review.module';
     NotificationsModule,
     RequestsModule,
     WorkersModule,
+    HealthModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

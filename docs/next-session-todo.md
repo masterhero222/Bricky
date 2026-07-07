@@ -1,12 +1,283 @@
 # Next Session TODO
 
+## P0 - Sprint 2 Controlled Request Lifecycle (Sprint 3 blocker)
+
+- [x] Replace direct assigned-to-completed behavior with backend-enforced states.
+- [x] Add worker arrival, start, ready, and close actions.
+- [x] Require a persisted completion photo before work can be marked ready.
+- [x] Add client confirmation and dispute actions.
+- [x] Keep completion photos pending moderation until approved.
+- [x] Add shared WebP compression, 1920 px cap, 1 MB output cap, and thumbnails for request/gallery/avatar uploads.
+- [x] Add additive SQL migration and rollback for lifecycle timestamps and thumbnails.
+- [ ] Expand isolated-MySQL lifecycle E2E to cover every transition and invalid jump.
+- [ ] Add real multipart image assertions for request, completion, gallery, and avatar thumbnails.
+- [ ] Complete manual mock acceptance for approval, rejection/resubmit, hide, suspension/reactivation, dispute, and review moderation.
+- [ ] Run staging migration/rollback rehearsal and acceptance checks.
+- [ ] Start Sprint 3 only after every item above is green.
+
 ## Highest Priority
 
+- P0 DONE IN CODE: Sprint 2.1 admin enforcement layer:
+  - DONE: suspended accounts are reloaded from the database and rejected on every protected request, including with existing JWTs;
+  - DONE: suspended workers are blocked from applications, assignment, completion, uploads, gallery deletion, profile changes, and reviews;
+  - DONE: suspended clients are blocked from request creation/resubmission, uploads, assignment, and reviews;
+  - DONE: suspended or unapproved workers are removed from public lists, profiles, batch lookups, and recommendation-oriented service results;
+  - DONE: non-approved requests cannot receive applications, assignment, completion, after-photos, or reviews;
+  - DONE: review creation requires an approved completed request and active client/worker accounts;
+  - DONE: reactivation restores normal permissions without changing historical data;
+  - DONE: mock admin decisions now enforce the same request/account/media visibility rules across client and worker mock screens;
+  - DONE: automated mock moderation contract test covers pending, approval, rejection, suspension, public visibility, and reactivation;
+  - DONE: clients cannot access the worker request map or worker-only profile/gallery/history endpoints;
+  - DONE: hidden completed requests and pending avatar/job media stay out of worker/public history surfaces;
+  - DONE locally: backend build and 63 unit tests pass;
+  - DONE: expanded MySQL lifecycle E2E passed in GitHub Actions run `28759468108`;
+  - NEXT RELEASE GATE: staging API/UI smoke tests and the production backup/deployment checklist;
+  - REFERENCE: `docs/sprint-2-1-enforcement-layer.md`;
+
+- P0 IMPLEMENTED: Sprint 2 admin moderation gate:
+  - DONE: separate request lifecycle status from publication moderation status;
+  - DONE: new requests and request images default to `pending_review`;
+  - DONE: worker feeds/map and public request media expose only approved content;
+  - DONE: JWT + admin-role protected request/media queues and audit log;
+  - DONE: `/admin` request/media queue with approve, reject, hide, reason, and counters;
+  - DONE: additive/idempotent migration and rollback package;
+  - DONE: worker profiles, avatars, gallery, completed-job media, and reviews require approval publicly;
+  - DONE: account suspend/activate actions and password-safe admin user listing;
+  - DONE: searchable/filterable audit-log tab with old/new values, reason, IP, and actor;
+  - DONE: queue search, status filters, pagination, and protected detail endpoints;
+  - DONE: suspended accounts lose access with already-issued JWT sessions;
+  - DESIGNED: canonical media asset/link model and additive migration sequence documented in `docs/canonical-media-model-proposal.md`; implementation remains a separate later migration;
+  - DONE: queue pagination/search and protected detail views;
+  - NEXT: add automated content-scanning hooks without bypassing human review or audit;
+  - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.
+
+- IN PROGRESS in this session: database/request model stabilization:
+  - backend repair catalog is being aligned with the 15 approved quick repair categories;
+  - request creation is being prepared to store `categoryKey`, coordinates, location source, and estimate fields;
+  - SQL migration draft added for request core fields before moving to separate request image/application tables;
+  - backend entity/service draft added for `request_applications` and `request_images`;
+  - SQL migration draft added for creating `request_applications` and `request_images` without deleting legacy JSON fields.
+- NEW BUSINESS PLAN DOC: review `docs/business-plan.md` before designing paid features.
+- NEW CALCULATOR PLAN REVIEWED: `Bricky Calculator Plan.docx` defines the calculator pricing foundation and the required order of work.
+- HIGH PRIORITY: stabilize the calculator in the mock flow before adding pricing tables or payment logic:
+  - finish market research for all 15 repair categories;
+  - move pricing out of React/catalog UI data into a central EUR config;
+  - calculate labor, materials, and total as min/max ranges;
+  - validate the formula and UX locally;
+  - only then draft and migrate the production pricing schema.
+- PRIORITY: Database reset and redesign:
+  - clean the production/test database down to the intentionally kept accounts only;
+  - delete tangled test profiles, requests, reviews, notifications, gallery rows, and related uploaded photos/files;
+  - preserve only the agreed client and worker accounts while testing the rebuilt flow;
+  - document how the current database works before changing it;
+  - identify which relations are weak, duplicated, or not scalable;
+  - redesign the data model so users, worker profiles, requests, applications, repair history, reviews, media/photos, and map locations have clear ownership and foreign-key logic;
+  - add new repair/job fields needed for real project testing before scaling the app further.
+- Production server is not stable yet:
+  - opening a worker profile from `/workers` can break the page;
+  - gallery thumbnails/photos are broken on `bricky.bg`;
+  - browser console shows many `404` errors for `gallery_1011_...jpg` files;
+  - `/api/workers/me/history` returns `404`;
+  - fix production uploads/static file serving before polishing the UI further.
 - DONE in dev/mock: request workflow is stable enough for local testing from both client and worker sides.
 - DONE in dev/mock: changing worker profile settings no longer breaks the mock test profile.
 - DONE in dev/mock: worker profile photo/avatar and public grid cards use the saved mock profile data.
 - Continue removing remaining direct `axios` calls from pages that should go through the shared mock-aware API layer.
 - Keep localStorage image usage low in dev/mock mode; use `Dev test` reset when old large image blobs already exist.
+
+## Production Server Fixes
+
+- DONE on map branch: production frontend uses `/api` instead of the server IP over HTTP.
+- DONE on map branch: legacy client/worker register pages use the shared API wrapper.
+- Verify on `bricky.bg` after deploy:
+  - worker login works;
+  - the worker navbar shows `Карта`;
+  - direct route `https://bricky.bg/repair-map` opens after worker login;
+  - `/api/workers` returns `200`;
+  - real `POST /api/auth/login` returns a JSON error for wrong credentials, not nginx `502`.
+- Fix public worker profile navigation from the workers grid:
+  - `/workers` card click should always open a valid worker profile route;
+  - profile route must support the same id/userId shape returned by production `/api/workers`;
+  - missing worker data should show a clean empty/error state, not break the page.
+- Fix gallery image URLs on production:
+  - inspect how gallery filenames are stored in the database;
+  - serve uploaded files from a stable public path such as `/uploads/...`;
+  - normalize frontend image URLs so raw filenames like `gallery_1011_...jpg` become valid asset URLs;
+  - add `onError` fallback UI so broken files do not visually explode the gallery.
+- Implement or remove `/api/workers/me/history`:
+  - backend should expose completed worker history with before/after photos and duration;
+  - or frontend should not call this endpoint in production until backend support exists.
+- Add server smoke tests after deploy:
+  - `curl https://bricky.bg/api/workers`;
+  - `curl https://bricky.bg/api/workers/{id}`;
+  - `curl https://bricky.bg/api/workers/me/history` with auth token when available;
+  - open `/workers`, one public worker profile, and the worker gallery in browser.
+- Clean up the server repository state:
+  - remove accidental embedded `Bricky` repo from the server git index if it is still present;
+  - avoid committing server-only merge commits back to `main` unless intentionally syncing live changes.
+
+## Database Cleanup And Data Model
+
+- TOP PRIORITY: reset the database into a clean test state:
+  - keep only the agreed client account and worker account;
+  - delete all other user/client/worker profiles;
+  - delete all old requests, reviews, notifications, gallery records, and broken/unused request history;
+  - delete or archive orphaned uploaded photos from the server filesystem after the DB rows are removed;
+  - use `scripts/db-reset-keep-client-1008-worker-1011.sql` as the starting reset script;
+  - run a `mysqldump` backup before any destructive cleanup.
+- TOP PRIORITY: redesign the database logic if the current schema cannot scale cleanly:
+  - write a clear explanation of the old database logic and how the current code uses it;
+  - map every frontend/backend flow to the tables it reads and writes;
+  - replace spaghetti relations with explicit foreign keys and join tables;
+  - make the model support growth instead of patching more JSON/simple-array fields.
+- Add new repair/job fields for the request lifecycle:
+  - repair type/category key;
+  - repair subtype where needed;
+  - address text plus latitude/longitude;
+  - approximate price/estimate fields;
+  - before photos;
+  - after photos;
+  - completion duration;
+  - assigned worker/application status;
+  - moderation/approval state for public request/map visibility.
+- Review database audit doc: `docs/database-systems-audit.md`.
+- Decide the canonical worker identifier:
+  - choose whether public/profile/request flows use `users.id` or `worker.id`;
+  - stop mixing `users.id`, `worker.id`, and `worker.userId` in frontend routes and backend services;
+  - keep one stable id shape in `/workers`, `/workers/:id`, reviews, assignments, and map requests.
+- Replace `requests.appliedWorkers` simple-array with a real `request_applications` table:
+  - `requestId`;
+  - `workerUserId`;
+  - status;
+  - optional offer/message/price later;
+  - created/updated timestamps.
+- IN PROGRESS in code: new `request_applications` entity exists and request apply/assign/unassign now dual-writes during the transition.
+- Move request photos out of `requests.photos` JSON/data URLs into real upload storage:
+  - create `request_images` or shared `media_assets` table;
+  - store file URLs/paths, not base64 blobs;
+  - support `before`, `after`, and `general` image types;
+  - link photos to request and uploader.
+- IN PROGRESS in code: new `request_images` entity exists and request create/complete/feed reads now hydrate from it when rows exist.
+- Add production migration for map coordinates:
+  - `requests.latitude`;
+  - `requests.longitude`;
+  - `requests.locationSource`;
+  - add indexes if map/feed queries need them.
+- Convert request statuses from Bulgarian display strings to machine constants:
+  - `new`;
+  - `applied`;
+  - `assigned`;
+  - `in_progress`;
+  - `completed`;
+  - `canceled`;
+  - translate labels in frontend.
+- Convert repair categories from display strings to stable category keys:
+  - use keys for DB/API/calculator/map filters;
+  - show Bulgarian labels only in UI.
+- Add needed indexes:
+  - `requests.clientId`;
+  - `requests.assignedWorkerId`;
+  - `requests.completedByWorkerId`;
+  - `requests.status`;
+  - `requests.category`;
+  - `requests.created_at`;
+  - `reviews.workerUserId`;
+  - `reviews.clientUserId`;
+  - request application and image foreign keys.
+- Clean legacy worker auth fields:
+  - stop using `worker.password`;
+  - avoid duplicate `worker.email` auth logic;
+  - keep auth source of truth in `users`.
+- Add migrations instead of relying on TypeORM synchronize.
+- Before any production DB change:
+  - create `mysqldump` backup;
+  - write rollback SQL;
+  - test migration locally or on a staging copy.
+
+## Monetization, Credits, And Payments
+
+- IMPORTANT: do not integrate real payment provider before the core platform is stable.
+- Product direction:
+  - clients stay free in the early version;
+  - workers are the paying side;
+  - Bricky sells request access, applications, visibility, professional profile tools, portfolio/history, and reputation;
+  - Bricky should not take repair commission or act as escrow in the first monetization version.
+- Planned worker plans:
+  - Free;
+  - Basic;
+  - Standard;
+  - Pro.
+- Plan dimensions to support later:
+  - visibility level;
+  - monthly application allowance;
+  - gallery/media limits;
+  - completed jobs/portfolio visibility;
+  - worker ranking/priority;
+  - service area/category access;
+  - future analytics or verified badge.
+- Credits model:
+  - workers get limited free applications first;
+  - after free applications are used, applying to requests requires credits or a paid plan;
+  - credit cost depends on request size/value/category;
+  - exact pricing must stay configurable and should not be hardcoded.
+- Phase 1 before monetization:
+  - finish DB cleanup;
+  - stabilize user/worker identity logic;
+  - normalize request statuses and categories;
+  - finish `request_applications`;
+  - finish request image/media storage;
+  - stabilize request map;
+  - stabilize calculator.
+- Phase 2: credits without real payments:
+  - add `worker_credit_wallets`;
+  - add `worker_credit_transactions`;
+  - give test workers trial credits;
+  - spend credits when applying to a request;
+  - block application if no free applications, no plan allowance, and insufficient credits;
+  - show credit balance and applications left in worker dashboard;
+  - add admin/manual credit adjustment.
+- Phase 3: visibility levels:
+  - add `worker_plans`;
+  - attach visibility level to each worker;
+  - filter worker request feed and map by visibility level;
+  - hide/show request fields based on plan;
+  - add upgrade prompts when visibility is limited.
+- Phase 4: payment integration:
+  - add `payment_orders`;
+  - choose payment provider;
+  - implement credit purchases;
+  - implement plan subscription/activation;
+  - store payment history;
+  - handle failed, canceled, and refunded payments;
+  - add admin/payment logs.
+- Backend services to create later:
+  - `RequestApplicationsService`;
+  - `CreditsService`;
+  - `PlansService`;
+  - `PaymentsService`;
+  - `RequestVisibilityService`.
+- Future API endpoints:
+  - `GET /worker/billing/status`;
+  - `GET /worker/credits`;
+  - `POST /worker/credits/purchase`;
+  - `GET /worker/credits/transactions`;
+  - `GET /worker/plan`;
+  - `POST /worker/plan/subscribe`;
+  - `POST /worker/plan/cancel`;
+  - existing `POST /requests/:id/apply` must eventually use `RequestApplicationsService`.
+- Manual monetization MVP before real payments:
+  - worker pays manually outside the app;
+  - admin grants credits or plan manually;
+  - use this to test business logic before card/payment-provider integration.
+- Business rules to decide later:
+  - exact plan prices;
+  - exact free application count;
+  - exact monthly application limits;
+  - exact credit costs per category/value;
+  - exact visibility rules;
+  - exact ranking logic;
+  - exact payment provider;
+  - exact refund/admin override rules.
 
 ## Client Requests
 
@@ -26,7 +297,7 @@
 - DONE in dev/mock: closing a request can attach "after" photos and save before/after photos in worker history.
 - DONE in dev/mock: completed objects are grouped into compact portfolio/CV-style albums with cover photos and a viewer for all images.
 - DONE in dev/mock: public worker profile shows completed Bricky objects as proof of real work through the platform.
-- Wire worker gallery and completed-job photos to real backend file upload/storage.
+- URGENT for production: wire worker gallery and completed-job photos to real backend file upload/storage.
 - Verify the same gallery/history behavior with production backend storage after upload endpoints are connected.
 - Decide whether repair photos are:
   - general portfolio photos;
@@ -50,35 +321,195 @@
 
 ## Map Feature
 
-- Add a map of repair activities.
-- Reference visual direction: Payday 2 Crime.Net map style, but adapted for Bricky.
-- Requests should appear as map markers/cards with:
-  - repair category icon;
-  - location/area;
-  - urgency/status;
-  - short title/description;
-  - number of interested workers or assigned state.
-- Start with Sofia mock data, then wire to real request addresses/geocoding later.
+- FEATURE BRANCH: `codex/feature-sofia-request-map`.
+- DONE in dev/mock: worker-only `/repair-map` route.
+- DONE in dev/mock: client accounts do not have access to the request map.
+- DONE in dev/mock: worker menu/nav links expose the map only to workers.
+- DONE in dev/mock: Sofia interactive slippy map with drag/pan and wheel zoom.
+- DONE in dev/mock: scroll over the map zooms the map instead of scrolling the page.
+- DONE in dev/mock: Payday 2 Crime.Net-inspired skin, toned down so streets remain readable.
+- DONE in dev/mock: requests appear as map markers at realistic Sofia addresses.
+- DONE in dev/mock: close requests cluster into a bubble with request count.
+- DONE in dev/mock: clicking a cluster expands requests so they can be selected individually.
+- DONE in dev/mock: hovering a request marker highlights it.
+- DONE in dev/mock: clicking a request updates the right-side panel.
+- DONE in dev/mock: request photos show in the right-side map details panel.
+- DONE in dev/mock: workers can apply from the selected map request.
+- NEXT: add real address geocoding for manually typed client addresses.
+- NEXT: add production DB migration for request `latitude`, `longitude`, and `locationSource`.
+  - Current map branch is live-safe without these DB columns.
+  - Exact production coordinate persistence is deferred until the migration is added.
+- NEXT: decide map provider for production:
+  - OpenStreetMap tiles;
+  - Google Maps;
+  - or paid commercial tile provider.
+- NEXT: add category/status filters and category-specific marker icons.
+- NEXT: add moderation/AI checks before requests appear on the worker map.
 
 ## Categories And Calculator
 
-- Review and finalize category list:
-  - repair roofs;
-  - bathroom renovation;
-  - full renovation;
-  - electrical installation;
-  - repainting;
-  - light refresh renovation;
-  - plus existing categories.
-- Research approximate material and labor prices.
-- Replace rough hardcoded estimates with a clearer pricing model:
-  - per square meter;
-  - per electrical/plumbing point;
-  - fixed base fee;
-  - difficulty multiplier;
-  - optional material quality level.
+- DONE in code: replace the small hardcoded repair list with a central repair catalog used by request forms and price presets.
+- DONE in mock: store repair categories in the dev/mock localStorage DB as `repairCategories`.
+- DONE in mock: expose `GET /repair-categories` through the mock API layer.
+- DONE in mock: `/requests` now uses a multi-step request wizard:
+  - quick repair links;
+  - category-specific activities;
+  - approximate size/quantity;
+  - district/address logistics;
+  - customer goal;
+  - Bricky communication preference;
+  - final review and mock submit.
+- DONE as SQL seed draft: add `scripts/db-repair-categories-seed.sql` for a future `repair_categories` table.
+- IMPORTANT: category work is mock-first for now; do not run the SQL seed on production until the DB cleanup/migration plan is approved.
+- DONE in mock/catalog: normalize the quick repair links to 15 stable category keys:
+  - `vik`;
+  - `electro`;
+  - `painting`;
+  - `plaster`;
+  - `tiles`;
+  - `bathroom_renovation`;
+  - `drywall`;
+  - `flooring`;
+  - `heating_cooling`;
+  - `windows_doors`;
+  - `furniture_mounting`;
+  - `roof_waterproofing`;
+  - `demolition_cleanup`;
+  - `full_renovation`;
+  - `small_repairs`.
+- Wire production backend to read repair categories from the database instead of static constants after the DB cleanup/migration.
+
+### Calculator Pricing Foundation - High Priority
+
+- DONE in mock v0.1: create `frontend/src/constants/repairPricingConfig.js` with activity-level EUR labor ranges for all 15 categories.
+- DONE in mock v0.1: add a shared calculation engine with:
+  - upward rounding to 5 EUR;
+  - category estimates before activity selection;
+  - activity-specific labor ranges;
+  - unit-aware size parsing;
+  - minimum visit prices;
+  - shared-visit labor discounts for eligible small tasks;
+  - bundle/include protection against double charging;
+  - urgency, complexity, location, and access multiplier support;
+  - inspection and electrical safety warnings.
+- DONE in mock v0.1: request wizard now reads the shared pricing config, displays EUR labor ranges, and saves `categoryKey` plus estimate min/max/currency in mock requests.
+- DONE in mock v0.1: add `materialPriceIndex.js` with 174 indexed material and consumable items in EUR.
+- DONE in mock v0.1: add 97 activity-specific material quantity rules covering all 15 repair categories.
+- SUPERSEDED v0.1: the former three-mode estimate was replaced by the two-mode v0.2 model below.
+- DONE in mock v0.1: calculate labor, materials, and total as separate min/max ranges, rounded upward to 5 EUR.
+- DONE in mock v0.1: expose material confidence (`high`, `medium`, `inspection_required`) and inspection warnings in the request wizard.
+- DONE in mock v0.1: protect bundled activities from double charging and exclude expensive finish products unless the selected rule explicitly includes them.
+- DONE in mock v0.1: save a complete versioned pricing snapshot in mock requests without changing the production API contract.
+- DONE in mock v0.1: add `npm run test:pricing` coverage for all 97 rules, referenced material keys, range integrity, bundles, inspection cases, and representative estimate modes.
+- SUPERSEDED v0.1: the former universal square-meter prompt was replaced by category/activity-specific quantity questions in v0.2.
+- DONE in mock v0.1: use exact area directly for area-based activities, convert it conservatively for room-based work, and keep it as context without multiplying item/point activities.
+- DONE in mock v0.1: cap calculator area input at 2000 sq.m and require an individual estimate above that limit.
+- DONE in mock v0.1: implement the Expected Range UX model with `expectedMin/Max`, `possibleMin/Max`, `confidence`, `displayMode`, and category-specific variation reasons.
+- DONE in mock v0.1: show the expected range as the primary client price and retain a wide technical possible range only as secondary information.
+- DONE in mock v0.1: store exact area and the complete expected/possible range model in the mock pricing snapshot; do not migrate this structure to production DB yet.
+- DONE in mock v0.1: stop writing calculator prices and calculator-version metadata into the free-form repair description.
+- DONE in mock v0.1: show the structured expected estimate separately in client requests, worker requests/history, and the repair map.
+- DONE in mock v0.1: hide legacy embedded calculator lines when old mock request descriptions are rendered without rewriting stored localStorage records.
+- Documentation: `docs/calculator-mock-pricing-v0.2.md` describes the current engine, area rules, range UX, snapshot, verification, and remaining work.
+- DONE in mock v0.2: replace the three-mode calculator with only `labor_only` and `labor_plus_materials`.
+- DONE in mock v0.2: add `pricingModeBehavior` and `defaultPricingMode` metadata to all 97 activities.
+- DONE in mock v0.2: show exactly `Труд` and `Труд + материали` for every selected activity and always respect the client's choice; remove hidden mode locking that produced identical comparisons.
+- DONE in mock v0.2: rename material-rule ranges to non-null `materialMin/materialMax` and formally support `logistics_formula`.
+- DONE in mock v0.2: normalize Bulgarian activity labels to stable keys and save both keys and labels in request snapshots.
+- DONE in mock v0.2: use category-specific quantity questions and show exact square-meter input only for area-based activities.
+- DONE in mock v0.2: clamp the primary expected-range ratio to 2.5 while retaining wider possible ranges internally.
+- DONE in mock v0.2: add display flags (`rangeTooWide`, `showPossibleRange`, `needsPhotos`, `needsInspection`) and cleaner confidence copy.
+- DONE in mock v0.2: mark the legacy category-level estimator as deprecated; active request flow uses the shared activity engine.
+- REMAINING TECHNICAL DEBT:
+  - the worker profile contains a second independent hardcoded calculator and must be moved to the shared engine;
+  - mock snapshots are complete, but production still needs a supported DTO and persistent historical calculation snapshot;
+  - pricing mode is implemented; urgency, complexity/access, material quality, and customer-supplied-material controls still need UI fields;
+  - quantity formulas and ranges must be validated with 3-5 active workers before they are treated as production prices;
+  - production backend defaults and DB snapshot structure still need final EUR alignment after mock validation.
+- HIGH: validate the current labor and material ranges for all 15 categories with real quotes and worker feedback; record source period, assumptions, and conditions for every correction.
+- DONE in mock v0.1: create a central config before any DB pricing migration at `frontend/src/constants/repairPricingConfig.js`.
+- Config requirements:
+  - stable category and activity keys;
+  - currency `EUR`;
+  - `laborMin` / `laborMax`;
+  - `materialMin` / `materialMax`;
+  - `unitType` per activity;
+  - notes and safety/disclaimer metadata;
+  - formula/version identifier so the shape is ready for later DB migration.
+- IN PROGRESS: move both mock calculator experiences to the same pricing engine/config:
+  - DONE: request wizard estimate;
+  - DONE in Sprint 2: worker profile calculator now uses the shared v0.2 engine, 15-category catalog, activity selection, exact-area handling, and the two canonical pricing modes;
+  - DONE in Sprint 2: removed the duplicate price table, manual labor-per-square-meter input, BGN output, and direct pricing constants from `WorkerProfile.jsx`.
+- DONE in mock v0.2: calculator result model exposes labor, material, expected, possible, and total ranges for the two current pricing modes.
+- HIGH: implement calculation multipliers:
+  - size/quantity;
+  - urgency;
+  - complexity/access;
+  - material quality.
+- HIGH: define category-specific units instead of one universal quantity:
+  - `m2` for painting, plaster, tiles, flooring, drywall, and roofing;
+  - point/item/linear meter for electrical and plumbing;
+  - `m2` or `m3` for demolition;
+  - item/hour/complexity for furniture and installation work.
+- HIGH: support multiple selected activities:
+  - first activity labor at 100%;
+  - each additional activity labor initially at a configurable 60-75%;
+  - materials remain at 100%;
+  - validate this rule with market research before treating it as final.
+- HIGH: add calculator disclaimers:
+  - general estimate disclaimer explaining inspection, access, complexity, urgency, and material dependency;
+  - electrical safety/inspection warning for panels, short circuits, defective circuits, and old installations;
+  - plumbing warning for hidden leaks, demolition, difficult access, and pipe replacement.
+- HIGH: add focused tests for:
+  - one activity with and without materials;
+  - multiple activities and shared-visit discount;
+  - every supported unit type;
+  - multiplier combinations;
+  - upward EUR rounding;
+  - missing/unknown pricing rules;
+  - min/max totals never becoming inverted or negative.
+
+### Materials Research - Medium-High Priority
+
+- DONE in mock v0.1: prepare a config-based Material Price Index with category grouping, units, EUR ranges, and source-period metadata; do not write it to production DB yet.
+- NEXT: validate representative prices and package assumptions with current supplier prices and worker feedback.
+- NEXT: decide how frequently the index is reviewed and versioned without changing historical request estimates.
+
+### Pricing Database Integration - Later
+
+- DO NOT create pricing migrations until the config-based calculator and mock UX are validated.
+- Future schema candidates:
+  - `repair_categories`;
+  - `repair_activities`;
+  - `repair_pricing_rules`;
+  - `material_price_index`;
+  - `calculator_versions`;
+  - optional `request_calculations` snapshot table.
+- Request creation must preserve a historical calculation snapshot containing:
+  - pricing version and currency;
+  - category/activity keys;
+  - size, urgency, complexity, material quality, and include-materials choices;
+  - labor, material, and total min/max values;
+  - calculation note/disclaimer.
+- Never make old requests read only the current live pricing rule; historical estimates must not change when pricing is updated.
+- Add pricing administration only after the DB model, request flow, map, and mock calculator are stable.
+- Keep payment/credits implementation behind calculator stabilization; do not build billing decisions on an unvalidated estimate model.
 
 ## Cleanup
+
+### Sprint 2 moderation gate
+
+- DONE: role-protected `/admin` and `/api/admin` surfaces.
+- DONE: separate lifecycle status from `pending_review`, `approved`, `rejected`, and `hidden` publication moderation.
+- DONE: moderate requests, request media, worker profiles, avatars, galleries, and reviews.
+- DONE: hide unapproved content from worker/public surfaces while preserving owner visibility.
+- DONE: client correction and resubmission after rejection.
+- DONE: dashboard counters, queues, detail view, search, status filters, pagination, approve/reject/hide, controlled request edit, and spam deletion.
+- DONE: immutable admin audit records include actor, action, target, old/new values, reason, request IP, and timestamp.
+- OPTIONAL NEXT: add standardized reason presets and a dedicated account-management tab in the admin UI.
+
+- DONE in mock v0.2: request browser geolocation permission when the client reaches the location step; store GPS coordinates when allowed and fall back to one exact-address field when denied or unavailable.
+- DONE in mock v0.2: remove the Sofia district dropdown so the client address is not classified under an incorrect neighborhood.
 
 - Stabilize `DevTestPanel` and mock localStorage DB.
 - Add a reset/seed explanation in docs or UI.

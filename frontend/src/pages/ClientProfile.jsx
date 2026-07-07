@@ -1,18 +1,22 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost, apiPut } from "../services/api";
 import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
+import { photoMediaUrl, photoThumbnailUrl } from "../utils/mediaUrls";
 import {
   CalendarDays,
   FileText,
   MapPin,
   Plus,
   RefreshCw,
+  Tag,
   Users,
 } from "lucide-react";
 import RequestInfoRow from "../components/requests/RequestInfoRow";
 import RequestPhotoCarousel from "../components/requests/RequestPhotoCarousel";
+import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
+import { RequestFlow } from "./Requests";
 
 function formatBG(dateStr) {
   try {
@@ -22,7 +26,7 @@ function formatBG(dateStr) {
   }
 }
 
-const CATEGORIES = ["ВиК", "Електро", "Шпакловка и боя", "Плочки"];
+const CATEGORIES = REPAIR_CATEGORIES;
 
 function uniqNums(arr) {
   const out = [];
@@ -37,7 +41,7 @@ function uniqNums(arr) {
   return out;
 }
 
-function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
+function imageFileToDataUrl(file, maxSize = 520, quality = 0.58) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -76,15 +80,7 @@ function filesToPhotos(files) {
 }
 
 function photoUrl(photo) {
-  const raw =
-    typeof photo === "string"
-      ? photo
-      : photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "";
-
-  if (!raw) return "";
-  if (/^(data:|blob:|https?:\/\/)/i.test(raw)) return raw;
-  if (raw.startsWith("/")) return `${import.meta.env.VITE_API_URL || "/api"}${raw}`;
-  return raw;
+  return photoMediaUrl(photo);
 }
 
 function safeRatingValue(x) {
@@ -114,13 +110,18 @@ export default function ClientProfile() {
     phone: "",
     email: "",
     address: "",
-    category: "ВиК",
+    category: "ВиК ремонти",
     description: "",
     photos: [],
+    latitude: null,
+    longitude: null,
+    locationSource: "manual",
   });
 
   const [createError, setCreateError] = useState("");
   const [createOk, setCreateOk] = useState("");
+  const [locationStatus, setLocationStatus] = useState("manual");
+  const [locationMessage, setLocationMessage] = useState("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
   const [actionMsg, setActionMsg] = useState("");
   const [assigningKey, setAssigningKey] = useState("");
 
@@ -184,7 +185,8 @@ export default function ClientProfile() {
       setReviewDraft((prev) => {
         const next = { ...prev };
         reqs.forEach((r) => {
-          const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+          const status = String(r.statusKey || r.status || "").toLowerCase();
+          const isCompleted = status === "completed" || status === "завършена";
           const assignedUserId = Number(r.assignedWorkerId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
 
@@ -251,6 +253,20 @@ export default function ClientProfile() {
     }
   }
 
+  async function editAndResubmit(requestItem) {
+    const description = window.prompt("Коригирай описанието на заявката:", cleanRequestDescription(requestItem.description) || "");
+    if (description === null) return;
+    const address = window.prompt("Коригирай адреса:", requestItem.address || "");
+    if (address === null) return;
+    try {
+      await apiPut(`/requests/${requestItem.id}/resubmit`, { description, address });
+      setActionMsg("Заявката е върната за нов преглед.");
+      await loadData();
+    } catch (error) {
+      setActionMsg(error?.response?.data?.message || "Не успях да върна заявката за преглед.");
+    }
+  }
+
   async function handleRequestPhotos(e) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -273,10 +289,51 @@ export default function ClientProfile() {
     }));
   }
 
+  function requestCurrentLocation() {
+    setCreateError("");
+
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      setLocationMessage("Браузърът не поддържа автоматична локация. Въведи точния адрес ръчно.");
+      setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationMessage("Питам браузъра за достъп до локацията...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        setNewReq((p) => ({
+          ...p,
+          latitude,
+          longitude,
+          locationSource: "gps",
+        }));
+        setLocationStatus("granted");
+        setLocationMessage(`Локацията е добавена към заявката: ${latitude}, ${longitude}.`);
+      },
+      (err) => {
+        console.warn("Geolocation denied/unavailable:", err);
+        setLocationStatus("denied");
+        setLocationMessage("Локацията е отказана или недостъпна. Въведи точния адрес ръчно, за да сложим заявката на картата.");
+        setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
   async function createRequest() {
     setCreateError("");
     setCreateOk("");
     try {
+      if (!String(newReq.address || "").trim() && !newReq.latitude && !newReq.longitude) {
+        setCreateError("Добави текуща локация или въведи точен адрес за заявката.");
+        return;
+      }
+
       const res = await apiPost("/requests", {
         clientName: newReq.clientName,
         email: newReq.email,
@@ -285,10 +342,15 @@ export default function ClientProfile() {
         category: newReq.category,
         description: newReq.description,
         photos: newReq.photos || [],
+        latitude: newReq.latitude,
+        longitude: newReq.longitude,
+        locationSource: newReq.locationSource || "manual",
       });
 
       setCreateOk(`Заявката е създадена! (#${res.data?.id ?? "?"})`);
-      setNewReq((p) => ({ ...p, description: "", photos: [] }));
+      setNewReq((p) => ({ ...p, description: "", photos: [], latitude: null, longitude: null, locationSource: "manual" }));
+      setLocationStatus("manual");
+      setLocationMessage("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
       setActiveTab("requests");
       await loadData();
     } catch (err) {
@@ -318,6 +380,24 @@ export default function ClientProfile() {
       else setActionMsg(err?.response?.data?.message || "Грешка при назначаване.");
     } finally {
       setAssigningKey("");
+    }
+  }
+
+  async function respondToCompletedWork(requestId, approved) {
+    try {
+      setActionMsg("");
+      if (approved) {
+        await apiPost(`/requests/${requestId}/confirm`, {});
+        setActionMsg("Работата е потвърдена. Майсторът може да затвори заявката.");
+      } else {
+        const reason = window.prompt("Опиши проблема, за да бъде прегледан от администратор:");
+        if (!reason) return;
+        await apiPost(`/requests/${requestId}/dispute`, { reason });
+        setActionMsg("Сигналът е изпратен за администраторска намеса.");
+      }
+      await loadData();
+    } catch (err) {
+      setActionMsg(err?.response?.data?.message || "Неуспешно обновяване на заявката.");
     }
   }
 
@@ -430,7 +510,8 @@ export default function ClientProfile() {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
-                  const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+                  const normalizedStatus = String(r.statusKey || r.status || "").toLowerCase();
+                  const isCompleted = normalizedStatus === "completed" || normalizedStatus === "завършена";
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem;
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
@@ -462,15 +543,35 @@ export default function ClientProfile() {
                         </div>
                       </div>
 
+                      {r.moderationStatus && r.moderationStatus !== "approved" && (
+                        <div className={`mt-5 rounded-xl border p-4 ${r.moderationStatus === "rejected" ? "border-red-400/30 bg-red-500/10" : "border-amber-400/30 bg-amber-500/10"}`}>
+                          <p className="font-extrabold text-white">{r.moderationStatus === "rejected" ? "Заявката е върната за корекция." : r.moderationStatus === "hidden" ? "Заявката е скрита от Bricky." : "Заявката чака преглед от Bricky."}</p>
+                          {r.moderationReason && <p className="mt-2 text-sm text-slate-200"><strong>Причина:</strong> {r.moderationReason}</p>}
+                          {["rejected", "hidden"].includes(r.moderationStatus) && <button onClick={() => editAndResubmit(r)} className="mt-3 rounded-lg bg-white/10 px-4 py-2 font-bold text-white hover:bg-white/15">Редактирай и изпрати отново</button>}
+                        </div>
+                      )}
+
+                      {normalizedStatus === "waiting_client_confirmation" && (
+                        <div className="mt-5 rounded-xl border border-cyan-400/25 bg-cyan-400/10 p-4">
+                          <p className="font-extrabold text-white">Майсторът отбеляза работата като готова.</p>
+                          <p className="mt-1 text-sm text-slate-300">Прегледай снимките след ремонта и потвърди резултата или изпрати проблем към администратор.</p>
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <button onClick={() => respondToCompletedWork(r.id, true)} className="rounded-xl bg-green-500 px-5 py-3 font-extrabold text-white hover:bg-green-400">Потвърди</button>
+                            <button onClick={() => respondToCompletedWork(r.id, false)} className="rounded-xl bg-red-500 px-5 py-3 font-extrabold text-white hover:bg-red-400">Има проблем</button>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="grid gap-8 py-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.95fr)]">
                         <div className="space-y-4 xl:border-r xl:border-slate-400/15 xl:pr-8">
                           <RequestInfoRow icon={<MapPin size={19} />} label="Адрес:" value={r.address || "—"} />
-                          <RequestInfoRow icon={<FileText size={19} />} label="Описание:" value={<span className="whitespace-pre-line">{r.description || "—"}</span>} />
+                          <RequestInfoRow icon={<FileText size={19} />} label="Описание:" value={<span className="whitespace-pre-line">{cleanRequestDescription(r.description) || "—"}</span>} />
+                          {formatRequestExpectedRange(r) && <RequestInfoRow icon={<Tag size={19} />} label="Ориентировъчна цена:" value={formatRequestExpectedRange(r)} accent />}
                         </div>
 
                         <div className="min-w-0">
                           <div className="mb-4 flex items-center gap-2 font-extrabold text-slate-100"><FileText size={19} className="text-slate-400" /> Снимки към заявката</div>
-                          <RequestPhotoCarousel photos={r.photos || []} getUrl={photoUrl} />
+                          <RequestPhotoCarousel photos={r.photos || []} getUrl={photoUrl} getThumbnailUrl={photoThumbnailUrl} />
                         </div>
                       </div>
 
@@ -629,89 +730,11 @@ export default function ClientProfile() {
         )}
 
         {activeTab === "create" && (
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8">Направи заявка</h1>
-
-            {createError && <div className="mb-4 text-red-400 font-bold">{createError}</div>}
-            {createOk && <div className="mb-4 text-green-400 font-bold">{createOk}</div>}
-
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  value={newReq.clientName}
-                  onChange={(e) => setNewReq((p) => ({ ...p, clientName: e.target.value }))}
-                  className="p-3 rounded bg-gray-900 border border-gray-700"
-                  placeholder="Име"
-                />
-                <input
-                  value={newReq.phone}
-                  onChange={(e) => setNewReq((p) => ({ ...p, phone: e.target.value }))}
-                  className="p-3 rounded bg-gray-900 border border-gray-700"
-                  placeholder="Телефон"
-                />
-              </div>
-
-              <input
-                value={newReq.email}
-                onChange={(e) => setNewReq((p) => ({ ...p, email: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-                placeholder="Имейл"
-              />
-
-              <input
-                value={newReq.address}
-                onChange={(e) => setNewReq((p) => ({ ...p, address: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-                placeholder="Адрес"
-              />
-
-              <select
-                value={newReq.category}
-                onChange={(e) => setNewReq((p) => ({ ...p, category: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-
-              <textarea
-                value={newReq.description}
-                onChange={(e) => setNewReq((p) => ({ ...p, description: e.target.value }))}
-                className="p-3 rounded bg-gray-900 border border-gray-700 w-full h-32"
-                placeholder="Опиши проблема..."
-              />
-
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-                <label className="block font-bold mb-2">Снимки на проблема / мястото за ремонт</label>
-                <input type="file" accept="image/*" multiple onChange={handleRequestPhotos} className="block w-full text-sm" />
-                <p className="text-xs text-gray-400 mt-2">
-                  Тези снимки ще помогнат на майсторите да преценят ремонта и ще се пазят към историята на заявката.
-                </p>
-
-                {Array.isArray(newReq.photos) && newReq.photos.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                    {newReq.photos.map((photo) => (
-                      <div key={photo.id || photoUrl(photo)} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
-                        <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover" />
-                        <button type="button" onClick={() => removeRequestPhoto(photo.id)} className="absolute right-1 top-1 bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 rounded">
-                          Махни
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={createRequest}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold"
-              >
-                Създай заявка
-              </button>
-            </div>
+          <div className="max-w-6xl mx-auto">
+            <RequestFlow embedded onCreated={() => {
+              setActiveTab("requests");
+              loadData();
+            }} />
           </div>
         )}
 

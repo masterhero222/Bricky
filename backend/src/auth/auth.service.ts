@@ -84,6 +84,7 @@ export class AuthService {
   async login(dto: LoginUserDto) {
     const user = await this.users.findByEmail(dto.email);
     if (!user) throw new BadRequestException('Грешен имейл или парола');
+    if (user.accountStatus === 'suspended') throw new BadRequestException('Акаунтът е временно спрян');
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new BadRequestException('Грешни данни');

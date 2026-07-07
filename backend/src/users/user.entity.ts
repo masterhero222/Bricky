@@ -18,6 +18,9 @@ export class UserEntity {
   @Column({ default: 'client' })
   role: string;
 
+  @Column({ type: 'varchar', length: 30, default: 'active' })
+  accountStatus: 'active' | 'suspended';
+
   @OneToMany(() => RequestEntity, (request) => request.client)
   requests: RequestEntity[];
 }

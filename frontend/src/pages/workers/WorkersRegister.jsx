@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import { apiPost } from "../../services/api";
 
 export default function WorkersRegister() {
   const [form, setForm] = useState({
@@ -53,7 +53,7 @@ export default function WorkersRegister() {
     };
 
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/workers`, payload);
+      await apiPost("/auth/register", { ...payload, role: "worker" });
       setSuccess("Успешна регистрация!");
       setError("");
       setForm({

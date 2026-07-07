@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { UserEntity } from '../../users/user.entity';
+import type { ModerationStatus } from '../../moderation/moderation.types';
 
 @Entity('requests')
 export class RequestEntity {
@@ -35,8 +36,29 @@ export class RequestEntity {
   @Column({ length: 100, nullable: true })
   category: string;
 
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  categoryKey: string | null;
+
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  latitude: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  longitude: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  locationSource: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  estimateMin: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  estimateMax: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  estimateCurrency: string | null;
 
   @Column({ type: 'simple-json', nullable: true })
   photos: any[] | null;
@@ -54,6 +76,27 @@ export class RequestEntity {
   })
   status: string;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  statusKey: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  workerArrivedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  workStartedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  workReadyAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  clientConfirmedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  disputedAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  disputeReason: string | null;
+
   @Column('simple-array', { nullable: true })
   appliedWorkers: number[];
 
@@ -69,6 +112,18 @@ export class RequestEntity {
 
   @Column({ type: 'int', nullable: true })
   durationDays: number | null;
+
+  @Column({ type: 'varchar', length: 30, default: 'pending_review' })
+  moderationStatus: ModerationStatus;
+
+  @Column({ type: 'text', nullable: true })
+  moderationReason: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  moderatedByUserId: number | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  moderatedAt: Date | null;
 
   @CreateDateColumn()
   created_at: Date;

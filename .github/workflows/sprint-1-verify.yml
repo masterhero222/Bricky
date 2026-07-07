@@ -1,0 +1,123 @@
+name: Bricky verification
+
+on:
+  push:
+    branches:
+      - "codex/sprint-*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bricky-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run Bricky verification gate
+        run: node scripts/verify-sprint-1.mjs
+
+  migration-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: bricky_rehearsal
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Rehearse Sprint 2 migration and rollback
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
+          MYSQL_DATABASE: bricky_rehearsal
+        run: bash scripts/rehearse-sprint2-migration.sh
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Create isolated lifecycle database
+        env:
+          MYSQL_PWD: root
+        run: |
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260704_000_legacy_baseline.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_001_sprint2_foundation_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_002_moderation_gate_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
+
+      - name: Run MySQL request lifecycle E2E
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: root
+          DB_NAME: bricky_sprint1_e2e
+          TYPEORM_SYNCHRONIZE: "false"
+          JWT_SECRET: sprint2-ci-only-secret
+          UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          MAIL_HOST: 127.0.0.1
+          MAIL_PORT: 2525
+          MAIL_USER: test
+          MAIL_PASS: test
+          MAIL_FROM: test@example.test
+        run: |
+          mkdir -p "$UPLOADS_DIR"
+          npm run test:e2e -- --runInBand
