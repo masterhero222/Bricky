@@ -1,6 +1,6 @@
 # Sprint 2 Completion Report
 
-Status: **OPEN**  
+Status: **RELEASED WITH ACCEPTED RESIDUAL RISK**
 Updated: 2026-07-07
 
 ## Green Evidence
@@ -20,10 +20,19 @@ Updated: 2026-07-07
 - Mobile navigation/logout passed after fixing worker-dashboard horizontal overflow.
 - Disposable staging rollback and forward reapplication preserved all tested rows.
 
-## Pending Evidence
+## Production Release
 
-- Real phone photo with EXIF.
-- PR review and exact-SHA production deployment.
-- Disposable production flow and cleanup.
+- Pull request: `#5` (`codex/sprint-2-foundation` to `main`).
+- Production merge SHA: `5a941fc6dd19c91685662a6e94d008130646d5c3`.
+- Release directory: `/var/www/Bricky-releases/5a941fc6dd19c91685662a6e94d008130646d5c3`.
+- PM2 process `bricky-backend` runs the backend from the release directory.
+- Production database was replaced with the sanitized Sprint 2 mock/staging dataset by explicit owner instruction.
+- A dedicated active administrator account was created. Its password is not stored in the repository.
+- Public API readiness, role logins, worker/request reads, media and thumbnail URLs, admin browser flow, and mobile admin layout passed.
+- Production runs with `TYPEORM_SYNCHRONIZE=false`.
 
-Sprint 2 must not be closed and Sprint 3 must not begin while any pending evidence remains.
+## Accepted Residual Risk
+
+An original phone photo larger than 10 MB was not supplied for the final production gate. Generated exact 10/15/20 MB EXIF fixtures passed the shared image pipeline. The owner explicitly authorized production deployment with this remaining acceptance item recorded for follow-up.
+
+Sprint 2 is released. Further Sprint 3 implementation remains a separate decision and scope.
