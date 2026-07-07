@@ -777,7 +777,7 @@ export default function WorkerProfile() {
 
   return (
     <div className="flex min-h-screen bg-gray-900 text-white">
-      <aside className="w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
+      <aside className="hidden md:block w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
         <nav className="flex flex-col gap-4 px-6 text-sm">
           {[
             ["dashboard", "Контрол панел"],
@@ -807,10 +807,10 @@ export default function WorkerProfile() {
         </nav>
       </aside>
 
-      <main className="flex-1 ml-64 pt-24 px-10 pb-20">
+      <main className="min-w-0 flex-1 ml-0 md:ml-64 pt-24 px-4 sm:px-6 lg:px-10 pb-20">
         {activeTab === "dashboard" && (
           <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
               <h1 className="text-3xl font-bold">Контрол панел</h1>
 
               <button
