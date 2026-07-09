@@ -12,6 +12,7 @@ import { ReviewModule } from './reviews/review.module';
 import { HealthModule } from './health/health.module';
 import { resolveTypeOrmSynchronize } from './config/database-policy';
 import { AdminModule } from './admin/admin.module';
+import { AccountSecurityModule } from './account-security/account-security.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AdminModule } from './admin/admin.module';
     ReviewModule,
     MailModule,
     NotificationsModule,
+    AccountSecurityModule,
     RequestsModule,
     WorkersModule,
     HealthModule,
