@@ -3,6 +3,8 @@ import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
+import { AccountSecurityService } from '../account-security/account-security.service';
+import { MailService } from '../mail/mail.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 
@@ -11,6 +13,8 @@ export class AuthService {
   constructor(
     private readonly users: UsersService,
     private readonly workers: WorkersService,
+    private readonly accountSecurity: AccountSecurityService,
+    private readonly mail: MailService,
     private readonly jwt: JwtService,
   ) {}
 
@@ -31,7 +35,9 @@ export class AuthService {
         role: 'client',
       });
 
-      return { message: 'Клиентът е регистриран успешно', user };
+      await this.sendVerificationEmail(user);
+
+      return { message: 'Клиентът е регистриран успешно. Провери имейла си за потвърждение.', user };
     }
 
     // WORKER
@@ -54,7 +60,9 @@ export class AuthService {
         skills: dto.skills ?? [],
       });
 
-      return { message: 'Майсторът е регистриран успешно', user };
+      await this.sendVerificationEmail(user);
+
+      return { message: 'Майсторът е регистриран успешно. Провери имейла си за потвърждение.', user };
     }
 
     throw new BadRequestException('Невалидна роля');
@@ -74,11 +82,11 @@ export class AuthService {
       email: safeRole === 'client' ? 'client.dev@bricky.local' : 'worker.dev@bricky.local',
     };
 
-      const token = await this.jwt.signAsync({
-        id: user.id,
-        role: user.role,
-        tokenVersion: 0,
-      });
+    const token = await this.jwt.signAsync({
+      id: user.id,
+      role: user.role,
+      tokenVersion: 0,
+    });
 
     return { token, user };
   }
@@ -104,6 +112,78 @@ export class AuthService {
         name: user.name,
         email: user.email,
       },
+    };
+  }
+
+  async verifyEmail(rawToken: string) {
+    const token = await this.accountSecurity.consumeToken(rawToken, 'email_verification');
+    const user = await this.users.markEmailVerified(token.userId);
+    return {
+      message: 'Имейлът е потвърден успешно',
+      user: user ? this.safeUser(user) : null,
+    };
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.users.findByEmail(email);
+    if (user && user.emailVerificationRequired && !user.emailVerifiedAt) {
+      await this.sendVerificationEmail(user);
+    }
+    return { message: 'Ако има акаунт с този имейл, ще получиш инструкции.' };
+  }
+
+  async requestPasswordReset(email: string) {
+    const user = await this.users.findByEmail(email);
+    if (user && user.accountStatus !== 'suspended') {
+      const { rawToken } = await this.accountSecurity.issueToken(user.id, 'password_reset', 60);
+      const status = await this.mail.sendPasswordReset({ email: user.email, name: user.name, token: rawToken });
+      await this.accountSecurity.logEmailDelivery({
+        userId: user.id,
+        email: user.email,
+        type: 'password_reset',
+        status,
+        provider: 'mailer',
+      });
+    }
+    return { message: 'Ако има акаунт с този имейл, ще получиш инструкции.' };
+  }
+
+  async resetPassword(rawToken: string, password: string) {
+    const token = await this.accountSecurity.consumeToken(rawToken, 'password_reset');
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await this.users.updatePasswordAndRevokeSessions(token.userId, passwordHash);
+    if (user) {
+      const status = await this.mail.sendPasswordChanged({ email: user.email, name: user.name });
+      await this.accountSecurity.logEmailDelivery({
+        userId: user.id,
+        email: user.email,
+        type: 'password_changed',
+        status,
+        provider: 'mailer',
+      });
+    }
+    return { message: 'Паролата е сменена успешно' };
+  }
+
+  private async sendVerificationEmail(user: { id: number; email: string; name?: string }) {
+    const { rawToken } = await this.accountSecurity.issueToken(user.id, 'email_verification', 24 * 60);
+    const status = await this.mail.sendEmailVerification({ email: user.email, name: user.name, token: rawToken });
+    await this.accountSecurity.logEmailDelivery({
+      userId: user.id,
+      email: user.email,
+      type: 'email_verification',
+      status,
+      provider: 'mailer',
+    });
+  }
+
+  private safeUser(user: { id: number; role: string; name: string; email: string; emailVerifiedAt?: Date | null }) {
+    return {
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+      emailVerifiedAt: user.emailVerifiedAt ?? null,
     };
   }
 }

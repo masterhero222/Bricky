@@ -8,11 +8,15 @@ import { JwtStrategy } from './jwt.strategy';
 
 import { UsersModule } from '../users/users.module';
 import { WorkersModule } from '../workers/workers.module';
+import { AccountSecurityModule } from '../account-security/account-security.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
     UsersModule,
     WorkersModule,
+    AccountSecurityModule,
+    MailModule,
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'supersecretkey',
