@@ -25,10 +25,13 @@ export class JwtAuthGuard implements CanActivate {
       const payload = jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey') as any;
       const user = await this.dataSource.getRepository(UserEntity).findOne({
         where: { id: Number(payload.id) },
-        select: { id: true, role: true, accountStatus: true },
+        select: { id: true, role: true, accountStatus: true, tokenVersion: true },
       });
       if (!user || user.accountStatus === 'suspended') {
         throw new UnauthorizedException('Account is unavailable');
+      }
+      if (Number(payload.tokenVersion ?? 0) !== Number(user.tokenVersion ?? 0)) {
+        throw new UnauthorizedException('Token has been revoked');
       }
       req.user = { ...payload, id: user.id, role: user.role };
       return true;

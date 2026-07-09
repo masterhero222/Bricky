@@ -74,10 +74,11 @@ export class AuthService {
       email: safeRole === 'client' ? 'client.dev@bricky.local' : 'worker.dev@bricky.local',
     };
 
-    const token = await this.jwt.signAsync({
-      id: user.id,
-      role: user.role,
-    });
+      const token = await this.jwt.signAsync({
+        id: user.id,
+        role: user.role,
+        tokenVersion: 0,
+      });
 
     return { token, user };
   }
@@ -92,6 +93,7 @@ export class AuthService {
     const token = await this.jwt.signAsync({
       id: user.id,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     });
 
     return {

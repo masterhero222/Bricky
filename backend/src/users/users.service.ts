@@ -29,4 +29,36 @@ export class UsersService {
 
     return this.repo.save(user);
   }
+
+  async markEmailVerified(id: number) {
+    await this.repo.update(id, {
+      emailVerifiedAt: new Date(),
+      emailVerificationRequired: false,
+    });
+    return this.findOne(id);
+  }
+
+  async updatePasswordAndRevokeSessions(id: number, passwordHash: string) {
+    await this.repo
+      .createQueryBuilder()
+      .update(UserEntity)
+      .set({
+        password: passwordHash,
+        passwordChangedAt: new Date(),
+        tokenVersion: () => 'tokenVersion + 1',
+      })
+      .where('id = :id', { id })
+      .execute();
+    return this.findOne(id);
+  }
+
+  async revokeSessions(id: number) {
+    await this.repo
+      .createQueryBuilder()
+      .update(UserEntity)
+      .set({ tokenVersion: () => 'tokenVersion + 1' })
+      .where('id = :id', { id })
+      .execute();
+    return this.findOne(id);
+  }
 }
