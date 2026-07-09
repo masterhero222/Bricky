@@ -9,6 +9,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { VerifiedAccountGuard } from '../auth/verified-account.guard';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 
@@ -17,7 +18,7 @@ export class ReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
 
   // ✅ client leaves review
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, VerifiedAccountGuard)
   @Post()
   async create(@Req() req: any, @Body() dto: CreateReviewDto) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');

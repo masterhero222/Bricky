@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { VerifiedAccountGuard } from '../auth/verified-account.guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { deleteStoredMedia, storeUploadedImage } from '../common/media-storage';
 
@@ -46,7 +47,7 @@ export class WorkersController {
     return worker;
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, VerifiedAccountGuard)
   @Put('me')
   async updateMe(@Req() req: any, @Body() data: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
@@ -54,7 +55,7 @@ export class WorkersController {
     return this.workersService.updateProfileByUserId(userId, data);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, VerifiedAccountGuard)
   @Post('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
@@ -101,7 +102,7 @@ export class WorkersController {
     return this.workersService.getGalleryByUserId(userId, true);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, VerifiedAccountGuard)
   @Post('me/gallery')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
@@ -134,7 +135,7 @@ export class WorkersController {
   }
 
   // за да работи с твоя apiPost(.../delete)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, VerifiedAccountGuard)
   @Post('me/gallery/:id/delete')
   async deleteGallery(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
