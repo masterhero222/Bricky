@@ -1,4 +1,5 @@
 ﻿import { useState } from "react";
+import { Link } from "react-router-dom";
 import { apiPost } from "../services/api";
 
 export default function Login() {
@@ -97,6 +98,15 @@ export default function Login() {
         {error && <p className="text-red-400 text-center">{error}</p>}
 
         <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <Link className="text-blue-300 hover:text-blue-200" to="/auth/forgot-password">
+            Забравена парола?
+          </Link>
+          <Link className="text-slate-300 hover:text-white" to="/auth/register">
+            Нямаш акаунт? Регистрация
+          </Link>
+        </div>
 
         {import.meta.env.DEV && (
           <div className="border-t border-gray-700 pt-4 space-y-2">

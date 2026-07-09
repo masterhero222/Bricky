@@ -10,6 +10,9 @@ import AboutUs from "./pages/AboutUs";
 import AuthGate from "./pages/AuthGate";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
@@ -37,6 +40,9 @@ export default function App() {
         <Route path="/auth" element={<AuthGate />} />
         <Route path="/auth/login" element={<Login />} />
         <Route path="/auth/register" element={<Register />} />
+        <Route path="/auth/verify-email" element={<VerifyEmail />} />
+        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
 
         {/* LAYOUT PAGES */}
         <Route element={<Layout />}>

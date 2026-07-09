@@ -1,8 +1,11 @@
 ﻿import { useState } from "react";
+import { Link } from "react-router-dom";
 import { apiPost } from "../services/api";
 
 export default function Register() {
   const [role, setRole] = useState("client");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -27,9 +30,11 @@ export default function Register() {
 
   const submit = async (e) => {
     e.preventDefault();
+    setNotice("");
+    setError("");
 
     if (form.password !== form.confirmPassword) {
-      alert("Паролите не съвпадат");
+      setError("Паролите не съвпадат.");
       return;
     }
 
@@ -56,12 +61,12 @@ export default function Register() {
           };
 
     try {
-      await apiPost(endpoint, payload);
-      alert("Успешна регистрация!");
-      window.location.href = "/auth/login";
+      const res = await apiPost(endpoint, payload);
+      setNotice(res.data?.message || "Регистрацията е успешна. Провери имейла си, за да потвърдиш акаунта.");
     } catch (err) {
       console.error(err.response?.data || err);
-      alert(err.response?.data?.message || "Грешка при регистрация");
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Грешка при регистрация.");
     }
   };
 
@@ -183,6 +188,13 @@ export default function Register() {
         <button className="w-full bg-red-600 hover:bg-red-700 p-3 rounded font-bold">
           Регистрация
         </button>
+
+        {notice && <p className="rounded-lg bg-emerald-500/15 p-3 text-emerald-200">{notice}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 p-3 text-red-200">{error}</p>}
+
+        <Link className="block text-center text-sm text-blue-300 hover:text-blue-200" to="/auth/login">
+          Вече имаш акаунт? Вход
+        </Link>
       </form>
     </div>
   );
