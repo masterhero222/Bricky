@@ -117,6 +117,32 @@ ORDER BY id DESC
 LIMIT 20;
 ```
 
+## Retention Cleanup
+
+Account verification, password reset, and news-unsubscribe tokens are operational security records, not permanent product history.
+
+Default retention policy:
+
+- expired account tokens: keep for 30 days after expiry, then remove;
+- used account tokens: keep for 30 days after use, then remove;
+- email delivery logs: keep for 180 days, then remove.
+
+Application code exposes the same retention behavior through `AccountSecurityService.cleanupExpiredSecurityData`.
+
+Manual SQL runbook:
+
+```bash
+mysql -u <MYSQL_USER> -p <DATABASE_NAME> < scripts/cleanup-account-security-data.sql
+```
+
+Before running the script:
+
+1. Create a fresh `mysqldump` backup.
+2. Confirm the target database is staging or explicitly approved production.
+3. Review and adjust `@token_retention_days` and `@email_log_retention_days` if the deployment policy changes.
+
+The cleanup script does not modify users, requests, media, reviews, admin records, or production content.
+
 ## Production Release Gate
 
 Before enabling this flow publicly:

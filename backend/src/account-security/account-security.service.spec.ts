@@ -8,10 +8,12 @@ describe('AccountSecurityService', () => {
       save: jest.fn(async (row) => row),
       findOne: jest.fn(),
       count: jest.fn(),
+      delete: jest.fn(),
     };
     const deliveryRepo = {
       create: jest.fn((row) => ({ id: 1, ...row })),
       save: jest.fn(async (row) => row),
+      delete: jest.fn(),
     };
 
     return {
@@ -111,6 +113,38 @@ describe('AccountSecurityService', () => {
       service.assertTokenIssueAllowed(42, 'email_verification', { maxAttempts: 3, windowMinutes: 60 }),
     ).rejects.toMatchObject({
       status: 429,
+    });
+  });
+
+  it('cleans expired security tokens and old email delivery logs with retention windows', async () => {
+    const { service, tokenRepo, deliveryRepo } = createService();
+    tokenRepo.delete
+      .mockResolvedValueOnce({ affected: 4 })
+      .mockResolvedValueOnce({ affected: 2 });
+    deliveryRepo.delete.mockResolvedValueOnce({ affected: 9 });
+
+    const result = await service.cleanupExpiredSecurityData({
+      tokenRetentionDays: 15,
+      emailLogRetentionDays: 90,
+    });
+
+    expect(result).toMatchObject({
+      tokenRetentionDays: 15,
+      emailLogRetentionDays: 90,
+      expiredTokens: 4,
+      usedTokens: 2,
+      emailLogs: 9,
+    });
+    expect(result.tokenCutoff).toBeInstanceOf(Date);
+    expect(result.emailLogCutoff).toBeInstanceOf(Date);
+    expect(tokenRepo.delete).toHaveBeenNthCalledWith(1, {
+      expiresAt: expect.any(Object),
+    });
+    expect(tokenRepo.delete).toHaveBeenNthCalledWith(2, {
+      usedAt: expect.any(Object),
+    });
+    expect(deliveryRepo.delete).toHaveBeenCalledWith({
+      createdAt: expect.any(Object),
     });
   });
 });

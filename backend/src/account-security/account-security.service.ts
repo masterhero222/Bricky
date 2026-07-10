@@ -1,9 +1,14 @@
-import { Injectable, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { AccountTokenEntity, AccountTokenType } from './account-token.entity';
 import { EmailDeliveryLogEntity, EmailDeliveryStatus } from './email-delivery-log.entity';
+
+export type AccountSecurityCleanupOptions = {
+  tokenRetentionDays?: number;
+  emailLogRetentionDays?: number;
+};
 
 @Injectable()
 export class AccountSecurityService {
@@ -120,6 +125,34 @@ export class AccountSecurityService {
     });
 
     return this.deliveryLogs.save(row);
+  }
+
+  async cleanupExpiredSecurityData(options?: AccountSecurityCleanupOptions) {
+    const tokenRetentionDays = options?.tokenRetentionDays ?? 30;
+    const emailLogRetentionDays = options?.emailLogRetentionDays ?? 180;
+    const now = Date.now();
+    const tokenCutoff = new Date(now - tokenRetentionDays * 24 * 60 * 60 * 1000);
+    const emailLogCutoff = new Date(now - emailLogRetentionDays * 24 * 60 * 60 * 1000);
+
+    const expiredTokens = await this.tokens.delete({
+      expiresAt: LessThan(tokenCutoff),
+    });
+    const usedTokens = await this.tokens.delete({
+      usedAt: LessThan(tokenCutoff),
+    });
+    const emailLogs = await this.deliveryLogs.delete({
+      createdAt: LessThan(emailLogCutoff),
+    });
+
+    return {
+      tokenRetentionDays,
+      emailLogRetentionDays,
+      tokenCutoff,
+      emailLogCutoff,
+      expiredTokens: expiredTokens.affected ?? 0,
+      usedTokens: usedTokens.affected ?? 0,
+      emailLogs: emailLogs.affected ?? 0,
+    };
   }
 
   private safeEquals(a: string, b: string) {

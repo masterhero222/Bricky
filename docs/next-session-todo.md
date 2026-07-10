@@ -497,6 +497,7 @@
 
 ## Account Registration And Email Notifications - High Priority
 
+- NEXT SESSION HANDOFF: use `docs/next-session-registration-notification-task.md` as the focused task brief for fixing and verifying registration, email confirmation, password reset/password change, and platform-news notification readiness.
 - Fix and verify the complete client and worker registration flow against the production database.
 - DONE: add email ownership verification:
   - DONE: send a verification email after registration;
@@ -520,7 +521,8 @@
   - NEXT: implement the actual news-campaign sender only after Sprint 2 release gates are closed.
 - DONE: document production email provider environment variables in `backend/.env.example` and `docs/email-provider-smoke-checklist.md`; never commit SMTP/API credentials.
 - DONE: add delivery logging without storing verification/reset tokens or sensitive email contents.
-- Add retry handling, provider failure states, expiry cleanup, and user-facing success/error messages.
+- DONE: add account-token/email-log retention cleanup method and manual SQL runbook for expired/used operational security data.
+- Add retry handling, provider failure states, scheduled cleanup execution, and user-facing success/error messages.
 - Add automated tests for valid, expired, reused, malformed, and rate-limited tokens; suspended accounts; session invalidation; resend behavior; consent; and unsubscribe.
 - Acceptance gate:
   - a new account receives and completes verification;
