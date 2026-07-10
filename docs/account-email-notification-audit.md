@@ -80,16 +80,16 @@ Current behavior:
 
 - `MailModule` uses `@nestjs-modules/mailer`, Nodemailer, and Handlebars templates.
 - SMTP-like settings come from `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, and `MAIL_FROM`.
-- `MailService` currently sends request confirmation email only.
+- `MailService` sends request confirmation email plus account verification, password reset, and password-changed transactional emails.
+- Account verification emails include both a single-use link token and a 6-digit code.
+- Account email delivery writes provider status and message/error metadata into `email_delivery_logs`.
+- Customer-facing account email copy has been rewritten with clean Bulgarian text.
 
 Important gaps:
 
-- Mail service is not yet structured around account email types.
-- No templates for verification, password reset, password changed, account security events, or platform-news emails.
-- No email delivery log table.
-- No retry/failure state model.
-- Existing mail service contains mojibake log/subject strings and should be cleaned while extending it.
-- No unsubscribe token or preference center integration.
+- No external retry scheduler is implemented for failed provider deliveries.
+- No campaign sender exists yet for platform-news emails; only consent and unsubscribe plumbing exists.
+- Account security event emails beyond password-changed are not yet modeled.
 
 ### In-App Notifications
 
@@ -267,6 +267,6 @@ Decision needed:
 ## Risks
 
 - Existing production currently has only the admin account after cleanup. The migration must preserve that account and mark or allow it as verified.
-- The current mail service has mojibake strings; extending it without cleanup will make customer-facing emails look broken.
+- DONE in the Sprint 2 release branch: account email templates were rewritten with clean Bulgarian copy and now include both verification links and 6-digit confirmation codes.
 - `TYPEORM_SYNCHRONIZE=false` means every entity change needs a matching SQL migration before production deploy.
 - If `tokenVersion` is added but not enforced everywhere, old sessions may remain valid after password resets.

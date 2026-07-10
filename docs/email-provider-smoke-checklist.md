@@ -7,7 +7,7 @@ This document describes how to configure and verify the Sprint 2 transactional e
 Covered flows:
 
 - account registration email verification;
-- resend verification link;
+- resend verification link and 6-digit confirmation code;
 - forgotten password;
 - password reset;
 - password-changed notification;
@@ -56,7 +56,9 @@ Use disposable email addresses only.
 6. Confirm login is rejected before verification.
 7. Open the verification link from the email.
 8. Confirm `users.emailVerifiedAt` is set.
-9. Confirm login succeeds after verification.
+9. Register a second disposable account and verify it by entering email + the 6-digit code at `/auth/verify-email`.
+10. Confirm the verification code is consumed once and cannot be reused.
+11. Confirm login succeeds after verification.
 
 ### 2. Resend Verification
 
@@ -64,8 +66,9 @@ Use disposable email addresses only.
 2. Attempt login before verification.
 3. Use the resend verification button on the login page.
 4. Confirm a new verification email arrives.
-5. Repeat until the fourth request within 60 minutes.
-6. Confirm the fourth request returns `429 Too Many Requests`.
+5. Repeat until the resend limit is reached within 60 minutes.
+6. Confirm the next request returns `429 Too Many Requests`.
+7. Note: every verification email creates both a link token and a code token, so the stored `account_tokens` count increases by two per email.
 
 ### 3. Password Reset
 
@@ -86,7 +89,8 @@ Verify:
 
 - unknown email reset requests do not reveal account existence;
 - suspended accounts cannot receive password reset emails;
-- verification resend and password reset are limited to 3 token issues per user per 60 minutes;
+- password reset is limited to 3 token issues per user per 60 minutes;
+- verification resend is limited by email sends, but each send stores two token rows: one link token and one code token;
 - invalid, reused, expired, and malformed tokens fail safely.
 
 ### 5. News Preferences And Unsubscribe
@@ -150,8 +154,9 @@ The cleanup script does not modify users, requests, media, reviews, admin record
 Before enabling this flow publicly:
 
 - backend and frontend builds must pass;
-- account-security and auth tests must pass;
+- account-security, auth, mail, and mock-auth tests must pass;
 - SMTP smoke test must pass with disposable accounts;
+- both verification paths must pass: email link and email + 6-digit code;
 - no real SMTP credentials may appear in git history;
 - production `FRONTEND_URL` must point to `https://bricky.bg`;
 - rollback must include disabling the mail provider env values and restarting the backend.
