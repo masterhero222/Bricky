@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { EmailDeliveryStatus } from '../account-security/email-delivery-log.entity';
 
-type AccountMailSendStatus = 'sent' | 'failed' | 'skipped';
+export type AccountMailSendResult = {
+  status: EmailDeliveryStatus;
+  providerMessageId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+};
 
 @Injectable()
 export class MailService {
@@ -28,14 +34,16 @@ export class MailService {
       this.logger.log(`Изпратено писмо до ${request.email}`);
     } catch (error) {
       this.logger.error(
-        `Грешка при изпращане на имейл до ${request.email}: ${error.message}`,
-        error.stack,
+        `Грешка при изпращане на имейл до ${request.email}: ${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
       );
     }
   }
 
   async sendEmailVerification(payload: { email: string; name?: string; token: string }) {
-    const verificationUrl = this.buildFrontendUrl(`/auth/verify-email?token=${encodeURIComponent(payload.token)}`);
+    const verificationUrl = this.buildFrontendUrl(
+      `/auth/verify-email?token=${encodeURIComponent(payload.token)}`,
+    );
     const greeting = this.greeting(payload.name);
 
     return this.sendAccountMail({
@@ -87,24 +95,58 @@ export class MailService {
     text: string;
     html: string;
     type: string;
-  }): Promise<AccountMailSendStatus> {
+  }): Promise<AccountMailSendResult> {
     if (!payload.to) {
       this.logger.warn(`Skipping ${payload.type} email: missing recipient`);
-      return 'skipped';
+      return { status: 'skipped', errorCode: 'missing_recipient', errorMessage: 'Missing recipient email' };
     }
 
     try {
-      await this.mailer.sendMail({
+      const response = await this.mailer.sendMail({
         to: payload.to,
         subject: payload.subject,
         text: payload.text,
         html: payload.html,
       });
       this.logger.log(`Sent ${payload.type} email to ${payload.to}`);
-      return 'sent';
+      return {
+        status: 'sent',
+        providerMessageId: this.getMessageId(response),
+      };
     } catch (error) {
-      this.logger.error(`Failed to send ${payload.type} email to ${payload.to}: ${error.message}`, error.stack);
-      return 'failed';
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Failed to send ${payload.type} email to ${payload.to}: ${errorMessage}`, this.getErrorStack(error));
+      return {
+        status: 'failed',
+        errorCode: this.getErrorCode(error),
+        errorMessage,
+      };
     }
+  }
+
+  private getMessageId(response: unknown) {
+    if (response && typeof response === 'object' && 'messageId' in response) {
+      const messageId = (response as { messageId?: unknown }).messageId;
+      return typeof messageId === 'string' ? messageId : null;
+    }
+    return null;
+  }
+
+  private getErrorCode(error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error) {
+      const code = (error as { code?: unknown }).code;
+      return typeof code === 'string' ? code : null;
+    }
+    return null;
+  }
+
+  private getErrorMessage(error: unknown) {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return 'Unknown mail provider error';
+  }
+
+  private getErrorStack(error: unknown) {
+    return error instanceof Error ? error.stack : undefined;
   }
 }

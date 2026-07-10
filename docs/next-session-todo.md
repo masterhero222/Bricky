@@ -522,7 +522,8 @@
 - DONE: document production email provider environment variables in `backend/.env.example` and `docs/email-provider-smoke-checklist.md`; never commit SMTP/API credentials.
 - DONE: add delivery logging without storing verification/reset tokens or sensitive email contents.
 - DONE: add account-token/email-log retention cleanup method and manual SQL runbook for expired/used operational security data.
-- Add retry handling, provider failure states, scheduled cleanup execution, and user-facing success/error messages.
+- DONE: capture account-email provider message ids and failure details in delivery logs.
+- Add retry handling, scheduled cleanup execution, and user-facing success/error messages.
 - Add automated tests for valid, expired, reused, malformed, and rate-limited tokens; suspended accounts; session invalidation; resend behavior; consent; and unsubscribe.
 - Acceptance gate:
   - a new account receives and completes verification;

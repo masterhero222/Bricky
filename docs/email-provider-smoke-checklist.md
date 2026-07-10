@@ -52,10 +52,11 @@ Use disposable email addresses only.
 2. Confirm the response asks the user to verify email.
 3. Confirm an `email_verification` row is created in `account_tokens`.
 4. Confirm an `email_delivery_logs` row is created for `email_verification`.
-5. Confirm login is rejected before verification.
-6. Open the verification link from the email.
-7. Confirm `users.emailVerifiedAt` is set.
-8. Confirm login succeeds after verification.
+5. Confirm the delivery log stores `status = sent` and `providerMessageId` when the provider returns one.
+6. Confirm login is rejected before verification.
+7. Open the verification link from the email.
+8. Confirm `users.emailVerifiedAt` is set.
+9. Confirm login succeeds after verification.
 
 ### 2. Resend Verification
 
@@ -72,11 +73,12 @@ Use disposable email addresses only.
 2. Request a reset for a verified disposable account.
 3. Confirm a `password_reset` row is created in `account_tokens`.
 4. Confirm an `email_delivery_logs` row is created for `password_reset`.
-5. Open the reset link from the email.
-6. Set a new password.
-7. Confirm a `password_changed` email is sent.
-8. Confirm old JWT sessions are invalidated by `tokenVersion`.
-9. Confirm login works with the new password and fails with the old password.
+5. Confirm provider failure cases store `status = failed`, `errorCode`, and `errorMessage` without storing tokens.
+6. Open the reset link from the email.
+7. Set a new password.
+8. Confirm a `password_changed` email is sent.
+9. Confirm old JWT sessions are invalidated by `tokenVersion`.
+10. Confirm login works with the new password and fails with the old password.
 
 ### 4. Abuse Checks
 

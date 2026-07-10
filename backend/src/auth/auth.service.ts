@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
 import { AccountSecurityService } from '../account-security/account-security.service';
-import { MailService } from '../mail/mail.service';
+import { AccountMailSendResult, MailService } from '../mail/mail.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 
@@ -147,14 +147,8 @@ export class AuthService {
     if (user && user.accountStatus !== 'suspended') {
       await this.accountSecurity.assertTokenIssueAllowed(user.id, 'password_reset', this.accountEmailRateLimit);
       const { rawToken } = await this.accountSecurity.issueToken(user.id, 'password_reset', 60);
-      const status = await this.mail.sendPasswordReset({ email: user.email, name: user.name, token: rawToken });
-      await this.accountSecurity.logEmailDelivery({
-        userId: user.id,
-        email: user.email,
-        type: 'password_reset',
-        status,
-        provider: 'mailer',
-      });
+      const delivery = await this.mail.sendPasswordReset({ email: user.email, name: user.name, token: rawToken });
+      await this.logAccountEmailDelivery(user, 'password_reset', delivery);
     }
     return { message: 'Ако има акаунт с този имейл, ще получиш инструкции.' };
   }
@@ -164,14 +158,8 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await this.users.updatePasswordAndRevokeSessions(token.userId, passwordHash);
     if (user) {
-      const status = await this.mail.sendPasswordChanged({ email: user.email, name: user.name });
-      await this.accountSecurity.logEmailDelivery({
-        userId: user.id,
-        email: user.email,
-        type: 'password_changed',
-        status,
-        provider: 'mailer',
-      });
+      const delivery = await this.mail.sendPasswordChanged({ email: user.email, name: user.name });
+      await this.logAccountEmailDelivery(user, 'password_changed', delivery);
     }
     return { message: 'Паролата е сменена успешно' };
   }
@@ -206,13 +194,24 @@ export class AuthService {
 
   private async sendVerificationEmail(user: { id: number; email: string; name?: string }) {
     const { rawToken } = await this.accountSecurity.issueToken(user.id, 'email_verification', 24 * 60);
-    const status = await this.mail.sendEmailVerification({ email: user.email, name: user.name, token: rawToken });
+    const delivery = await this.mail.sendEmailVerification({ email: user.email, name: user.name, token: rawToken });
+    await this.logAccountEmailDelivery(user, 'email_verification', delivery);
+  }
+
+  private async logAccountEmailDelivery(
+    user: { id: number; email: string },
+    type: string,
+    delivery: AccountMailSendResult,
+  ) {
     await this.accountSecurity.logEmailDelivery({
       userId: user.id,
       email: user.email,
-      type: 'email_verification',
-      status,
+      type,
+      status: delivery.status,
       provider: 'mailer',
+      providerMessageId: delivery.providerMessageId,
+      errorCode: delivery.errorCode,
+      errorMessage: delivery.errorMessage,
     });
   }
 

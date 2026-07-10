@@ -235,7 +235,8 @@ Implemented in the current release branch:
 - account settings now expose platform-news opt-in/opt-out for clients and workers;
 - public single-use `news_unsubscribe` token consumption is implemented for future news emails;
 - Bulgarian auth and account email copy was cleaned so production users do not see mojibake text;
-- account-token/email-delivery retention cleanup is implemented in `AccountSecurityService` with a manual SQL runbook in `scripts/cleanup-account-security-data.sql`.
+- account-token/email-delivery retention cleanup is implemented in `AccountSecurityService` with a manual SQL runbook in `scripts/cleanup-account-security-data.sql`;
+- account email delivery logs now capture provider message ids and provider failure details without storing raw verification/reset tokens.
 
 Verified locally:
 
@@ -249,4 +250,5 @@ Remaining before this account/email slice is production-complete:
 - consider adding IP-based throttling at the proxy/API edge for anonymous abuse patterns;
 - implement the actual news-campaign sender later; Sprint 2 now only provides consent and unsubscribe plumbing;
 - schedule or manually run the account-security cleanup after backup according to the documented retention policy;
+- add retry handling for failed account email delivery if the selected provider does not handle retries externally;
 - run a live SMTP smoke test with disposable accounts.

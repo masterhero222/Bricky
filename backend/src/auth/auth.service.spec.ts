@@ -47,8 +47,18 @@ describe('AuthService email verification gate', () => {
       logEmailDelivery: jest.fn().mockResolvedValue({ id: 1 }),
     };
     const mail = {
-      sendEmailVerification: jest.fn().mockResolvedValue('sent'),
-      sendPasswordReset: jest.fn().mockResolvedValue('sent'),
+      sendEmailVerification: jest.fn().mockResolvedValue({
+        status: 'sent',
+        providerMessageId: 'verification-message-id',
+      }),
+      sendPasswordReset: jest.fn().mockResolvedValue({
+        status: 'sent',
+        providerMessageId: 'reset-message-id',
+      }),
+      sendPasswordChanged: jest.fn().mockResolvedValue({
+        status: 'sent',
+        providerMessageId: 'changed-message-id',
+      }),
     };
     const jwt = {
       signAsync: jest.fn().mockResolvedValue('signed-token'),
@@ -98,6 +108,15 @@ describe('AuthService email verification gate', () => {
     expect(mail.sendEmailVerification).toHaveBeenCalledWith(
       expect.objectContaining({ email: baseUser.email, token: 'raw-token' }),
     );
+    expect(accountSecurity.logEmailDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: baseUser.id,
+        email: baseUser.email,
+        type: 'email_verification',
+        status: 'sent',
+        providerMessageId: 'verification-message-id',
+      }),
+    );
   });
 
   it('rate limits password reset before sending email', async () => {
@@ -111,6 +130,15 @@ describe('AuthService email verification gate', () => {
     });
     expect(mail.sendPasswordReset).toHaveBeenCalledWith(
       expect.objectContaining({ email: baseUser.email, token: 'raw-token' }),
+    );
+    expect(accountSecurity.logEmailDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: baseUser.id,
+        email: baseUser.email,
+        type: 'password_reset',
+        status: 'sent',
+        providerMessageId: 'reset-message-id',
+      }),
     );
   });
 
