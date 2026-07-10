@@ -498,27 +498,27 @@
 ## Account Registration And Email Notifications - High Priority
 
 - Fix and verify the complete client and worker registration flow against the production database.
-- Add email ownership verification:
-  - send a verification email after registration;
-  - keep the account unverified and restrict protected platform actions until confirmation;
-  - use a single-use, expiring, securely hashed verification token;
-  - support safe resend with rate limiting and without account enumeration;
-  - record verification timestamps and audit relevant security events.
-- Add forgotten-password and password-reset flow:
-  - request reset without revealing whether an email exists;
-  - send a single-use, expiring, securely hashed reset token;
-  - invalidate the token after use and invalidate existing JWT sessions after password change;
-  - enforce password policy and rate limits;
-  - notify the account owner after a successful password change.
-- Add transactional account emails for registration verification, password reset, password change, and important account/security events.
+- DONE: add email ownership verification:
+  - DONE: send a verification email after registration;
+  - DONE: keep the account unverified and restrict protected platform actions until confirmation;
+  - DONE: use a single-use, expiring, securely hashed verification token;
+  - DONE: support safe resend with rate limiting and without account enumeration;
+  - DONE: record verification timestamps and email delivery logs.
+- DONE: add forgotten-password and password-reset flow:
+  - DONE: request reset without revealing whether an email exists;
+  - DONE: send a single-use, expiring, securely hashed reset token;
+  - DONE: invalidate the token after use and invalidate existing JWT sessions after password change;
+  - DONE: enforce token issue rate limits;
+  - DONE: notify the account owner after a successful password change.
+- DONE: add transactional account emails for registration verification, password reset, and password change.
 - Add optional platform-news emails:
   - explicit opt-in consent, disabled by default unless legally approved otherwise;
   - persistent consent timestamp and source;
   - visible preference control in account settings;
   - one-click unsubscribe included in every news email;
   - transactional security emails must remain separate from marketing/news consent.
-- Configure a production email provider through environment variables; never commit SMTP/API credentials.
-- Add delivery logging without storing verification/reset tokens or sensitive email contents.
+- DONE: document production email provider environment variables in `backend/.env.example` and `docs/email-provider-smoke-checklist.md`; never commit SMTP/API credentials.
+- DONE: add delivery logging without storing verification/reset tokens or sensitive email contents.
 - Add retry handling, provider failure states, expiry cleanup, and user-facing success/error messages.
 - Add automated tests for valid, expired, reused, malformed, and rate-limited tokens; suspended accounts; session invalidation; resend behavior; consent; and unsubscribe.
 - Acceptance gate:

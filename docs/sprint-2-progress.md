@@ -230,6 +230,8 @@ Implemented in the current release branch:
 - login UI can resend the verification link when an account is not confirmed;
 - verification resend and password reset token issuing are rate-limited to 3 attempts per user per 60 minutes;
 - frontend routes for email verification, forgotten password, and password reset;
+- backend `.env.example` documents the required mail provider variables without secrets;
+- `docs/email-provider-smoke-checklist.md` defines the disposable-account SMTP acceptance flow;
 - Bulgarian auth and account email copy was cleaned so production users do not see mojibake text.
 
 Verified locally:
