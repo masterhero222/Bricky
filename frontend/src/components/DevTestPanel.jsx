@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { getDevEmailOutbox, getDevIdentities, isDevMockToken, resetDevDb, setDevIdentity } from "../services/devMockApi";
+import { createDevNewsUnsubscribeEmail, getDevEmailOutbox, getDevIdentities, isDevMockToken, resetDevDb, setDevIdentity } from "../services/devMockApi";
 
 export default function DevTestPanel() {
   const [visible, setVisible] = useState(false);
@@ -36,6 +36,13 @@ export default function DevTestPanel() {
       return;
     }
     window.location.href = role === "admin" ? "/admin" : role === "worker" ? "/worker/profile" : "/client/profile";
+  };
+
+  const createUnsubscribe = () => {
+    setError("");
+    const email = createDevNewsUnsubscribeEmail();
+    if (!email) setError("Влез като client/worker, за да генерираш mock unsubscribe имейл.");
+    else setTick((x) => x + 1);
   };
 
   return (
@@ -97,7 +104,16 @@ export default function DevTestPanel() {
           </div>
 
           <div className="mt-4 rounded-lg border border-cyan-400/20 bg-slate-900/80 p-3">
-            <div className="mb-2 text-xs font-bold uppercase text-cyan-200">Mock имейли</div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-bold uppercase text-cyan-200">Mock имейли</div>
+              <button
+                type="button"
+                onClick={createUnsubscribe}
+                className="rounded bg-cyan-700 px-2 py-1 text-[10px] font-bold hover:bg-cyan-600"
+              >
+                + unsubscribe
+              </button>
+            </div>
             {!outbox.length && <p className="text-xs text-slate-400">Няма изпратени mock имейли.</p>}
             <div className="space-y-2">
               {outbox.map((email) => (
@@ -109,15 +125,20 @@ export default function DevTestPanel() {
                     </span>
                   </div>
                   <div className="mt-1 text-slate-400">{email.reason || email.type}</div>
-                  {!email.usedAt && (email.verificationUrl || email.resetUrl) && (
+                  {email.code && (
+                    <div className="mt-2 rounded bg-slate-950 p-2 text-center text-lg font-black tracking-[0.35em] text-cyan-200">
+                      {email.code}
+                    </div>
+                  )}
+                  {!email.usedAt && (email.verificationUrl || email.resetUrl || email.unsubscribeUrl) && (
                     <button
                       type="button"
                       onClick={() => {
-                        window.location.href = email.verificationUrl || email.resetUrl;
+                        window.location.href = email.verificationUrl || email.resetUrl || email.unsubscribeUrl;
                       }}
                       className="mt-2 w-full rounded bg-emerald-700 px-2 py-1 font-bold hover:bg-emerald-600"
                     >
-                      Отвори {email.type === "password_reset" ? "reset" : "verification"} link
+                      Отвори {email.type === "password_reset" ? "reset" : email.type === "news_unsubscribe" ? "unsubscribe" : "verification"} link
                     </button>
                   )}
                 </div>

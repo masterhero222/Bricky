@@ -33,7 +33,16 @@ export class AccountSecurityService {
     ttlMinutes: number,
     metadata?: { ip?: string | null; userAgent?: string | null },
   ) {
-    const rawToken = this.createRawToken();
+    return this.issueTokenWithRawToken(userId, type, this.createRawToken(), ttlMinutes, metadata);
+  }
+
+  async issueTokenWithRawToken(
+    userId: number,
+    type: AccountTokenType,
+    rawToken: string,
+    ttlMinutes: number,
+    metadata?: { ip?: string | null; userAgent?: string | null },
+  ) {
     const tokenHash = this.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
 
@@ -90,6 +99,31 @@ export class AccountSecurityService {
 
     if (!row || !this.safeEquals(row.tokenHash, tokenHash)) {
       throw new BadRequestException('Невалиден или изтекъл токен');
+    }
+
+    row.usedAt = new Date();
+    await this.tokens.save(row);
+    return row;
+  }
+
+  async consumeTokenForUser(userId: number, rawToken: string, type: AccountTokenType) {
+    if (!rawToken || rawToken.length < 6) {
+      throw new BadRequestException('Невалиден или изтекъл код');
+    }
+
+    const tokenHash = this.hashToken(rawToken);
+    const row = await this.tokens.findOne({
+      where: {
+        userId,
+        tokenHash,
+        type,
+        usedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+    });
+
+    if (!row || !this.safeEquals(row.tokenHash, tokenHash)) {
+      throw new BadRequestException('Невалиден или изтекъл код');
     }
 
     row.usedAt = new Date();

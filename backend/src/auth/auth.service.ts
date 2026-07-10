@@ -1,5 +1,6 @@
 ﻿import { Injectable, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
@@ -129,13 +130,34 @@ export class AuthService {
     };
   }
 
+  async verifyEmailCode(email: string, code: string) {
+    const user = await this.users.findByEmail(email);
+    if (!user) throw new BadRequestException('Невалиден или изтекъл код');
+    if (!user.emailVerificationRequired || user.emailVerifiedAt) {
+      return {
+        message: 'Имейлът вече е потвърден',
+        user: this.safeUser(user),
+      };
+    }
+
+    await this.accountSecurity.consumeTokenForUser(user.id, code.trim(), 'email_verification');
+    const verified = await this.users.markEmailVerified(user.id);
+    return {
+      message: 'Имейлът е потвърден успешно',
+      user: verified ? this.safeUser(verified) : null,
+    };
+  }
+
   async resendVerification(email: string) {
     const user = await this.users.findByEmail(email);
     if (user && user.emailVerificationRequired && !user.emailVerifiedAt) {
       await this.accountSecurity.assertTokenIssueAllowed(
         user.id,
         'email_verification',
-        this.accountEmailRateLimit,
+        {
+          maxAttempts: this.accountEmailRateLimit.maxAttempts * 2,
+          windowMinutes: this.accountEmailRateLimit.windowMinutes,
+        },
       );
       await this.sendVerificationEmail(user);
     }
@@ -194,8 +216,19 @@ export class AuthService {
 
   private async sendVerificationEmail(user: { id: number; email: string; name?: string }) {
     const { rawToken } = await this.accountSecurity.issueToken(user.id, 'email_verification', 24 * 60);
-    const delivery = await this.mail.sendEmailVerification({ email: user.email, name: user.name, token: rawToken });
+    const verificationCode = this.createVerificationCode();
+    await this.accountSecurity.issueTokenWithRawToken(user.id, 'email_verification', verificationCode, 24 * 60);
+    const delivery = await this.mail.sendEmailVerification({
+      email: user.email,
+      name: user.name,
+      token: rawToken,
+      code: verificationCode,
+    });
     await this.logAccountEmailDelivery(user, 'email_verification', delivery);
+  }
+
+  private createVerificationCode() {
+    return String(randomInt(100000, 1000000));
   }
 
   private async logAccountEmailDelivery(

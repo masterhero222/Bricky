@@ -376,6 +376,9 @@ function normalizeMockAuthState(db) {
       accountStatus: user.accountStatus || "active",
       emailVerifiedAt: verificationRequired ? user.emailVerifiedAt ?? null : user.emailVerifiedAt || nowIso(),
       emailVerificationRequired: verificationRequired,
+      newsOptIn: user.newsOptIn ?? true,
+      newsOptInSource: user.newsOptInSource || "mock_seed",
+      newsUnsubscribedAt: user.newsUnsubscribedAt || null,
       tokenVersion: Number(user.tokenVersion || 0),
       createdAt: user.createdAt || user.created_at || nowIso(),
       created_at: user.created_at || user.createdAt || nowIso(),
@@ -735,6 +738,10 @@ function randomMockToken() {
   return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
+function randomMockVerificationCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 function ensureMockOutbox(db) {
   db.mockEmailOutbox = Array.isArray(db.mockEmailOutbox) ? db.mockEmailOutbox : [];
   return db.mockEmailOutbox;
@@ -764,6 +771,7 @@ function issueMockVerificationEmail(db, account, reason = "registration") {
     role: account.role === "worker" ? "worker" : "client",
     email: normalizeEmail(account.email),
     token: randomMockToken(),
+    code: randomMockVerificationCode(),
     verificationUrl: "",
     expiresAt,
     usedAt: null,
@@ -798,6 +806,30 @@ function issueMockPasswordResetEmail(db, account) {
   return email;
 }
 
+function issueMockNewsUnsubscribeEmail(db, account, reason = "news_campaign") {
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const outbox = ensureMockOutbox(db);
+  const email = {
+    id: `email-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    type: "news_unsubscribe",
+    status: "sent",
+    provider: "mock",
+    reason,
+    userId: mockAccountId(account),
+    role: account.role === "worker" ? "worker" : "client",
+    email: normalizeEmail(account.email),
+    token: randomMockToken(),
+    unsubscribeUrl: "",
+    expiresAt,
+    usedAt: null,
+    createdAt,
+  };
+  email.unsubscribeUrl = `/auth/news-unsubscribe?token=${encodeURIComponent(email.token)}`;
+  outbox.unshift(email);
+  return email;
+}
+
 function mockResendVerification(db, payload = {}) {
   const account = findMockAccountByEmail(db, payload.email);
   if (account && account.emailVerificationRequired && !account.emailVerifiedAt) {
@@ -808,6 +840,62 @@ function mockResendVerification(db, payload = {}) {
   return response({
     message: "Mock среда: ако има непотвърден акаунт с този имейл, е създадена нова заявка за потвърждение.",
   });
+}
+
+function mockNewsPreferences(db, role, userId) {
+  const account = findMockAccountByRoleAndId(db, role, userId);
+  if (!account || !isActiveAccount(account)) return fail("Акаунтът не е намерен или е спрян.", 401);
+  return response({
+    newsOptIn: account.newsOptIn ?? true,
+    source: account.newsOptInSource || "mock_seed",
+    updatedAt: account.newsPreferencesUpdatedAt || account.createdAt || nowIso(),
+  });
+}
+
+function mockUpdateNewsPreferences(db, role, userId, payload = {}) {
+  const account = findMockAccountByRoleAndId(db, role, userId);
+  if (!account || !isActiveAccount(account)) return fail("Акаунтът не е намерен или е спрян.", 401);
+  const now = nowIso();
+  account.newsOptIn = Boolean(payload.newsOptIn);
+  account.newsOptInSource = payload.source || "account_settings";
+  account.newsPreferencesUpdatedAt = now;
+  if (account.newsOptIn) account.newsUnsubscribedAt = null;
+  else account.newsUnsubscribedAt = now;
+  writeDb(db);
+  emitDevDbChanged();
+  return response({
+    message: "Предпочитанията са запазени.",
+    preferences: {
+      newsOptIn: account.newsOptIn,
+      source: account.newsOptInSource,
+      updatedAt: account.newsPreferencesUpdatedAt,
+    },
+  });
+}
+
+function mockNewsUnsubscribe(db, payload = {}) {
+  const token = String(payload.token || "").trim();
+  if (!token) return fail("Невалиден или изтекъл token за отписване.", 400);
+
+  const email = ensureMockOutbox(db).find((item) => item.type === "news_unsubscribe" && item.token === token) || null;
+  if (!email || email.usedAt || new Date(email.expiresAt).getTime() < Date.now()) {
+    return fail("Невалиден или изтекъл token за отписване.", 400);
+  }
+
+  const account = findMockAccountByRoleAndId(db, email.role, email.userId);
+  if (!account || !isActiveAccount(account)) return fail("Акаунтът не е намерен или е спрян.", 404);
+
+  const now = nowIso();
+  account.newsOptIn = false;
+  account.newsOptInSource = "one_click_unsubscribe";
+  account.newsPreferencesUpdatedAt = now;
+  account.newsUnsubscribedAt = now;
+  email.usedAt = now;
+  email.status = "used";
+  writeDb(db);
+  emitDevDbChanged();
+
+  return response({ message: "Отписването от новини е успешно." });
 }
 
 function mockRequestPasswordReset(db, payload = {}) {
@@ -874,6 +962,39 @@ function mockVerifyEmail(db, payload = {}) {
   });
 }
 
+function mockVerifyEmailCode(db, payload = {}) {
+  const emailAddress = normalizeEmail(payload.email);
+  const code = String(payload.code || "").trim();
+  if (!emailAddress || !/^\d{6}$/.test(code)) return fail("Невалиден или изтекъл код за потвърждение.", 400);
+
+  const email =
+    ensureMockOutbox(db).find(
+      (item) =>
+        item.type === "email_verification" &&
+        item.email === emailAddress &&
+        item.code === code &&
+        !item.usedAt &&
+        new Date(item.expiresAt).getTime() >= Date.now(),
+    ) || null;
+  if (!email) return fail("Невалиден или изтекъл код за потвърждение.", 400);
+
+  const account = findMockAccountByRoleAndId(db, email.role, email.userId);
+  if (!account) return fail("Акаунтът не е намерен.", 404);
+
+  const verifiedAt = nowIso();
+  account.emailVerifiedAt = verifiedAt;
+  account.emailVerificationRequired = false;
+  email.usedAt = verifiedAt;
+  email.status = "used";
+  writeDb(db);
+  emitDevDbChanged();
+
+  return response({
+    message: "Имейлът е потвърден успешно.",
+    user: publicUser(account),
+  });
+}
+
 function mockRegister(db, payload = {}) {
   const role = payload.role === "worker" ? "worker" : "client";
   const email = normalizeEmail(payload.email);
@@ -905,7 +1026,12 @@ function mockRegister(db, payload = {}) {
     emitDevDbChanged();
     return response({
       message: "Mock регистрацията е успешна. Акаунтът чака имейл потвърждение.",
-      mockEmail: { id: verificationEmail.id, email: verificationEmail.email, verificationUrl: verificationEmail.verificationUrl },
+      mockEmail: {
+        id: verificationEmail.id,
+        email: verificationEmail.email,
+        verificationUrl: verificationEmail.verificationUrl,
+        code: verificationEmail.code,
+      },
       user: publicUser(user),
     }, 201);
   }
@@ -946,7 +1072,12 @@ function mockRegister(db, payload = {}) {
   emitDevDbChanged();
   return response({
     message: "Mock регистрацията е успешна. Акаунтът чака имейл потвърждение.",
-    mockEmail: { id: verificationEmail.id, email: verificationEmail.email, verificationUrl: verificationEmail.verificationUrl },
+    mockEmail: {
+      id: verificationEmail.id,
+      email: verificationEmail.email,
+      verificationUrl: verificationEmail.verificationUrl,
+      code: verificationEmail.code,
+    },
     user: publicUser(worker),
     worker: publicWorker(worker),
   }, 201);
@@ -1128,6 +1259,19 @@ export function getDevEmailOutbox() {
   return [...(db.mockEmailOutbox || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
+export function createDevNewsUnsubscribeEmail() {
+  const db = readDb();
+  const user = currentUser();
+  const role = user.role === "worker" ? "worker" : user.role === "client" ? "client" : "";
+  if (!role) return null;
+  const account = findMockAccountByRoleAndId(db, role, role === "worker" ? user.userId || user.id : user.id);
+  if (!account || !isActiveAccount(account)) return null;
+  const email = issueMockNewsUnsubscribeEmail(db, account, "dev_test");
+  writeDb(db);
+  emitDevDbChanged();
+  return email;
+}
+
 export async function mockRequest(method, url, data) {
   const db = readDb();
   const path = asPath(url);
@@ -1150,16 +1294,25 @@ export async function mockRequest(method, url, data) {
   if (method === "post" && path === "/auth/verify-email") {
     return mockVerifyEmail(db, data);
   }
+  if (method === "post" && path === "/auth/verify-email-code") {
+    return mockVerifyEmailCode(db, data);
+  }
   if (method === "post" && path === "/auth/request-password-reset") {
     return mockRequestPasswordReset(db, data);
   }
   if (method === "post" && path === "/auth/reset-password") {
     return mockResetPassword(db, data);
   }
+  if (method === "post" && path === "/auth/news-unsubscribe") {
+    return mockNewsUnsubscribe(db, data);
+  }
 
   if ((role === "client" || role === "worker") && !requireActiveMockAccount(db, role, userId)) {
     return fail("Акаунтът е спрян от администратор.", 401);
   }
+
+  if (method === "get" && path === "/auth/me/news-preferences") return mockNewsPreferences(db, role, userId);
+  if (method === "put" && path === "/auth/me/news-preferences") return mockUpdateNewsPreferences(db, role, userId, data);
 
   if (path.startsWith("/admin")) {
     if (role !== "admin") return fail("Admin only", 403);

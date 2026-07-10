@@ -1,6 +1,6 @@
 # Next Session Task - Registration And Notification System
 
-Status: open
+Status: partially implemented locally / production SMTP smoke still required
 Priority: P0 after the current Sprint 2 stabilization gate
 Scope: account registration, account recovery, transactional email, and platform-news notification readiness
 
@@ -8,17 +8,28 @@ Scope: account registration, account recovery, transactional email, and platform
 
 Stabilize the Bricky account registration and notification system so users can safely create accounts, confirm ownership, recover access, and receive platform communication without leaking security information or relying on frontend-only checks.
 
-## Required Work
+## Implemented In Current Code
+
+- Client and worker registration creates unverified accounts.
+- Login is blocked until email confirmation.
+- Real backend confirmation supports both:
+  - `/auth/verify-email` with a single-use expiring link token;
+  - `/auth/verify-email-code` with account email plus a 6-digit code from the email.
+- Verification links and codes are hashed in `account_tokens`.
+- Resend verification is generic and rate-limited.
+- Password reset uses a single-use expiring token and revokes sessions after password change.
+- Account email delivery is logged without storing raw tokens or provider credentials.
+- Mock mode does not require SMTP and mirrors the production flow through `mockEmailOutbox`.
+- Mock registration, duplicate email rejection, unverified login blocking, verification, password reset, and unsubscribe are covered by `npm run test:mock-auth`.
+
+## Remaining Required Work
 
 ### Registration And Account Confirmation
 
-- Verify the complete client registration flow.
-- Verify the complete worker registration flow.
-- Send an email confirmation link after registration.
-- Keep newly registered accounts unverified until the confirmation link is used.
+- Smoke test the complete client registration flow against the real production/staging SMTP provider.
+- Smoke test the complete worker registration flow against the real production/staging SMTP provider.
 - Block protected marketplace actions for unverified accounts in the backend.
-- Ensure verification links are single-use, expiring, hashed in storage, and safe to resend.
-- Ensure resend verification does not reveal whether an email exists.
+- Confirm every protected marketplace action is covered by `VerifiedAccountGuard`.
 
 ### Password Reset And Password Change
 
@@ -77,5 +88,4 @@ Stabilize the Bricky account registration and notification system so users can s
 
 ## Notes For The Next Session
 
-This task is documentation and planning handoff only. It does not change application schema, TypeORM entities, migrations, frontend code, backend code, or production data.
-
+This handoff was originally documentation-only. The current branch now includes application changes for real email verification links/codes and mock parity. It still does not include committed SMTP credentials or production data changes.

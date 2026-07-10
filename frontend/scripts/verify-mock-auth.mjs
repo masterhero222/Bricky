@@ -33,7 +33,7 @@ globalThis.window = {
   dispatchEvent() {},
 };
 
-const { mockRequest, resetDevDb } = await import('../src/services/devMockApi.js');
+const { createDevNewsUnsubscribeEmail, mockRequest, resetDevDb } = await import('../src/services/devMockApi.js');
 
 const STORAGE_KEY = 'bricky.dev.db';
 
@@ -66,6 +66,11 @@ function latestPasswordResetEmail(email) {
   return (db.mockEmailOutbox || []).find((item) => item.type === 'password_reset' && item.email === email);
 }
 
+function latestNewsUnsubscribeEmail(email) {
+  const db = readDb();
+  return (db.mockEmailOutbox || []).find((item) => item.type === 'news_unsubscribe' && item.email === email);
+}
+
 resetDevDb();
 
 const clientEmail = 'mock.client@example.com';
@@ -91,6 +96,7 @@ assert.equal(client.emailVerificationRequired, true);
 assert.equal(client.tokenVersion, 0);
 assert.ok(client.createdAt);
 assert.ok(latestVerificationEmail(clientEmail)?.token, 'client verification email should be stored in mock outbox');
+assert.match(latestVerificationEmail(clientEmail)?.code || '', /^\d{6}$/, 'client verification code should be stored in mock outbox');
 
 await expectReject(
   mockRequest('post', '/auth/login', {
@@ -107,9 +113,15 @@ assert.match(resend.data.message, /потвърждение/i);
 const afterResendCount = (readDb().mockEmailOutbox || []).filter((item) => item.email === clientEmail).length;
 assert.equal(afterResendCount, beforeResendCount + 1, 'resend should create another mock verification email');
 
-const clientToken = latestVerificationEmail(clientEmail).token;
-const clientVerify = await mockRequest('post', '/auth/verify-email', { token: clientToken });
+const clientCode = latestVerificationEmail(clientEmail).code;
+const clientVerify = await mockRequest('post', '/auth/verify-email-code', { email: clientEmail, code: clientCode });
 assert.equal(clientVerify.data.user.email, clientEmail);
+
+await expectReject(
+  mockRequest('post', '/auth/verify-email-code', { email: clientEmail, code: clientCode }),
+  400,
+  /код/i,
+);
 
 db = readDb();
 const verifiedClient = db.clients.find((item) => item.email === clientEmail);
@@ -141,6 +153,7 @@ assert.equal(worker.emailVerificationRequired, true);
 assert.equal(worker.tokenVersion, 0);
 assert.ok(worker.createdAt);
 assert.ok(latestVerificationEmail(workerEmail)?.token, 'worker verification email should be stored in mock outbox');
+assert.match(latestVerificationEmail(workerEmail)?.code || '', /^\d{6}$/, 'worker verification code should be stored in mock outbox');
 
 await expectReject(
   mockRequest('post', '/auth/login', {
@@ -196,6 +209,35 @@ const clientLoginAfterReset = await mockRequest('post', '/auth/login', {
   password: 'newpass123',
 });
 assert.equal(clientLoginAfterReset.data.user.role, 'client');
+
+const initialNewsPreferences = await mockRequest('get', '/auth/me/news-preferences');
+assert.equal(initialNewsPreferences.data.newsOptIn, true);
+
+const disabledNewsPreferences = await mockRequest('put', '/auth/me/news-preferences', {
+  newsOptIn: false,
+  source: 'mock_test',
+});
+assert.equal(disabledNewsPreferences.data.preferences.newsOptIn, false);
+
+const enabledNewsPreferences = await mockRequest('put', '/auth/me/news-preferences', {
+  newsOptIn: true,
+  source: 'mock_test',
+});
+assert.equal(enabledNewsPreferences.data.preferences.newsOptIn, true);
+
+const unsubscribeEmail = createDevNewsUnsubscribeEmail();
+assert.ok(unsubscribeEmail?.token, 'news unsubscribe email should be stored in mock outbox');
+assert.equal(latestNewsUnsubscribeEmail(clientEmail).token, unsubscribeEmail.token);
+
+const unsubscribe = await mockRequest('post', '/auth/news-unsubscribe', { token: unsubscribeEmail.token });
+assert.match(unsubscribe.data.message, /отпис/i);
+assert.equal(readDb().clients.find((item) => item.email === clientEmail).newsOptIn, false);
+
+await expectReject(
+  mockRequest('post', '/auth/news-unsubscribe', { token: unsubscribeEmail.token }),
+  400,
+  /token/i,
+);
 
 await expectReject(
   mockRequest('post', '/auth/reset-password', {

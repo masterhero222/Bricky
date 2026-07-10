@@ -31,8 +31,11 @@ function shouldUseMock(url) {
       path === "/auth/login" ||
       path === "/auth/resend-verification" ||
       path === "/auth/verify-email" ||
+      path === "/auth/verify-email-code" ||
       path === "/auth/request-password-reset" ||
       path === "/auth/reset-password" ||
+      path === "/auth/news-unsubscribe" ||
+      path === "/auth/me/news-preferences" ||
       path.includes("/auth/dev-login") ||
       path === "/repair-categories" ||
       path === "/workers" ||

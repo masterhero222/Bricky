@@ -19,6 +19,7 @@ describe('AuthService email verification gate', () => {
     const users = {
       findByEmail: jest.fn().mockResolvedValue(user),
       findOne: jest.fn().mockResolvedValue(user),
+      markEmailVerified: jest.fn().mockResolvedValue({ ...user, emailVerifiedAt: new Date(), emailVerificationRequired: false }),
       updatePasswordAndRevokeSessions: jest.fn(),
       getNewsPreferences: jest.fn().mockResolvedValue({
         newsOptIn: false,
@@ -43,7 +44,9 @@ describe('AuthService email verification gate', () => {
     const accountSecurity = {
       assertTokenIssueAllowed: jest.fn().mockResolvedValue(undefined),
       issueToken: jest.fn().mockResolvedValue({ rawToken: 'raw-token' }),
+      issueTokenWithRawToken: jest.fn().mockResolvedValue({ rawToken: '123456' }),
       consumeToken: jest.fn().mockResolvedValue({ userId: baseUser.id, type: 'news_unsubscribe' }),
+      consumeTokenForUser: jest.fn().mockResolvedValue({ userId: baseUser.id, type: 'email_verification' }),
       logEmailDelivery: jest.fn().mockResolvedValue({ id: 1 }),
     };
     const mail = {
@@ -102,11 +105,11 @@ describe('AuthService email verification gate', () => {
     await service.resendVerification(baseUser.email);
 
     expect(accountSecurity.assertTokenIssueAllowed).toHaveBeenCalledWith(baseUser.id, 'email_verification', {
-      maxAttempts: 3,
+      maxAttempts: 6,
       windowMinutes: 60,
     });
     expect(mail.sendEmailVerification).toHaveBeenCalledWith(
-      expect.objectContaining({ email: baseUser.email, token: 'raw-token' }),
+      expect.objectContaining({ email: baseUser.email, token: 'raw-token', code: expect.stringMatching(/^\d{6}$/) }),
     );
     expect(accountSecurity.logEmailDelivery).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -117,6 +120,15 @@ describe('AuthService email verification gate', () => {
         providerMessageId: 'verification-message-id',
       }),
     );
+  });
+
+  it('verifies email with a short code for the account email', async () => {
+    const { service, accountSecurity, users } = createService(baseUser);
+
+    await service.verifyEmailCode(baseUser.email, '123456');
+
+    expect(accountSecurity.consumeTokenForUser).toHaveBeenCalledWith(baseUser.id, '123456', 'email_verification');
+    expect(users.findByEmail).toHaveBeenCalledWith(baseUser.email);
   });
 
   it('rate limits password reset before sending email', async () => {

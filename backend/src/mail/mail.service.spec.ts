@@ -40,6 +40,26 @@ describe('MailService account email delivery results', () => {
     );
   });
 
+  it('includes a short verification code when one is provided', async () => {
+    process.env.FRONTEND_URL = 'https://bricky.test';
+    const { service, mailer } = createService();
+    mailer.sendMail.mockResolvedValue({ messageId: 'provider-456' });
+
+    await service.sendEmailVerification({
+      email: 'client@example.com',
+      name: 'Client Test',
+      token: 'raw-token',
+      code: '123456',
+    });
+
+    expect(mailer.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('Код за потвърждение: 123456'),
+        html: expect.stringContaining('123456'),
+      }),
+    );
+  });
+
   it('returns failed status with provider error details', async () => {
     const { service, mailer } = createService();
     const error = Object.assign(new Error('SMTP rejected recipient'), { code: 'EENVELOPE' });

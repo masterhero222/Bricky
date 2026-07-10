@@ -6,6 +6,7 @@ import { TokenDto } from './dto/token.dto';
 import { EmailDto } from './dto/email.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { NewsPreferencesDto } from './dto/news-preferences.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
@@ -30,6 +31,11 @@ export class AuthController {
   @Post('verify-email')
   verifyEmail(@Body() dto: TokenDto) {
     return this.auth.verifyEmail(dto.token);
+  }
+
+  @Post('verify-email-code')
+  verifyEmailCode(@Body() dto: VerifyEmailCodeDto) {
+    return this.auth.verifyEmailCode(dto.email, dto.code);
   }
 
   @Post('resend-verification')

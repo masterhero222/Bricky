@@ -218,6 +218,29 @@ Sprint 2 remains **OPEN** only for the missing original phone image over 10 MB a
 
 Sprint 2 is now released with the documented residual risk. No Sprint 3 marketplace or payment feature was added as part of this release.
 
+## Account Email Stabilization - 2026-07-10
+
+Implemented after the production release as a Sprint 2 hardening task:
+
+- client and worker registration now remain unverified until email confirmation;
+- backend login blocks unverified accounts;
+- verification email supports both a single-use expiring link and a 6-digit confirmation code;
+- verification tokens and codes are stored as hashes in `account_tokens`, not as raw secrets;
+- `/auth/verify-email-code` verifies by email + code for users who cannot or do not want to open the link;
+- resend verification remains generic and rate-limited;
+- password reset uses a single-use expiring token and revokes sessions after password change;
+- account email delivery is logged without storing raw tokens or provider credentials;
+- mock mode mirrors the same behavior through `mockEmailOutbox` instead of auto-approving registrations;
+- dev test panel shows mock verification/reset/unsubscribe emails and the verification code;
+- news preferences and one-click unsubscribe are mock-aware and covered by the auth regression test.
+
+Verification evidence:
+
+- frontend `npm run test:mock-auth`: passed;
+- backend `auth.service.spec.ts` and `mail.service.spec.ts`: passed;
+- frontend production build: passed;
+- backend production build: passed.
+
 ## Account Verification And Recovery Pass - 2026-07-10
 
 Implemented in the current release branch:
@@ -263,13 +286,13 @@ Implemented in the current release branch:
 - mock client registration creates `id`, `name`, `email`, `role`, `accountStatus`, `emailVerifiedAt`, `emailVerificationRequired`, `tokenVersion`, `createdAt`, and `created_at`;
 - mock worker registration creates the user/account fields plus linked worker profile data with `userId`, profile `id`, skills, moderation state, gallery, and completed-job collections;
 - old localStorage mock data is migrated safely with missing auth fields instead of requiring a manual reset;
-- mock registration no longer auto-verifies email; it stores the account as pending verification and writes a mock `email_verification` message with a single-use token/link into `mockEmailOutbox`;
-- mock resend creates a new verification message without account enumeration, and mock login remains blocked until `/auth/verify-email` consumes a valid token;
-- the local `Dev test` panel now shows the latest mock verification emails and opens pending verification links for manual browser testing;
+- mock registration no longer auto-verifies email; it stores the account as pending verification and writes a mock `email_verification` message with a single-use token/link and 6-digit code into `mockEmailOutbox`;
+- mock resend creates a new verification message without account enumeration, and mock login remains blocked until `/auth/verify-email` consumes a valid token or `/auth/verify-email-code` consumes a valid email/code pair;
+- the local `Dev test` panel now shows the latest mock verification emails, their codes, and opens pending verification links for manual browser testing;
 - mock password reset now creates a `password_reset` outbox email, requires a valid single-use token, updates the stored password, bumps `tokenVersion`, and rejects reused/expired/invalid tokens;
 - remaining page-level direct `axios` upload calls were removed from the worker profile; avatar/gallery uploads now use the shared API wrapper, leaving `axios` centralized in `frontend/src/services/api.js`;
 - mock mode still does not require real SMTP env vars; real provider delivery remains a backend/production configuration concern;
-- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, token verification, login after verification, password reset, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
+- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, code verification, token verification, login after verification, password reset, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 
 Verified locally:
 

@@ -83,6 +83,9 @@
 - DONE in dev/mock: changing worker profile settings no longer breaks the mock test profile.
 - DONE in dev/mock: worker profile photo/avatar and public grid cards use the saved mock profile data.
 - DONE in Sprint 2 release branch: removed the remaining direct page-level `axios` calls from worker avatar/gallery upload; uploads now go through the shared mock-aware API layer, with `axios` centralized in `services/api.js`.
+- DONE in Sprint 2 release branch: client/worker mock registration no longer auto-approves email; mock outbox now provides verification links and 6-digit codes, and login stays blocked until confirmation.
+- DONE in Sprint 2 release branch: production auth supports real email verification by single-use link or email + 6-digit code; tokens/codes are hashed in the database and delivery is logged.
+- DONE in Sprint 2 release branch: mock password reset, news preferences, and one-click unsubscribe token flow are handled by the shared mock API and covered by regression tests.
 - Keep localStorage image usage low in dev/mock mode; use `Dev test` reset when old large image blobs already exist.
 
 ## Production Server Fixes
@@ -500,15 +503,16 @@
 - NEXT SESSION HANDOFF: use `docs/next-session-registration-notification-task.md` as the focused task brief for fixing and verifying registration, email confirmation, password reset/password change, and platform-news notification readiness.
 - Fix and verify the complete client and worker registration flow against the production database.
 - DONE in mock: `/auth/register` and `/auth/login` are handled by the shared mock-aware `apiPost` layer in dev mode without backend or SMTP dependency.
-- DONE in mock: registration supports client and worker payloads, creates current user schema fields, stores accounts as pending email verification, writes a mock verification email/token to `mockEmailOutbox`, and creates the linked worker profile.
-- DONE in mock: the local `Dev test` panel shows the latest mock verification emails and opens pending verification links for manual browser testing.
+- DONE in mock: registration supports client and worker payloads, creates current user schema fields, stores accounts as pending email verification, writes a mock verification email/token/code to `mockEmailOutbox`, and creates the linked worker profile.
+- DONE in mock: the local `Dev test` panel shows the latest mock verification emails, displays their 6-digit codes, and opens pending verification links for manual browser testing.
 - DONE in mock: password reset creates a `password_reset` outbox email, requires a valid single-use token, updates the stored password, bumps `tokenVersion`, and rejects reused/expired/invalid tokens.
 - DONE in mock: old localStorage mock accounts are migrated with account status, verification, token version, password, and creation metadata.
-- DONE in mock: regression script `npm run test:mock-auth` covers client registration, worker registration, login blocked before verification, resend, token verification, password reset, login for both roles after verification, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
+- DONE in mock: regression script `npm run test:mock-auth` covers client registration, worker registration, login blocked before verification, resend, code verification, token verification, password reset, login for both roles after verification, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 - DONE: add email ownership verification:
   - DONE: send a verification email after registration;
   - DONE: keep the account unverified and restrict protected platform actions until confirmation;
   - DONE: use a single-use, expiring, securely hashed verification token;
+  - DONE: support a 6-digit email code for confirmation when opening the link is inconvenient;
   - DONE: support safe resend with rate limiting and without account enumeration;
   - DONE: record verification timestamps and email delivery logs.
 - DONE: add forgotten-password and password-reset flow:

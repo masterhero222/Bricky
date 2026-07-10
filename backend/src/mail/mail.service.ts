@@ -40,17 +40,21 @@ export class MailService {
     }
   }
 
-  async sendEmailVerification(payload: { email: string; name?: string; token: string }) {
+  async sendEmailVerification(payload: { email: string; name?: string; token: string; code?: string }) {
     const verificationUrl = this.buildFrontendUrl(
       `/auth/verify-email?token=${encodeURIComponent(payload.token)}`,
     );
     const greeting = this.greeting(payload.name);
+    const codeText = payload.code ? `\n\nКод за потвърждение: ${payload.code}` : '';
+    const codeHtml = payload.code
+      ? `<p><strong>Код за потвърждение:</strong> <span style="font-size: 24px; letter-spacing: 4px;">${payload.code}</span></p>`
+      : '';
 
     return this.sendAccountMail({
       to: payload.email,
       subject: 'Потвърди имейла си в Bricky',
-      text: `${greeting}\n\nПотвърди имейла си от този линк:\n${verificationUrl}\n\nАко не си създавал акаунт в Bricky, игнорирай това съобщение.`,
-      html: `<p>${greeting}</p><p>Потвърди имейла си от този линк:</p><p><a href="${verificationUrl}">${verificationUrl}</a></p><p>Ако не си създавал акаунт в Bricky, игнорирай това съобщение.</p>`,
+      text: `${greeting}\n\nПотвърди имейла си от този линк:\n${verificationUrl}${codeText}\n\nАко не си създавал акаунт в Bricky, игнорирай това съобщение.`,
+      html: `<p>${greeting}</p><p>Потвърди имейла си от този линк:</p><p><a href="${verificationUrl}">${verificationUrl}</a></p>${codeHtml}<p>Ако не си създавал акаунт в Bricky, игнорирай това съобщение.</p>`,
       type: 'email_verification',
     });
   }
