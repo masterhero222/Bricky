@@ -27,6 +27,12 @@ function shouldUseMock(url) {
   return (
     import.meta.env.DEV &&
     (isDevMockToken() ||
+      path === "/auth/register" ||
+      path === "/auth/login" ||
+      path === "/auth/resend-verification" ||
+      path === "/auth/verify-email" ||
+      path === "/auth/request-password-reset" ||
+      path === "/auth/reset-password" ||
       path.includes("/auth/dev-login") ||
       path === "/repair-categories" ||
       path === "/workers" ||

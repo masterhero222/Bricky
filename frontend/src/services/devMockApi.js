@@ -348,14 +348,59 @@ function readDb() {
         writeDb(migrated);
         return migrated;
       }
-      return db;
+      const migrated = normalizeMockAuthState(db);
+      if (migrated !== db) writeDb(migrated);
+      return migrated;
     }
   } catch {
     // Invalid or outdated local mock data is replaced with a clean seed below.
   }
-  const db = normalizeMockEnforcementState(seedDb());
+  const db = normalizeMockAuthState(normalizeMockEnforcementState(seedDb()));
   writeDb(db);
   return db;
+}
+
+function nextId(items = [], field = "id", fallback = 1000) {
+  return Math.max(fallback, ...items.map((item) => Number(item?.[field] || 0)).filter(Number.isFinite)) + 1;
+}
+
+function normalizeMockAuthState(db) {
+  let changed = false;
+  const patchUser = (user, role) => {
+    const verificationRequired = user.emailVerificationRequired ?? false;
+    const next = {
+      ...user,
+      role: user.role || role,
+      name: user.name || user.fullName || (role === "worker" ? "Mock Worker" : "Mock Client"),
+      email: normalizeEmail(user.email),
+      accountStatus: user.accountStatus || "active",
+      emailVerifiedAt: verificationRequired ? user.emailVerifiedAt ?? null : user.emailVerifiedAt || nowIso(),
+      emailVerificationRequired: verificationRequired,
+      tokenVersion: Number(user.tokenVersion || 0),
+      createdAt: user.createdAt || user.created_at || nowIso(),
+      created_at: user.created_at || user.createdAt || nowIso(),
+      password: user.password || "123456",
+    };
+    if (role === "worker") {
+      next.userId = Number(user.userId || user.id);
+      next.fullName = user.fullName || user.name || "Mock Worker";
+      next.city = user.city || "";
+      next.skills = Array.isArray(user.skills) ? user.skills : [];
+      next.moderationStatus = user.moderationStatus || "approved";
+      next.avatarModerationStatus = user.avatarModerationStatus || next.moderationStatus;
+      next.gallery = Array.isArray(user.gallery) ? user.gallery : [];
+      next.completedJobs = Array.isArray(user.completedJobs) ? user.completedJobs : [];
+    }
+    if (JSON.stringify(next) !== JSON.stringify(user)) changed = true;
+    return next;
+  };
+
+  const nextDb = {
+    ...db,
+    clients: (db.clients || []).map((client) => patchUser(client, "client")),
+    workers: (db.workers || []).map((worker) => patchUser(worker, "worker")),
+  };
+  return changed ? nextDb : db;
 }
 
 function normalizeMockEnforcementState(db) {
@@ -643,6 +688,129 @@ function fail(message, status = 400) {
   return Promise.reject(err);
 }
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function allMockAccounts(db) {
+  return [
+    ...(db.clients || []).map((client) => ({ ...client, role: "client" })),
+    ...(db.workers || []).map((worker) => ({ ...worker, role: "worker" })),
+  ];
+}
+
+function findMockAccountByEmail(db, email) {
+  const normalized = normalizeEmail(email);
+  return allMockAccounts(db).find((account) => normalizeEmail(account.email) === normalized) || null;
+}
+
+function mockJwt(role, userId) {
+  return `local-dev-token-${role}-${userId}`;
+}
+
+function setMockSession(user) {
+  const role = user.role === "worker" ? "worker" : "client";
+  const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
+  localStorage.setItem("token", mockJwt(role, userId));
+  localStorage.setItem("role", role);
+  localStorage.setItem("userId", String(userId));
+  localStorage.setItem("userName", user.name || user.fullName || "Mock User");
+  window.dispatchEvent(new Event("bricky-dev-identity-changed"));
+  return localStorage.getItem("token");
+}
+
+function validateMockPassword(password) {
+  if (!password || String(password).length < 6) return "Паролата трябва да е поне 6 символа.";
+  return null;
+}
+
+function mockRegister(db, payload = {}) {
+  const role = payload.role === "worker" ? "worker" : "client";
+  const email = normalizeEmail(payload.email);
+  if (!email) return fail("Имейлът е задължителен.", 400);
+  const passwordError = validateMockPassword(payload.password);
+  if (passwordError) return fail(passwordError, 400);
+  if (findMockAccountByEmail(db, email)) return fail("Имейлът вече съществува.", 400);
+
+  const createdAt = nowIso();
+  if (role === "client") {
+    const name = String(payload.name || "").trim();
+    if (!name) return fail("Името е задължително.", 400);
+    const user = {
+      id: nextId(db.clients, "id", 1000),
+      name,
+      email,
+      password: payload.password,
+      role: "client",
+      accountStatus: "active",
+      emailVerifiedAt: createdAt,
+      emailVerificationRequired: false,
+      tokenVersion: 0,
+      createdAt,
+      created_at: createdAt,
+    };
+    db.clients.push(user);
+    writeDb(db);
+    return response({
+      message: "Mock регистрацията е успешна. Имейлът е потвърден автоматично.",
+      user: publicUser(user),
+    }, 201);
+  }
+
+  const fullName = String(payload.fullName || payload.name || "").trim();
+  if (!fullName) return fail("Трите имена са задължителни.", 400);
+  const userId = nextId(db.workers, "userId", 2000);
+  const profileId = nextId(db.workers, "id", 1000);
+  const worker = {
+    id: profileId,
+    userId,
+    role: "worker",
+    fullName,
+    name: fullName,
+    email,
+    password: payload.password,
+    phone: String(payload.phone || "").trim(),
+    city: String(payload.city || "").trim(),
+    skills: Array.isArray(payload.skills) ? payload.skills : [],
+    description: "",
+    experience: "",
+    equipment: "",
+    avatarUrl: "",
+    accountStatus: "active",
+    emailVerifiedAt: createdAt,
+    emailVerificationRequired: false,
+    tokenVersion: 0,
+    moderationStatus: "approved",
+    avatarModerationStatus: "approved",
+    gallery: [],
+    completedJobs: [],
+    createdAt,
+    created_at: createdAt,
+  };
+  db.workers.push(worker);
+  writeDb(db);
+  return response({
+    message: "Mock регистрацията е успешна. Имейлът е потвърден автоматично.",
+    user: publicUser(worker),
+    worker: publicWorker(worker),
+  }, 201);
+}
+
+function mockLogin(db, payload = {}) {
+  const account = findMockAccountByEmail(db, payload.email);
+  if (!account || String(account.password || "") !== String(payload.password || "")) {
+    return fail("Грешен имейл или парола", 400);
+  }
+  if ((account.accountStatus || "active") === "suspended") {
+    return fail("Акаунтът е временно спрян", 401);
+  }
+  if (account.emailVerificationRequired && !account.emailVerifiedAt) {
+    return fail("Имейлът не е потвърден. В mock средата го потвърди през Dev test или reset на mock базата.", 400);
+  }
+  const token = setMockSession(account);
+  return response({ token, user: publicUser(account) });
+}
+
 function sortNewest(items) {
   return [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
@@ -728,9 +896,12 @@ function asPath(url) {
 
 function publicUser(user) {
   if (!user) return null;
+  const isWorker = user.role === "worker" || Boolean(user.userId);
+  const accountId = isWorker ? user.userId || user.id : user.id;
   return {
-    id: user.id || user.userId,
+    id: accountId,
     userId: user.userId || user.id,
+    profileId: isWorker ? user.id : undefined,
     role: user.role,
     name: user.name || user.fullName,
     fullName: user.fullName || user.name,
@@ -801,6 +972,28 @@ export async function mockRequest(method, url, data) {
   const user = currentUser();
   const role = localStorage.getItem("role") || user.role;
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
+
+  if (method === "post" && path === "/auth/register") return mockRegister(db, data);
+  if (method === "post" && path === "/auth/login") return mockLogin(db, data);
+  if (method === "post" && path === "/auth/dev-login") {
+    const loginRole = data?.role === "admin" ? "admin" : data?.role === "worker" ? "worker" : "client";
+    const first = loginRole === "admin" ? { id: 999, role: "admin", name: "Bricky Admin" } : loginRole === "worker" ? db.workers[0] : db.clients[0];
+    if (loginRole !== "admin" && !isActiveAccount(first)) return fail("Акаунтът е временно спрян", 401);
+    setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
+    return response({ token: localStorage.getItem("token"), user: publicUser(first) });
+  }
+  if (method === "post" && path === "/auth/resend-verification") {
+    return response({ message: "Mock среда: ако акаунтът съществува, имейлът е потвърден автоматично." });
+  }
+  if (method === "post" && path === "/auth/verify-email") {
+    return response({ message: "Mock среда: имейлът е потвърден автоматично.", user: publicUser(user) });
+  }
+  if (method === "post" && path === "/auth/request-password-reset") {
+    return response({ message: "Mock среда: ако има акаунт с този имейл, ще получиш инструкции." });
+  }
+  if (method === "post" && path === "/auth/reset-password") {
+    return response({ message: "Mock среда: паролата е сменена успешно." });
+  }
 
   if ((role === "client" || role === "worker") && !requireActiveMockAccount(db, role, userId)) {
     return fail("Акаунтът е спрян от администратор.", 401);

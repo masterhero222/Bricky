@@ -499,6 +499,10 @@
 
 - NEXT SESSION HANDOFF: use `docs/next-session-registration-notification-task.md` as the focused task brief for fixing and verifying registration, email confirmation, password reset/password change, and platform-news notification readiness.
 - Fix and verify the complete client and worker registration flow against the production database.
+- DONE in mock: `/auth/register` and `/auth/login` are handled by the shared mock-aware `apiPost` layer in dev mode without backend or SMTP dependency.
+- DONE in mock: registration supports client and worker payloads, creates current user schema fields, auto-verifies mock emails, and creates the linked worker profile.
+- DONE in mock: old localStorage mock accounts are migrated with account status, verification, token version, password, and creation metadata.
+- DONE in mock: regression script `npm run test:mock-auth` covers client registration, worker registration, login for both roles, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 - DONE: add email ownership verification:
   - DONE: send a verification email after registration;
   - DONE: keep the account unverified and restrict protected platform actions until confirmation;

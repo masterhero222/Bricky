@@ -252,3 +252,21 @@ Remaining before this account/email slice is production-complete:
 - schedule or manually run the account-security cleanup after backup according to the documented retention policy;
 - add retry handling for failed account email delivery if the selected provider does not handle retries externally;
 - run a live SMTP smoke test with disposable accounts.
+
+## Mock Registration P0 Fix - 2026-07-10
+
+The local mock registration 500 was traced to the shared API router: `Register.jsx` already used `apiPost`, but `api.js` only routed auth requests to `devMockApi` when a mock token already existed. A first-time registration therefore fell through to the real backend and failed when the local backend/mail setup was unavailable.
+
+Implemented in the current release branch:
+
+- `/auth/register`, `/auth/login`, verification, resend, password-reset, and dev-login endpoints are mock-routed in dev mode without requiring a prior mock token;
+- mock client registration creates `id`, `name`, `email`, `role`, `accountStatus`, `emailVerifiedAt`, `emailVerificationRequired`, `tokenVersion`, `createdAt`, and `created_at`;
+- mock worker registration creates the user/account fields plus linked worker profile data with `userId`, profile `id`, skills, moderation state, gallery, and completed-job collections;
+- old localStorage mock data is migrated safely with missing auth fields instead of requiring a manual reset;
+- mock registration auto-verifies email and never requires real SMTP;
+- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
+
+Verified locally:
+
+- `frontend npm run test:mock-auth` passes;
+- `frontend npm run build` passes.
