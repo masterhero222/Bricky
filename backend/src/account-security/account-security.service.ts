@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { IsNull, MoreThan, Repository } from 'typeorm';
@@ -44,6 +44,28 @@ export class AccountSecurityService {
 
     await this.tokens.save(row);
     return { rawToken, token: row };
+  }
+
+  async assertTokenIssueAllowed(
+    userId: number,
+    type: AccountTokenType,
+    options: { maxAttempts: number; windowMinutes: number },
+  ) {
+    const since = new Date(Date.now() - options.windowMinutes * 60 * 1000);
+    const recentCount = await this.tokens.count({
+      where: {
+        userId,
+        type,
+        createdAt: MoreThan(since),
+      },
+    });
+
+    if (recentCount >= options.maxAttempts) {
+      throw new HttpException(
+        `Твърде много заявки. Опитай отново след ${options.windowMinutes} минути.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 
   async consumeToken(rawToken: string, type: AccountTokenType) {

@@ -10,6 +10,8 @@ import { LoginUserDto } from './dto/login-user.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly accountEmailRateLimit = { maxAttempts: 3, windowMinutes: 60 };
+
   constructor(
     private readonly users: UsersService,
     private readonly workers: WorkersService,
@@ -130,6 +132,11 @@ export class AuthService {
   async resendVerification(email: string) {
     const user = await this.users.findByEmail(email);
     if (user && user.emailVerificationRequired && !user.emailVerifiedAt) {
+      await this.accountSecurity.assertTokenIssueAllowed(
+        user.id,
+        'email_verification',
+        this.accountEmailRateLimit,
+      );
       await this.sendVerificationEmail(user);
     }
     return { message: 'Ако има акаунт с този имейл, ще получиш инструкции.' };
@@ -138,6 +145,7 @@ export class AuthService {
   async requestPasswordReset(email: string) {
     const user = await this.users.findByEmail(email);
     if (user && user.accountStatus !== 'suspended') {
+      await this.accountSecurity.assertTokenIssueAllowed(user.id, 'password_reset', this.accountEmailRateLimit);
       const { rawToken } = await this.accountSecurity.issueToken(user.id, 'password_reset', 60);
       const status = await this.mail.sendPasswordReset({ email: user.email, name: user.name, token: rawToken });
       await this.accountSecurity.logEmailDelivery({

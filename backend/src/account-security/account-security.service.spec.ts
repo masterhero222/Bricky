@@ -7,6 +7,7 @@ describe('AccountSecurityService', () => {
       create: jest.fn((row) => ({ id: 1, ...row })),
       save: jest.fn(async (row) => row),
       findOne: jest.fn(),
+      count: jest.fn(),
     };
     const deliveryRepo = {
       create: jest.fn((row) => ({ id: 1, ...row })),
@@ -81,5 +82,35 @@ describe('AccountSecurityService', () => {
         type: 'password_reset',
       }),
     );
+  });
+
+  it('allows token issuing below the rate limit', async () => {
+    const { service, tokenRepo } = createService();
+    tokenRepo.count.mockResolvedValue(2);
+
+    await expect(
+      service.assertTokenIssueAllowed(42, 'password_reset', { maxAttempts: 3, windowMinutes: 60 }),
+    ).resolves.toBeUndefined();
+
+    expect(tokenRepo.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 42,
+          type: 'password_reset',
+          createdAt: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
+  it('rejects token issuing after too many recent attempts', async () => {
+    const { service, tokenRepo } = createService();
+    tokenRepo.count.mockResolvedValue(3);
+
+    await expect(
+      service.assertTokenIssueAllowed(42, 'email_verification', { maxAttempts: 3, windowMinutes: 60 }),
+    ).rejects.toMatchObject({
+      status: 429,
+    });
   });
 });

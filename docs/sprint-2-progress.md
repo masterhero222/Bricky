@@ -228,6 +228,7 @@ Implemented in the current release branch:
 - verified-account guard on protected marketplace mutations;
 - login now rejects accounts that still require email confirmation;
 - login UI can resend the verification link when an account is not confirmed;
+- verification resend and password reset token issuing are rate-limited to 3 attempts per user per 60 minutes;
 - frontend routes for email verification, forgotten password, and password reset;
 - Bulgarian auth and account email copy was cleaned so production users do not see mojibake text.
 
@@ -235,11 +236,11 @@ Verified locally:
 
 - frontend production build passes;
 - backend production build passes;
-- targeted auth service tests pass for rejected unverified login and successful verified login.
+- targeted account-security and auth service tests pass for rejected unverified login, successful verified login, and token-issue rate limiting.
 
 Remaining before this account/email slice is production-complete:
 
 - configure a real production mail provider with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`, and `FRONTEND_URL`;
-- add resend/password-reset rate limiting before opening this to public traffic;
+- consider adding IP-based throttling at the proxy/API edge for anonymous abuse patterns;
 - add news notification consent, unsubscribe token flow, and preference UI;
 - run a live SMTP smoke test with disposable accounts.
