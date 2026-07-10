@@ -56,6 +56,11 @@ function writeDb(db) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 }
 
+function latestVerificationEmail(email) {
+  const db = readDb();
+  return (db.mockEmailOutbox || []).find((item) => item.type === 'email_verification' && item.email === email);
+}
+
 resetDevDb();
 
 const clientEmail = 'mock.client@example.com';
@@ -76,10 +81,35 @@ let db = readDb();
 const client = db.clients.find((item) => item.email === clientEmail);
 assert.ok(client, 'client should be stored');
 assert.equal(client.accountStatus, 'active');
-assert.ok(client.emailVerifiedAt, 'mock client should be auto verified');
-assert.equal(client.emailVerificationRequired, false);
+assert.equal(client.emailVerifiedAt, null);
+assert.equal(client.emailVerificationRequired, true);
 assert.equal(client.tokenVersion, 0);
 assert.ok(client.createdAt);
+assert.ok(latestVerificationEmail(clientEmail)?.token, 'client verification email should be stored in mock outbox');
+
+await expectReject(
+  mockRequest('post', '/auth/login', {
+    email: clientEmail,
+    password: '123456',
+  }),
+  400,
+  /потвърден/i,
+);
+
+const beforeResendCount = (readDb().mockEmailOutbox || []).filter((item) => item.email === clientEmail).length;
+const resend = await mockRequest('post', '/auth/resend-verification', { email: clientEmail });
+assert.match(resend.data.message, /потвърждение/i);
+const afterResendCount = (readDb().mockEmailOutbox || []).filter((item) => item.email === clientEmail).length;
+assert.equal(afterResendCount, beforeResendCount + 1, 'resend should create another mock verification email');
+
+const clientToken = latestVerificationEmail(clientEmail).token;
+const clientVerify = await mockRequest('post', '/auth/verify-email', { token: clientToken });
+assert.equal(clientVerify.data.user.email, clientEmail);
+
+db = readDb();
+const verifiedClient = db.clients.find((item) => item.email === clientEmail);
+assert.ok(verifiedClient.emailVerifiedAt, 'client should be verified after token confirmation');
+assert.equal(verifiedClient.emailVerificationRequired, false);
 
 const workerRegister = await mockRequest('post', '/auth/register', {
   role: 'worker',
@@ -101,10 +131,24 @@ const worker = db.workers.find((item) => item.email === workerEmail);
 assert.ok(worker, 'worker profile should be stored');
 assert.ok(worker.userId, 'worker profile should link to account userId');
 assert.equal(worker.accountStatus, 'active');
-assert.ok(worker.emailVerifiedAt, 'mock worker should be auto verified');
-assert.equal(worker.emailVerificationRequired, false);
+assert.equal(worker.emailVerifiedAt, null);
+assert.equal(worker.emailVerificationRequired, true);
 assert.equal(worker.tokenVersion, 0);
 assert.ok(worker.createdAt);
+assert.ok(latestVerificationEmail(workerEmail)?.token, 'worker verification email should be stored in mock outbox');
+
+await expectReject(
+  mockRequest('post', '/auth/login', {
+    email: workerEmail,
+    password: '123456',
+  }),
+  400,
+  /потвърден/i,
+);
+
+const workerToken = latestVerificationEmail(workerEmail).token;
+const workerVerify = await mockRequest('post', '/auth/verify-email', { token: workerToken });
+assert.equal(workerVerify.data.user.email, workerEmail);
 
 const clientLogin = await mockRequest('post', '/auth/login', {
   email: clientEmail,

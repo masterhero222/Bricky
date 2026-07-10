@@ -263,8 +263,10 @@ Implemented in the current release branch:
 - mock client registration creates `id`, `name`, `email`, `role`, `accountStatus`, `emailVerifiedAt`, `emailVerificationRequired`, `tokenVersion`, `createdAt`, and `created_at`;
 - mock worker registration creates the user/account fields plus linked worker profile data with `userId`, profile `id`, skills, moderation state, gallery, and completed-job collections;
 - old localStorage mock data is migrated safely with missing auth fields instead of requiring a manual reset;
-- mock registration auto-verifies email and never requires real SMTP;
-- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
+- mock registration no longer auto-verifies email; it stores the account as pending verification and writes a mock `email_verification` message with a single-use token/link into `mockEmailOutbox`;
+- mock resend creates a new verification message without account enumeration, and mock login remains blocked until `/auth/verify-email` consumes a valid token;
+- mock mode still does not require real SMTP env vars; real provider delivery remains a backend/production configuration concern;
+- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, token verification, login after verification, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 
 Verified locally:
 

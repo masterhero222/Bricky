@@ -397,10 +397,11 @@ function normalizeMockAuthState(db) {
 
   const nextDb = {
     ...db,
+    mockEmailOutbox: Array.isArray(db.mockEmailOutbox) ? db.mockEmailOutbox : [],
     clients: (db.clients || []).map((client) => patchUser(client, "client")),
     workers: (db.workers || []).map((worker) => patchUser(worker, "worker")),
   };
-  return changed ? nextDb : db;
+  return changed || nextDb.mockEmailOutbox !== db.mockEmailOutbox ? nextDb : db;
 }
 
 function normalizeMockEnforcementState(db) {
@@ -724,6 +725,93 @@ function validateMockPassword(password) {
   return null;
 }
 
+function emitDevDbChanged() {
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    window.dispatchEvent(new Event("bricky-dev-db-changed"));
+  }
+}
+
+function randomMockToken() {
+  return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function ensureMockOutbox(db) {
+  db.mockEmailOutbox = Array.isArray(db.mockEmailOutbox) ? db.mockEmailOutbox : [];
+  return db.mockEmailOutbox;
+}
+
+function mockAccountId(account) {
+  return account.role === "worker" ? Number(account.userId || account.id) : Number(account.id);
+}
+
+function findMockAccountByRoleAndId(db, role, id) {
+  const wantedId = Number(id);
+  if (role === "worker") return (db.workers || []).find((worker) => Number(worker.userId || worker.id) === wantedId) || null;
+  return (db.clients || []).find((client) => Number(client.id) === wantedId) || null;
+}
+
+function issueMockVerificationEmail(db, account, reason = "registration") {
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const outbox = ensureMockOutbox(db);
+  const email = {
+    id: `email-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    type: "email_verification",
+    status: "sent",
+    provider: "mock",
+    reason,
+    userId: mockAccountId(account),
+    role: account.role === "worker" ? "worker" : "client",
+    email: normalizeEmail(account.email),
+    token: randomMockToken(),
+    verificationUrl: "",
+    expiresAt,
+    usedAt: null,
+    createdAt,
+  };
+  email.verificationUrl = `/auth/verify-email?token=${encodeURIComponent(email.token)}`;
+  outbox.unshift(email);
+  return email;
+}
+
+function mockResendVerification(db, payload = {}) {
+  const account = findMockAccountByEmail(db, payload.email);
+  if (account && account.emailVerificationRequired && !account.emailVerifiedAt) {
+    issueMockVerificationEmail(db, account, "resend");
+    writeDb(db);
+    emitDevDbChanged();
+  }
+  return response({
+    message: "Mock среда: ако има непотвърден акаунт с този имейл, е създадена нова заявка за потвърждение.",
+  });
+}
+
+function mockVerifyEmail(db, payload = {}) {
+  const token = String(payload.token || "").trim();
+  if (!token) return fail("Невалиден или изтекъл token за потвърждение.", 400);
+
+  const email = ensureMockOutbox(db).find((item) => item.type === "email_verification" && item.token === token) || null;
+  if (!email || email.usedAt || new Date(email.expiresAt).getTime() < Date.now()) {
+    return fail("Невалиден или изтекъл token за потвърждение.", 400);
+  }
+
+  const account = findMockAccountByRoleAndId(db, email.role, email.userId);
+  if (!account) return fail("Акаунтът не е намерен.", 404);
+
+  const verifiedAt = nowIso();
+  account.emailVerifiedAt = verifiedAt;
+  account.emailVerificationRequired = false;
+  email.usedAt = verifiedAt;
+  email.status = "used";
+  writeDb(db);
+  emitDevDbChanged();
+
+  return response({
+    message: "Имейлът е потвърден успешно.",
+    user: publicUser(account),
+  });
+}
+
 function mockRegister(db, payload = {}) {
   const role = payload.role === "worker" ? "worker" : "client";
   const email = normalizeEmail(payload.email);
@@ -743,16 +831,19 @@ function mockRegister(db, payload = {}) {
       password: payload.password,
       role: "client",
       accountStatus: "active",
-      emailVerifiedAt: createdAt,
-      emailVerificationRequired: false,
+      emailVerifiedAt: null,
+      emailVerificationRequired: true,
       tokenVersion: 0,
       createdAt,
       created_at: createdAt,
     };
     db.clients.push(user);
+    const verificationEmail = issueMockVerificationEmail(db, user, "registration");
     writeDb(db);
+    emitDevDbChanged();
     return response({
-      message: "Mock регистрацията е успешна. Имейлът е потвърден автоматично.",
+      message: "Mock регистрацията е успешна. Акаунтът чака имейл потвърждение.",
+      mockEmail: { id: verificationEmail.id, email: verificationEmail.email, verificationUrl: verificationEmail.verificationUrl },
       user: publicUser(user),
     }, 201);
   }
@@ -777,8 +868,8 @@ function mockRegister(db, payload = {}) {
     equipment: "",
     avatarUrl: "",
     accountStatus: "active",
-    emailVerifiedAt: createdAt,
-    emailVerificationRequired: false,
+    emailVerifiedAt: null,
+    emailVerificationRequired: true,
     tokenVersion: 0,
     moderationStatus: "approved",
     avatarModerationStatus: "approved",
@@ -788,9 +879,12 @@ function mockRegister(db, payload = {}) {
     created_at: createdAt,
   };
   db.workers.push(worker);
+  const verificationEmail = issueMockVerificationEmail(db, worker, "registration");
   writeDb(db);
+  emitDevDbChanged();
   return response({
-    message: "Mock регистрацията е успешна. Имейлът е потвърден автоматично.",
+    message: "Mock регистрацията е успешна. Акаунтът чака имейл потвърждение.",
+    mockEmail: { id: verificationEmail.id, email: verificationEmail.email, verificationUrl: verificationEmail.verificationUrl },
     user: publicUser(worker),
     worker: publicWorker(worker),
   }, 201);
@@ -805,7 +899,7 @@ function mockLogin(db, payload = {}) {
     return fail("Акаунтът е временно спрян", 401);
   }
   if (account.emailVerificationRequired && !account.emailVerifiedAt) {
-    return fail("Имейлът не е потвърден. В mock средата го потвърди през Dev test или reset на mock базата.", 400);
+    return fail("Имейлът не е потвърден. В mock средата отвори verification линка от mock email outbox.", 400);
   }
   const token = setMockSession(account);
   return response({ token, user: publicUser(account) });
@@ -957,8 +1051,9 @@ export function setDevIdentity(role, id) {
 }
 
 export function resetDevDb() {
-  writeDb(normalizeMockEnforcementState(seedDb()));
+  writeDb(normalizeMockAuthState(normalizeMockEnforcementState(seedDb())));
   window.dispatchEvent(new Event("bricky-dev-identity-changed"));
+  emitDevDbChanged();
 }
 
 export function getDevIdentities() {
@@ -983,10 +1078,10 @@ export async function mockRequest(method, url, data) {
     return response({ token: localStorage.getItem("token"), user: publicUser(first) });
   }
   if (method === "post" && path === "/auth/resend-verification") {
-    return response({ message: "Mock среда: ако акаунтът съществува, имейлът е потвърден автоматично." });
+    return mockResendVerification(db, data);
   }
   if (method === "post" && path === "/auth/verify-email") {
-    return response({ message: "Mock среда: имейлът е потвърден автоматично.", user: publicUser(user) });
+    return mockVerifyEmail(db, data);
   }
   if (method === "post" && path === "/auth/request-password-reset") {
     return response({ message: "Mock среда: ако има акаунт с този имейл, ще получиш инструкции." });
