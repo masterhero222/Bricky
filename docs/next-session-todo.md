@@ -82,7 +82,7 @@
 - DONE in dev/mock: request workflow is stable enough for local testing from both client and worker sides.
 - DONE in dev/mock: changing worker profile settings no longer breaks the mock test profile.
 - DONE in dev/mock: worker profile photo/avatar and public grid cards use the saved mock profile data.
-- Continue removing remaining direct `axios` calls from pages that should go through the shared mock-aware API layer.
+- DONE in Sprint 2 release branch: removed the remaining direct page-level `axios` calls from worker avatar/gallery upload; uploads now go through the shared mock-aware API layer, with `axios` centralized in `services/api.js`.
 - Keep localStorage image usage low in dev/mock mode; use `Dev test` reset when old large image blobs already exist.
 
 ## Production Server Fixes

@@ -1,11 +1,10 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
 import NewsPreferencesPanel from "../../components/settings/NewsPreferencesPanel";
-import { getApiBase, mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
+import { mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
 import { getPricingActivity } from "../../constants/repairPricingConfig";
@@ -410,11 +409,8 @@ export default function WorkerProfile() {
     const fd = new FormData();
     fd.append("avatar", profile.avatar);
 
-    const res = await axios.post(`${getApiBase()}/workers/me/avatar`, fd, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
-      },
+    const res = await apiPost("/workers/me/avatar", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
 
     const updated = res.data || {};
@@ -564,11 +560,8 @@ export default function WorkerProfile() {
       const fd = new FormData();
       galleryFiles.forEach((f) => fd.append("images", f));
 
-      await axios.post(`${getApiBase()}/workers/me/gallery`, fd, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
+      await apiPost("/workers/me/gallery", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       setGalleryMsg("Снимките са качени.");

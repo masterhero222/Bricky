@@ -267,6 +267,7 @@ Implemented in the current release branch:
 - mock resend creates a new verification message without account enumeration, and mock login remains blocked until `/auth/verify-email` consumes a valid token;
 - the local `Dev test` panel now shows the latest mock verification emails and opens pending verification links for manual browser testing;
 - mock password reset now creates a `password_reset` outbox email, requires a valid single-use token, updates the stored password, bumps `tokenVersion`, and rejects reused/expired/invalid tokens;
+- remaining page-level direct `axios` upload calls were removed from the worker profile; avatar/gallery uploads now use the shared API wrapper, leaving `axios` centralized in `frontend/src/services/api.js`;
 - mock mode still does not require real SMTP env vars; real provider delivery remains a backend/production configuration concern;
 - `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, token verification, login after verification, password reset, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 
