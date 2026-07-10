@@ -33,8 +33,8 @@ describe('VerifiedAccountGuard', () => {
       emailVerifiedAt: null,
     });
 
-    await expect(guard.canActivate(context({ user: { id: 7 } }))).rejects.toBeInstanceOf(
-      ForbiddenException,
+    await expect(guard.canActivate(context({ user: { id: 7 } }))).rejects.toThrow(
+      'Потвърди имейла си, за да продължиш.',
     );
   });
 
