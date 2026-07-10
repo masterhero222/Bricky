@@ -94,6 +94,9 @@ export class AuthService {
     const user = await this.users.findByEmail(dto.email);
     if (!user) throw new BadRequestException('Грешен имейл или парола');
     if (user.accountStatus === 'suspended') throw new BadRequestException('Акаунтът е временно спрян');
+    if (user.emailVerificationRequired && !user.emailVerifiedAt) {
+      throw new BadRequestException('Имейлът не е потвърден. Провери пощата си или изпрати нов линк за потвърждение.');
+    }
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new BadRequestException('Грешни данни');

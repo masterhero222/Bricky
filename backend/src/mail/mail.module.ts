@@ -24,7 +24,6 @@ import { MailService } from './mail.service';
           from: config.get<string>('MAIL_FROM'),
         },
         template: {
-          // буквално казваме "търси темплейти в src/mail/templates"
           dir: join(__dirname, 'templates'),
           adapter: new HandlebarsAdapter(),
           options: { strict: true },

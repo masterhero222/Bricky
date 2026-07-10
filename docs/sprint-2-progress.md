@@ -217,3 +217,29 @@ Sprint 2 remains **OPEN** only for the missing original phone image over 10 MB a
 - The unavailable original phone image over 10 MB remains an accepted P1 follow-up. Generated exact-size fixtures passed.
 
 Sprint 2 is now released with the documented residual risk. No Sprint 3 marketplace or payment feature was added as part of this release.
+
+## Account Verification And Recovery Pass - 2026-07-10
+
+Implemented in the current release branch:
+
+- email verification, resend verification, password reset request, and password reset endpoints;
+- account token and email delivery-log persistence through additive migration `004`;
+- JWT token-version enforcement so password reset and administrative session revocation invalidate existing tokens;
+- verified-account guard on protected marketplace mutations;
+- login now rejects accounts that still require email confirmation;
+- login UI can resend the verification link when an account is not confirmed;
+- frontend routes for email verification, forgotten password, and password reset;
+- Bulgarian auth and account email copy was cleaned so production users do not see mojibake text.
+
+Verified locally:
+
+- frontend production build passes;
+- backend production build passes;
+- targeted auth service tests pass for rejected unverified login and successful verified login.
+
+Remaining before this account/email slice is production-complete:
+
+- configure a real production mail provider with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`, and `FRONTEND_URL`;
+- add resend/password-reset rate limiting before opening this to public traffic;
+- add news notification consent, unsubscribe token flow, and preference UI;
+- run a live SMTP smoke test with disposable accounts.

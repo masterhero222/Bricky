@@ -5,6 +5,8 @@ import { apiPost } from "../services/api";
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [showResend, setShowResend] = useState(false);
   const [devLoading, setDevLoading] = useState("");
 
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -38,6 +40,8 @@ export default function Login() {
   const submit = async (e) => {
     e.preventDefault();
     setError("");
+    setNotice("");
+    setShowResend(false);
 
     try {
       const res = await apiPost("/auth/login", form);
@@ -51,7 +55,22 @@ export default function Login() {
 
       const msg = err.response?.data?.message;
       console.error("LOGIN ERROR:", err.response?.data || err);
-      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Грешен имейл или парола.");
+      const normalizedMessage = Array.isArray(msg) ? msg.join(", ") : msg || "Грешен имейл или парола.";
+      setError(normalizedMessage);
+      setShowResend(normalizedMessage.toLowerCase().includes("имейлът не е потвърден"));
+    }
+  };
+
+  const resendVerification = async () => {
+    setError("");
+    setNotice("");
+
+    try {
+      const res = await apiPost("/auth/resend-verification", { email: form.email });
+      setNotice(res.data?.message || "Ако има акаунт с този имейл, ще получиш инструкции.");
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Не успяхме да изпратим нов линк.");
     }
   };
 
@@ -95,7 +114,18 @@ export default function Login() {
           required
         />
 
-        {error && <p className="text-red-400 text-center">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 p-3 text-center text-red-200">{error}</p>}
+        {notice && <p className="rounded-lg bg-emerald-500/15 p-3 text-center text-emerald-200">{notice}</p>}
+
+        {showResend && (
+          <button
+            type="button"
+            onClick={resendVerification}
+            className="w-full rounded bg-slate-700 p-3 font-bold text-slate-100 hover:bg-slate-600"
+          >
+            Изпрати нов линк за потвърждение
+          </button>
+        )}
 
         <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
 
