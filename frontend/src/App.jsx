@@ -13,6 +13,7 @@ import Register from "./pages/Register";
 import VerifyEmail from "./pages/VerifyEmail";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import NewsUnsubscribe from "./pages/NewsUnsubscribe";
 
 // CLIENT
 import ClientProfile from "./pages/ClientProfile";
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/auth/verify-email" element={<VerifyEmail />} />
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/news-unsubscribe" element={<NewsUnsubscribe />} />
 
         {/* LAYOUT PAGES */}
         <Route element={<Layout />}>

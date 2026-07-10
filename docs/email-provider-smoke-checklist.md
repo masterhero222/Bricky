@@ -87,6 +87,17 @@ Verify:
 - verification resend and password reset are limited to 3 token issues per user per 60 minutes;
 - invalid, reused, expired, and malformed tokens fail safely.
 
+### 5. News Preferences And Unsubscribe
+
+1. Open account settings as a client and enable platform news.
+2. Confirm `users.newsOptIn = 1`, `newsOptInAt` is set, and `newsOptInSource = account_settings`.
+3. Disable platform news from settings.
+4. Confirm `users.newsOptIn = 0` and `newsUnsubscribedAt` is set.
+5. Generate a `news_unsubscribe` token for a disposable user.
+6. Open `/auth/news-unsubscribe?token=<TOKEN>`.
+7. Confirm the token is consumed once and `newsOptIn` is disabled.
+8. Confirm opening the same link again fails safely.
+
 ## SQL Inspection Helpers
 
 ```sql
@@ -116,4 +127,3 @@ Before enabling this flow publicly:
 - no real SMTP credentials may appear in git history;
 - production `FRONTEND_URL` must point to `https://bricky.bg`;
 - rollback must include disabling the mail provider env values and restarting the backend.
-

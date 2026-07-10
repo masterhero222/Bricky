@@ -512,11 +512,12 @@
   - DONE: notify the account owner after a successful password change.
 - DONE: add transactional account emails for registration verification, password reset, and password change.
 - Add optional platform-news emails:
-  - explicit opt-in consent, disabled by default unless legally approved otherwise;
-  - persistent consent timestamp and source;
-  - visible preference control in account settings;
-  - one-click unsubscribe included in every news email;
-  - transactional security emails must remain separate from marketing/news consent.
+  - DONE: explicit opt-in consent, disabled by default unless legally approved otherwise;
+  - DONE: persistent consent timestamp and source;
+  - DONE: visible preference control in account settings;
+  - DONE: one-click unsubscribe token endpoint for future news emails;
+  - DONE: transactional security emails remain separate from marketing/news consent.
+  - NEXT: implement the actual news-campaign sender only after Sprint 2 release gates are closed.
 - DONE: document production email provider environment variables in `backend/.env.example` and `docs/email-provider-smoke-checklist.md`; never commit SMTP/API credentials.
 - DONE: add delivery logging without storing verification/reset tokens or sensitive email contents.
 - Add retry handling, provider failure states, expiry cleanup, and user-facing success/error messages.

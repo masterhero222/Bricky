@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { VerifiedAccountGuard } from './verified-account.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 import { UsersModule } from '../users/users.module';
 import { WorkersModule } from '../workers/workers.module';
@@ -25,7 +26,7 @@ import { MailModule } from '../mail/mail.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, VerifiedAccountGuard],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, VerifiedAccountGuard],
+  exports: [AuthService, JwtAuthGuard, VerifiedAccountGuard],
 })
 export class AuthModule {}

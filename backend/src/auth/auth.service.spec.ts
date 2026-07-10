@@ -18,12 +18,32 @@ describe('AuthService email verification gate', () => {
   const createService = (user: any) => {
     const users = {
       findByEmail: jest.fn().mockResolvedValue(user),
+      findOne: jest.fn().mockResolvedValue(user),
       updatePasswordAndRevokeSessions: jest.fn(),
+      getNewsPreferences: jest.fn().mockResolvedValue({
+        newsOptIn: false,
+        newsOptInAt: null,
+        newsOptInSource: null,
+        newsUnsubscribedAt: null,
+      }),
+      updateNewsPreference: jest.fn().mockResolvedValue({
+        newsOptIn: true,
+        newsOptInAt: new Date('2026-07-10T10:00:00.000Z'),
+        newsOptInSource: 'account_settings',
+        newsUnsubscribedAt: null,
+      }),
+      markNewsUnsubscribed: jest.fn().mockResolvedValue({
+        newsOptIn: false,
+        newsOptInAt: null,
+        newsOptInSource: 'account_settings',
+        newsUnsubscribedAt: new Date('2026-07-10T11:00:00.000Z'),
+      }),
     };
     const workers = {};
     const accountSecurity = {
       assertTokenIssueAllowed: jest.fn().mockResolvedValue(undefined),
       issueToken: jest.fn().mockResolvedValue({ rawToken: 'raw-token' }),
+      consumeToken: jest.fn().mockResolvedValue({ userId: baseUser.id, type: 'news_unsubscribe' }),
       logEmailDelivery: jest.fn().mockResolvedValue({ id: 1 }),
     };
     const mail = {
@@ -38,6 +58,7 @@ describe('AuthService email verification gate', () => {
       service: new AuthService(users as any, workers as any, accountSecurity as any, mail as any, jwt as any),
       accountSecurity,
       mail,
+      users,
       jwt,
     };
   };
@@ -91,5 +112,34 @@ describe('AuthService email verification gate', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith(
       expect.objectContaining({ email: baseUser.email, token: 'raw-token' }),
     );
+  });
+
+  it('updates news preferences for the authenticated account', async () => {
+    const { service, users } = createService(baseUser);
+
+    const result = await service.updateNewsPreferences(baseUser.id, true, 'account_settings');
+
+    expect(users.updateNewsPreference).toHaveBeenCalledWith(baseUser.id, true, 'account_settings');
+    expect(result.preferences.newsOptIn).toBe(true);
+  });
+
+  it('issues a news unsubscribe token without exposing stored hashes', async () => {
+    const { service, accountSecurity } = createService(baseUser);
+
+    const result = await service.issueNewsUnsubscribeToken(baseUser.id);
+
+    expect(accountSecurity.issueToken).toHaveBeenCalledWith(baseUser.id, 'news_unsubscribe', 30 * 24 * 60);
+    expect(result).toEqual({ token: 'raw-token' });
+  });
+
+  it('unsubscribes news through a single-use token', async () => {
+    const { service, accountSecurity, users } = createService(baseUser);
+
+    await expect(service.unsubscribeNews('raw-news-token')).resolves.toEqual({
+      message: 'Отписването от новини е успешно.',
+    });
+
+    expect(accountSecurity.consumeToken).toHaveBeenCalledWith('raw-news-token', 'news_unsubscribe');
+    expect(users.markNewsUnsubscribed).toHaveBeenCalledWith(baseUser.id);
   });
 });

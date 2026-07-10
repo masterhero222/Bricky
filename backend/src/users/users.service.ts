@@ -61,4 +61,36 @@ export class UsersService {
       .execute();
     return this.findOne(id);
   }
+
+  async getNewsPreferences(id: number) {
+    const user = await this.findOne(id);
+    if (!user) return null;
+
+    return {
+      newsOptIn: Boolean(user.newsOptIn),
+      newsOptInAt: user.newsOptInAt,
+      newsOptInSource: user.newsOptInSource,
+      newsUnsubscribedAt: user.newsUnsubscribedAt,
+    };
+  }
+
+  async updateNewsPreference(id: number, optIn: boolean, source?: string | null) {
+    const now = new Date();
+    await this.repo.update(id, {
+      newsOptIn: optIn,
+      newsOptInAt: optIn ? now : null,
+      newsOptInSource: optIn ? source || 'account_settings' : null,
+      newsUnsubscribedAt: optIn ? null : now,
+    });
+    return this.getNewsPreferences(id);
+  }
+
+  async markNewsUnsubscribed(id: number) {
+    const now = new Date();
+    await this.repo.update(id, {
+      newsOptIn: false,
+      newsUnsubscribedAt: now,
+    });
+    return this.getNewsPreferences(id);
+  }
 }

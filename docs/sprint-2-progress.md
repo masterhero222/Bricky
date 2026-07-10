@@ -232,6 +232,8 @@ Implemented in the current release branch:
 - frontend routes for email verification, forgotten password, and password reset;
 - backend `.env.example` documents the required mail provider variables without secrets;
 - `docs/email-provider-smoke-checklist.md` defines the disposable-account SMTP acceptance flow;
+- account settings now expose platform-news opt-in/opt-out for clients and workers;
+- public single-use `news_unsubscribe` token consumption is implemented for future news emails;
 - Bulgarian auth and account email copy was cleaned so production users do not see mojibake text.
 
 Verified locally:
@@ -244,5 +246,5 @@ Remaining before this account/email slice is production-complete:
 
 - configure a real production mail provider with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`, and `FRONTEND_URL`;
 - consider adding IP-based throttling at the proxy/API edge for anonymous abuse patterns;
-- add news notification consent, unsubscribe token flow, and preference UI;
+- implement the actual news-campaign sender later; Sprint 2 now only provides consent and unsubscribe plumbing;
 - run a live SMTP smoke test with disposable accounts.

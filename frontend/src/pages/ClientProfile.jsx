@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import RequestInfoRow from "../components/requests/RequestInfoRow";
 import RequestPhotoCarousel from "../components/requests/RequestPhotoCarousel";
+import NewsPreferencesPanel from "../components/settings/NewsPreferencesPanel";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 import { RequestFlow } from "./Requests";
 
@@ -754,6 +755,9 @@ export default function ClientProfile() {
           <div className="mx-auto max-w-4xl">
             <h1 className="mb-3 text-3xl font-extrabold">Настройки</h1>
             <p className="mb-8 text-slate-400">Управлявай профила, адресите, известията и сигурността си.</p>
+            <div className="mb-6">
+              <NewsPreferencesPanel />
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <SettingsCard title="Профил" text="Име, телефон и имейл за връзка." />
               <SettingsCard title="Адреси" text="Запазени адреси и бележки за достъп." />

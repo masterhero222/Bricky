@@ -4,6 +4,7 @@ import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
+import NewsPreferencesPanel from "../../components/settings/NewsPreferencesPanel";
 import { getApiBase, mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
@@ -1629,9 +1630,9 @@ export default function WorkerProfile() {
         )}
 
         {activeTab === "settings" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Настройки</h1>
-            <p className="text-gray-400">(placeholder)</p>
+          <div className="mx-auto mt-10 max-w-4xl">
+            <h1 className="mb-4 text-3xl font-bold">Настройки</h1>
+            <NewsPreferencesPanel />
           </div>
         )}
 

@@ -176,6 +176,34 @@ export class AuthService {
     return { message: 'Паролата е сменена успешно' };
   }
 
+  async getNewsPreferences(userId: number) {
+    const preferences = await this.users.getNewsPreferences(userId);
+    if (!preferences) throw new BadRequestException('Акаунтът не е намерен');
+    return preferences;
+  }
+
+  async updateNewsPreferences(userId: number, newsOptIn: boolean, source?: string) {
+    const preferences = await this.users.updateNewsPreference(userId, Boolean(newsOptIn), source);
+    if (!preferences) throw new BadRequestException('Акаунтът не е намерен');
+    return {
+      message: newsOptIn ? 'Абонаментът за новини е включен.' : 'Абонаментът за новини е изключен.',
+      preferences,
+    };
+  }
+
+  async issueNewsUnsubscribeToken(userId: number) {
+    const user = await this.users.findOne(userId);
+    if (!user) throw new BadRequestException('Акаунтът не е намерен');
+    const { rawToken } = await this.accountSecurity.issueToken(user.id, 'news_unsubscribe', 30 * 24 * 60);
+    return { token: rawToken };
+  }
+
+  async unsubscribeNews(rawToken: string) {
+    const token = await this.accountSecurity.consumeToken(rawToken, 'news_unsubscribe');
+    await this.users.markNewsUnsubscribed(token.userId);
+    return { message: 'Отписването от новини е успешно.' };
+  }
+
   private async sendVerificationEmail(user: { id: number; email: string; name?: string }) {
     const { rawToken } = await this.accountSecurity.issueToken(user.id, 'email_verification', 24 * 60);
     const status = await this.mail.sendEmailVerification({ email: user.email, name: user.name, token: rawToken });
