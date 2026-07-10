@@ -109,15 +109,15 @@ export default function DevTestPanel() {
                     </span>
                   </div>
                   <div className="mt-1 text-slate-400">{email.reason || email.type}</div>
-                  {!email.usedAt && email.verificationUrl && (
+                  {!email.usedAt && (email.verificationUrl || email.resetUrl) && (
                     <button
                       type="button"
                       onClick={() => {
-                        window.location.href = email.verificationUrl;
+                        window.location.href = email.verificationUrl || email.resetUrl;
                       }}
                       className="mt-2 w-full rounded bg-emerald-700 px-2 py-1 font-bold hover:bg-emerald-600"
                     >
-                      Отвори verification link
+                      Отвори {email.type === "password_reset" ? "reset" : "verification"} link
                     </button>
                   )}
                 </div>

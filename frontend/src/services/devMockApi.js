@@ -774,6 +774,30 @@ function issueMockVerificationEmail(db, account, reason = "registration") {
   return email;
 }
 
+function issueMockPasswordResetEmail(db, account) {
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const outbox = ensureMockOutbox(db);
+  const email = {
+    id: `email-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    type: "password_reset",
+    status: "sent",
+    provider: "mock",
+    reason: "password_reset",
+    userId: mockAccountId(account),
+    role: account.role === "worker" ? "worker" : "client",
+    email: normalizeEmail(account.email),
+    token: randomMockToken(),
+    resetUrl: "",
+    expiresAt,
+    usedAt: null,
+    createdAt,
+  };
+  email.resetUrl = `/auth/reset-password?token=${encodeURIComponent(email.token)}`;
+  outbox.unshift(email);
+  return email;
+}
+
 function mockResendVerification(db, payload = {}) {
   const account = findMockAccountByEmail(db, payload.email);
   if (account && account.emailVerificationRequired && !account.emailVerifiedAt) {
@@ -784,6 +808,44 @@ function mockResendVerification(db, payload = {}) {
   return response({
     message: "Mock среда: ако има непотвърден акаунт с този имейл, е създадена нова заявка за потвърждение.",
   });
+}
+
+function mockRequestPasswordReset(db, payload = {}) {
+  const account = findMockAccountByEmail(db, payload.email);
+  if (account && isActiveAccount(account)) {
+    issueMockPasswordResetEmail(db, account);
+    writeDb(db);
+    emitDevDbChanged();
+  }
+  return response({
+    message: "Mock среда: ако има активен акаунт с този имейл, е създаден линк за смяна на паролата.",
+  });
+}
+
+function mockResetPassword(db, payload = {}) {
+  const token = String(payload.token || "").trim();
+  if (!token) return fail("Невалиден или изтекъл token за смяна на паролата.", 400);
+
+  const passwordError = validateMockPassword(payload.password);
+  if (passwordError) return fail(passwordError, 400);
+
+  const email = ensureMockOutbox(db).find((item) => item.type === "password_reset" && item.token === token) || null;
+  if (!email || email.usedAt || new Date(email.expiresAt).getTime() < Date.now()) {
+    return fail("Невалиден или изтекъл token за смяна на паролата.", 400);
+  }
+
+  const account = findMockAccountByRoleAndId(db, email.role, email.userId);
+  if (!account || !isActiveAccount(account)) return fail("Акаунтът не е намерен или е спрян.", 404);
+
+  const changedAt = nowIso();
+  account.password = payload.password;
+  account.tokenVersion = Number(account.tokenVersion || 0) + 1;
+  email.usedAt = changedAt;
+  email.status = "used";
+  writeDb(db);
+  emitDevDbChanged();
+
+  return response({ message: "Паролата е сменена успешно." });
 }
 
 function mockVerifyEmail(db, payload = {}) {
@@ -1089,10 +1151,10 @@ export async function mockRequest(method, url, data) {
     return mockVerifyEmail(db, data);
   }
   if (method === "post" && path === "/auth/request-password-reset") {
-    return response({ message: "Mock среда: ако има акаунт с този имейл, ще получиш инструкции." });
+    return mockRequestPasswordReset(db, data);
   }
   if (method === "post" && path === "/auth/reset-password") {
-    return response({ message: "Mock среда: паролата е сменена успешно." });
+    return mockResetPassword(db, data);
   }
 
   if ((role === "client" || role === "worker") && !requireActiveMockAccount(db, role, userId)) {

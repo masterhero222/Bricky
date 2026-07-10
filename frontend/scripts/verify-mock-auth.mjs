@@ -61,6 +61,11 @@ function latestVerificationEmail(email) {
   return (db.mockEmailOutbox || []).find((item) => item.type === 'email_verification' && item.email === email);
 }
 
+function latestPasswordResetEmail(email) {
+  const db = readDb();
+  return (db.mockEmailOutbox || []).find((item) => item.type === 'password_reset' && item.email === email);
+}
+
 resetDevDb();
 
 const clientEmail = 'mock.client@example.com';
@@ -157,6 +162,50 @@ const clientLogin = await mockRequest('post', '/auth/login', {
 assert.equal(clientLogin.data.user.role, 'client');
 assert.equal(localStorage.getItem('role'), 'client');
 
+const resetRequest = await mockRequest('post', '/auth/request-password-reset', { email: clientEmail });
+assert.match(resetRequest.data.message, /паролата/i);
+const resetEmail = latestPasswordResetEmail(clientEmail);
+assert.ok(resetEmail?.token, 'password reset email should be stored in mock outbox');
+
+await expectReject(
+  mockRequest('post', '/auth/reset-password', {
+    token: resetEmail.token,
+    password: '123',
+  }),
+  400,
+  /6/i,
+);
+
+const resetPassword = await mockRequest('post', '/auth/reset-password', {
+  token: resetEmail.token,
+  password: 'newpass123',
+});
+assert.match(resetPassword.data.message, /сменена/i);
+
+await expectReject(
+  mockRequest('post', '/auth/login', {
+    email: clientEmail,
+    password: '123456',
+  }),
+  400,
+  /Грешен/i,
+);
+
+const clientLoginAfterReset = await mockRequest('post', '/auth/login', {
+  email: clientEmail,
+  password: 'newpass123',
+});
+assert.equal(clientLoginAfterReset.data.user.role, 'client');
+
+await expectReject(
+  mockRequest('post', '/auth/reset-password', {
+    token: resetEmail.token,
+    password: 'another123',
+  }),
+  400,
+  /token/i,
+);
+
 const workerLogin = await mockRequest('post', '/auth/login', {
   email: workerEmail,
   password: '123456',
@@ -184,7 +233,7 @@ writeDb(db);
 await expectReject(
   mockRequest('post', '/auth/login', {
     email: clientEmail,
-    password: '123456',
+    password: 'newpass123',
   }),
   401,
   /спрян/i,
@@ -200,7 +249,7 @@ writeDb(db);
 await expectReject(
   mockRequest('post', '/auth/login', {
     email: clientEmail,
-    password: '123456',
+    password: 'newpass123',
   }),
   400,
   /потвърден/i,

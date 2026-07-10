@@ -266,8 +266,9 @@ Implemented in the current release branch:
 - mock registration no longer auto-verifies email; it stores the account as pending verification and writes a mock `email_verification` message with a single-use token/link into `mockEmailOutbox`;
 - mock resend creates a new verification message without account enumeration, and mock login remains blocked until `/auth/verify-email` consumes a valid token;
 - the local `Dev test` panel now shows the latest mock verification emails and opens pending verification links for manual browser testing;
+- mock password reset now creates a `password_reset` outbox email, requires a valid single-use token, updates the stored password, bumps `tokenVersion`, and rejects reused/expired/invalid tokens;
 - mock mode still does not require real SMTP env vars; real provider delivery remains a backend/production configuration concern;
-- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, token verification, login after verification, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
+- `frontend/scripts/verify-mock-auth.mjs` covers client registration, worker registration, login blocked before verification, resend, token verification, login after verification, password reset, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 
 Verified locally:
 
