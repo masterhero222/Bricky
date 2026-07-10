@@ -501,6 +501,7 @@
 - Fix and verify the complete client and worker registration flow against the production database.
 - DONE in mock: `/auth/register` and `/auth/login` are handled by the shared mock-aware `apiPost` layer in dev mode without backend or SMTP dependency.
 - DONE in mock: registration supports client and worker payloads, creates current user schema fields, stores accounts as pending email verification, writes a mock verification email/token to `mockEmailOutbox`, and creates the linked worker profile.
+- DONE in mock: the local `Dev test` panel shows the latest mock verification emails and opens pending verification links for manual browser testing.
 - DONE in mock: old localStorage mock accounts are migrated with account status, verification, token version, password, and creation metadata.
 - DONE in mock: regression script `npm run test:mock-auth` covers client registration, worker registration, login blocked before verification, resend, token verification, login for both roles after verification, duplicate email rejection, suspended account rejection, and explicit unverified account rejection.
 - DONE: add email ownership verification:

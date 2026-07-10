@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { getDevIdentities, isDevMockToken, resetDevDb, setDevIdentity } from "../services/devMockApi";
+import { getDevEmailOutbox, getDevIdentities, isDevMockToken, resetDevDb, setDevIdentity } from "../services/devMockApi";
 
 export default function DevTestPanel() {
   const [visible, setVisible] = useState(false);
@@ -9,10 +9,12 @@ export default function DevTestPanel() {
   useEffect(() => {
     const refresh = () => setTick((x) => x + 1);
     window.addEventListener("bricky-dev-identity-changed", refresh);
+    window.addEventListener("bricky-dev-db-changed", refresh);
     window.addEventListener("storage", refresh);
     refresh();
     return () => {
       window.removeEventListener("bricky-dev-identity-changed", refresh);
+      window.removeEventListener("bricky-dev-db-changed", refresh);
       window.removeEventListener("storage", refresh);
     };
   }, []);
@@ -24,6 +26,7 @@ export default function DevTestPanel() {
   const activeUserId = localStorage.getItem("userId") || "";
   const activeName = localStorage.getItem("userName") || "няма";
   const activeMock = isDevMockToken();
+  const outbox = getDevEmailOutbox().slice(0, 4);
 
   const login = (role, id) => {
     setError("");
@@ -91,6 +94,35 @@ export default function DevTestPanel() {
 
           <div className="mt-3">
             {admins.map((admin) => <button key={admin.id} type="button" onClick={() => login("admin", admin.id)} className="w-full rounded bg-cyan-700 px-3 py-2 text-sm font-bold hover:bg-cyan-600">Вход като администратор</button>)}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-cyan-400/20 bg-slate-900/80 p-3">
+            <div className="mb-2 text-xs font-bold uppercase text-cyan-200">Mock имейли</div>
+            {!outbox.length && <p className="text-xs text-slate-400">Няма изпратени mock имейли.</p>}
+            <div className="space-y-2">
+              {outbox.map((email) => (
+                <div key={email.id} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-semibold text-white">{email.email}</span>
+                    <span className={email.usedAt ? "text-emerald-300" : "text-amber-300"}>
+                      {email.usedAt ? "used" : "pending"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-slate-400">{email.reason || email.type}</div>
+                  {!email.usedAt && email.verificationUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = email.verificationUrl;
+                      }}
+                      className="mt-2 w-full rounded bg-emerald-700 px-2 py-1 font-bold hover:bg-emerald-600"
+                    >
+                      Отвори verification link
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
           <button
