@@ -34,6 +34,30 @@ Rules:
 - production must use `TYPEORM_SYNCHRONIZE=false`;
 - `FRONTEND_URL` must match the real public app URL, otherwise email links will point to the wrong host.
 
+## Google SMTP Configuration
+
+For Google SMTP, use an app password, not the normal Google account password.
+
+Recommended production/staging values:
+
+```env
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USER=<FULL_GMAIL_OR_WORKSPACE_EMAIL>
+MAIL_PASS=<GOOGLE_APP_PASSWORD>
+MAIL_FROM="Bricky <FULL_GMAIL_OR_WORKSPACE_EMAIL>"
+```
+
+Google setup requirements:
+
+1. Enable 2-Step Verification for the sending Google account.
+2. Create an App Password for mail/SMTP.
+3. Store the 16-character app password only in the backend runtime environment.
+4. Restart the backend after changing the environment.
+5. If Google Workspace blocks SMTP auth, allow app passwords or use a dedicated transactional provider instead.
+
+Never commit the Google app password. If it is exposed, revoke it in Google Account settings and generate a new one.
+
 ## Local Setup
 
 1. Copy `backend/.env.example` to `backend/.env`.
@@ -45,6 +69,26 @@ Rules:
 ## Smoke Test Flow
 
 Use disposable email addresses only.
+
+The repository includes an API smoke helper for the primary gate:
+
+```powershell
+$env:API_BASE_URL="https://bricky.bg/api"
+$env:SMOKE_EMAIL="bricky-smoke+20260711@example.com"
+$env:SMOKE_PASSWORD="Use-A-Disposable-Strong-Password-123!"
+$env:SMOKE_ROLE="client"
+npm run smoke:email-verification
+```
+
+The helper:
+
+1. creates a new client or worker account;
+2. confirms login is blocked before verification;
+3. waits for the 6-digit code from the real email inbox;
+4. verifies `/auth/verify-email-code`;
+5. confirms login succeeds after verification.
+
+This smoke test is accepted only when the code arrives through the configured real SMTP provider and the final login succeeds.
 
 ### 1. Registration Verification
 

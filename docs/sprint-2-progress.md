@@ -276,6 +276,18 @@ Remaining before this account/email slice is production-complete:
 - add retry handling for failed account email delivery if the selected provider does not handle retries externally;
 - run a live SMTP smoke test with disposable accounts.
 
+## Google SMTP Smoke Gate - 2026-07-11
+
+Added the repeatable production/staging smoke helper for the real SMTP gate:
+
+- `npm run smoke:email-verification` registers a disposable client or worker through the public API;
+- the helper confirms login is blocked before verification;
+- the operator enters the 6-digit code received from the real mailbox;
+- the helper calls `/auth/verify-email-code`;
+- the helper confirms login succeeds only after verification.
+
+Google SMTP setup is documented in `docs/email-provider-smoke-checklist.md` with `smtp.gmail.com`, port `587`, and a Google App Password. This gate remains open until the backend runtime environment is configured with real Google SMTP credentials and the helper passes against `https://bricky.bg/api` or an isolated staging API.
+
 ## Mock Registration P0 Fix - 2026-07-10
 
 The local mock registration 500 was traced to the shared API router: `Register.jsx` already used `apiPost`, but `api.js` only routed auth requests to `devMockApi` when a mock token already existed. A first-time registration therefore fell through to the real backend and failed when the local backend/mail setup was unavailable.
