@@ -286,7 +286,21 @@ Added the repeatable production/staging smoke helper for the real SMTP gate:
 - the helper calls `/auth/verify-email-code`;
 - the helper confirms login succeeds only after verification.
 
-Google SMTP setup is documented in `docs/email-provider-smoke-checklist.md` with `smtp.gmail.com`, port `587`, and a Google App Password. This gate remains open until the backend runtime environment is configured with real Google SMTP credentials and the helper passes against `https://bricky.bg/api` or an isolated staging API.
+Google SMTP setup is documented in `docs/email-provider-smoke-checklist.md` with `smtp.gmail.com`, port `587`, and a Google App Password.
+
+Production smoke result: passed on 2026-07-11.
+
+- production was deployed to commit `42962a7282e4a7b5308c09380a29bf03b6cfa4cc`;
+- production health checks passed through `https://bricky.bg/api/health/ready`;
+- `/auth/verify-email-code` was confirmed available in production;
+- a disposable client account was registered through `https://bricky.bg/api/auth/register`;
+- login before verification was blocked;
+- the verification email arrived through real Gmail SMTP;
+- the 6-digit email code was accepted by the production API;
+- the API returned `emailVerifiedAt`;
+- login after verification succeeded and returned an access token.
+
+No SMTP credentials, verification code, JWT, or disposable password were recorded in documentation.
 
 ## Mock Registration P0 Fix - 2026-07-10
 

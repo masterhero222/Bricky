@@ -204,3 +204,20 @@ Before enabling this flow publicly:
 - no real SMTP credentials may appear in git history;
 - production `FRONTEND_URL` must point to `https://bricky.bg`;
 - rollback must include disabling the mail provider env values and restarting the backend.
+
+## Production Smoke Evidence - 2026-07-11
+
+Result: passed against `https://bricky.bg/api` with Google SMTP.
+
+Evidence:
+
+- production backend health returned `status = ok`, `database = ok`, and `storage = ok`;
+- `/auth/verify-email-code` was available in production and no longer returned `404`;
+- a disposable client account was registered with a Gmail plus-address;
+- login before verification was rejected with the expected unverified-email response;
+- the verification email arrived through the configured Gmail SMTP account;
+- the 6-digit email code was consumed successfully by `/auth/verify-email-code`;
+- the API returned a verified user with `emailVerifiedAt` set;
+- login after verification succeeded and returned an access token.
+
+No SMTP credentials, verification code, JWT, or passwords were recorded in this document.
