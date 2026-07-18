@@ -141,13 +141,31 @@
   position: relative;
   z-index: 3;
   justify-self: end;
+  align-self: end;
   display: inline-flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding: 13px 22px;
   color: var(--wpp-cyan-soft);
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
+  border-radius: 999px;
+  text-shadow: 0 0 14px rgba(36, 212, 242, 0.38);
+}
+
+.wpp-verified::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -26px -70px -26px -54px;
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at center, rgba(2, 8, 17, 0.92) 0%, rgba(4, 16, 29, 0.74) 48%, transparent 76%),
+    radial-gradient(ellipse at center, rgba(36, 212, 242, 0.16) 0%, transparent 62%);
+  filter: blur(2px);
+  pointer-events: none;
 }
 
 .wpp-verified svg {

@@ -354,7 +354,7 @@ export default function RepairMap() {
             <button onClick={loadMapRequests} className="px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 font-bold">
               Обнови
             </button>
-            <Link to="/worker/profile" className="px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 font-bold">
+            <Link to="/worker/profile?tab=requests" className="px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 font-bold">
               Към заявки
             </Link>
           </div>

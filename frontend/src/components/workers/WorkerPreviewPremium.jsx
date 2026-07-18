@@ -1,7 +1,6 @@
 import {
   BadgeCheck,
   BriefcaseBusiness,
-  Check,
   CircleX,
   Images,
   MapPin,
@@ -107,11 +106,6 @@ export default function WorkerPreviewPremium({
                   event.currentTarget.src = "/media_files/Snejan.jpg";
                 }}
               />
-              {approved && (
-                <span className="wpp-avatar-verified" aria-label="Проверен майстор">
-                  <Check aria-hidden="true" />
-                </span>
-              )}
             </div>
 
             <h1 className="wpp-worker-name">{name}</h1>

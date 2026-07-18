@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
@@ -106,8 +107,25 @@ function toNum(x) {
   return Number.isFinite(n) ? n : null;
 }
 
+const WORKER_TABS = new Set([
+  "dashboard",
+  "requests",
+  "profile",
+  "referrals",
+  "gallery",
+  "calculator",
+  "settings",
+  "subscription",
+]);
+
+function normalizeWorkerTab(tab) {
+  return WORKER_TABS.has(tab) ? tab : "dashboard";
+}
+
 export default function WorkerProfile() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => normalizeWorkerTab(searchParams.get("tab")));
 
   const [profile, setProfile] = useState({
     fullName: "",
@@ -129,6 +147,22 @@ export default function WorkerProfile() {
 
   const [previewAvatar, setPreviewAvatar] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const nextTab = normalizeWorkerTab(searchParams.get("tab"));
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [searchParams]);
+
+  function selectWorkerTab(key) {
+    if (key === "map") {
+      navigate("/repair-map");
+      return;
+    }
+
+    const nextTab = normalizeWorkerTab(key);
+    setActiveTab(nextTab);
+    navigate(nextTab === "dashboard" ? "/worker/profile" : `/worker/profile?tab=${encodeURIComponent(nextTab)}`);
+  }
 
   const [requests, setRequests] = useState([]);
   const [completedRequests, setCompletedRequests] = useState([]);
@@ -869,9 +903,9 @@ export default function WorkerProfile() {
     previewAvatar || (profile.avatarUrl ? absUrl(profile.avatarUrl) : "") || "/media_files/Snejan.jpg";
 
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
-      <aside className="w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
-        <nav className="flex flex-col gap-4 px-6 text-sm">
+    <div className="flex min-h-screen bg-[#07101d] text-white">
+      <aside className="w-64 bg-[#0a1929]/95 border-r border-cyan-400/15 pt-24 fixed h-full shadow-2xl shadow-cyan-950/20">
+        <nav className="flex flex-col gap-2 px-5 text-sm">
           {[
             ["dashboard", "Контрол панел"],
             ["requests", "Заявки"],
@@ -885,11 +919,13 @@ export default function WorkerProfile() {
           ].map(([key, label]) => (
             <button
               key={key}
-              onClick={() => {
-                if (key === "map") window.location.href = "/repair-map";
-                else setActiveTab(key);
-              }}
-              className={activeTab === key ? "text-red-400 font-bold" : "hover:text-red-300"}
+              type="button"
+              onClick={() => selectWorkerTab(key)}
+              className={`rounded-xl px-4 py-3 text-left font-bold transition ${
+                activeTab === key
+                  ? "border border-green-400/20 bg-green-400/10 text-green-300 shadow-lg shadow-green-950/20"
+                  : "text-slate-300 hover:bg-cyan-400/10 hover:text-cyan-100"
+              }`}
             >
               {label}
             </button>
@@ -901,18 +937,18 @@ export default function WorkerProfile() {
         </nav>
       </aside>
 
-      <main className="flex-1 ml-64 pt-24 px-10 pb-20">
+      <main className="flex-1 ml-64 pt-24 px-10 pb-20 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)]">
         {activeTab === "dashboard" && (
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-6xl mx-auto rounded-2xl border border-cyan-400/15 bg-[#081827]/75 p-6 shadow-2xl shadow-cyan-950/20">
             <div className="flex items-center justify-between gap-4 mb-6">
-              <h1 className="text-3xl font-bold">Контрол панел</h1>
+              <h1 className="text-3xl font-black">Контрол панел</h1>
 
               <button
                 onClick={() => {
                   loadRequests();
                   loadMyReviews();
                 }}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
+                className="rounded-xl bg-green-500 px-5 py-3 font-black text-white shadow-lg shadow-green-950/30 transition hover:bg-green-400"
               >
                 Обнови
               </button>
@@ -923,13 +959,13 @@ export default function WorkerProfile() {
             {applyMsg && <p className="text-yellow-300 mt-2">{applyMsg}</p>}
 
             <div className="grid md:grid-cols-4 gap-4 mt-4">
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">Общо заявки</p>
-                <p className="text-3xl font-bold mt-2">{stats.total}</p>
+              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
+                <p className="text-cyan-100/70 text-sm">Общо заявки</p>
+                <p className="text-3xl font-black mt-2">{stats.total}</p>
               </div>
 
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">Рейтинг</p>
+              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
+                <p className="text-cyan-100/70 text-sm">Рейтинг</p>
                 {ratingLoading ? (
                   <p className="text-gray-400 mt-2">Зареждане...</p>
                 ) : ratingError ? (
@@ -942,8 +978,8 @@ export default function WorkerProfile() {
                 )}
               </div>
 
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">По статус</p>
+              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
+                <p className="text-cyan-100/70 text-sm">По статус</p>
                 <div className="mt-3 space-y-2 text-sm">
                   {Object.keys(stats.byStatus).length === 0 ? (
                     <p className="text-gray-500">—</p>
@@ -958,8 +994,8 @@ export default function WorkerProfile() {
                 </div>
               </div>
 
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">По категория</p>
+              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
+                <p className="text-cyan-100/70 text-sm">По категория</p>
                 <div className="mt-3 space-y-2 text-sm">
                   {Object.keys(stats.byCategory).length === 0 ? (
                     <p className="text-gray-500">—</p>
@@ -975,7 +1011,7 @@ export default function WorkerProfile() {
               </div>
             </div>
 
-            <div className="mt-8 bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <div className="mt-8 rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-6 shadow-inner shadow-cyan-950/20">
               <h2 className="text-xl font-bold mb-4">Последни заявки</h2>
 
               {stats.newest.length === 0 ? (
