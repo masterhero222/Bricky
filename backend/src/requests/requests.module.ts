@@ -9,6 +9,7 @@ import { RequestEventEntity } from './entities/request-event.entity';
 import { RequestPricingSnapshotEntity } from './entities/request-pricing-snapshot.entity';
 import { RequestsService } from './requests.service';
 import { RequestsController } from './requests.controller';
+import { RequestLifecycleService } from './request-lifecycle.service';
 import { MailModule } from '../mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { WorkersModule } from '../workers/workers.module';
@@ -36,7 +37,7 @@ import { WorkerProfileEntity } from '../workers/worker-profile.entity';
     MediaModule,
   ],
   controllers: [RequestsController],
-  providers: [RequestsService],
-  exports: [RequestsService],
+  providers: [RequestsService, RequestLifecycleService],
+  exports: [RequestsService, RequestLifecycleService],
 })
 export class RequestsModule {}
