@@ -29,6 +29,16 @@ const CLIENTS = [
   }
 ];
 
+const ADMINS = [
+  {
+    id: 1,
+    role: "super_admin",
+    name: "Bricky Admin",
+    email: "admin@bricky.dev",
+    status: "active",
+  },
+];
+
 const WORKERS = [
   {
     "id": 1,
@@ -44,7 +54,14 @@ const WORKERS = [
     ],
     "description": "ВиК ремонти, течове, сифони и смесители.",
     "experience": "8 години",
-    "equipment": "Професионални инструменти за ВиК диагностика."
+    "equipment": "Професионални инструменти за ВиК диагностика.",
+    "avatarUrl": "/media_files/maistor.png",
+    "approvalStatus": "approved",
+    "visibilityStatus": "public",
+    "gallery": [
+      { id: "gallery-201-1", userId: 201, name: "Смяна на сифон", url: "/media_files/banq.jpg", created_at: "2026-07-01T09:00:00.000Z" },
+      { id: "gallery-201-2", userId: 201, name: "Баня след ремонт", url: "/media_files/banq2.jpg", created_at: "2026-07-02T09:00:00.000Z" }
+    ]
   },
   {
     "id": 2,
@@ -60,7 +77,17 @@ const WORKERS = [
     ],
     "description": "Контакти, табла, осветление и аварийни ремонти.",
     "experience": "6 години",
-    "equipment": "Тестер, инструменти за ел. инсталации."
+    "equipment": "Тестер, инструменти за ел. инсталации.",
+    "avatarUrl": "/media_files/worker_1011_1781367743213.jpg",
+    "approvalStatus": "approved",
+    "visibilityStatus": "public",
+    "gallery": [
+      { id: "gallery-202-1", userId: 202, name: "Ел. табло", url: "/media_files/images.jpg", created_at: "2026-07-03T09:00:00.000Z" },
+      { id: "gallery-202-2", userId: 202, name: "Осветление", url: "/media_files/download.jpg", created_at: "2026-07-04T09:00:00.000Z" }
+    ],
+    "isBoosted": true,
+    "boostSource": "referral",
+    "boostEndsAt": "2026-08-15T23:59:59.000Z"
   },
   {
     "id": 3,
@@ -77,7 +104,14 @@ const WORKERS = [
     ],
     "description": "Бани, плочки, шпакловка и довършителни работи.",
     "experience": "10 години",
-    "equipment": "Машина за рязане на плочки, лазерен нивелир."
+    "equipment": "Машина за рязане на плочки, лазерен нивелир.",
+    "avatarUrl": "/media_files/worker_1010_1771026735538.png",
+    "approvalStatus": "pending",
+    "visibilityStatus": "hidden",
+    "gallery": [
+      { id: "gallery-203-1", userId: 203, name: "Плочки баня", url: "/media_files/banq3.jpg", created_at: "2026-07-05T09:00:00.000Z" },
+      { id: "gallery-203-2", userId: 203, name: "Фаянс", url: "/media_files/sadsadasd.jpg", created_at: "2026-07-06T09:00:00.000Z" }
+    ]
   }
 ];
 function nowIso() {
@@ -116,10 +150,16 @@ function guessRepairCategory(text) {
 }
 
 function seedDb() {
+  const referralRewardEndsAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
   return {
-    mapSeedVersion: 4,
+    mapSeedVersion: 5,
     nextRequestId: 7,
     nextReviewId: 1,
+    nextUserId: 301,
+    nextWorkerId: 4,
+    nextReferralId: 3,
+    nextRewardId: 2,
+    admins: ADMINS,
     repairCategories: REPAIR_CATEGORY_OPTIONS.map((category) => ({
       ...category,
       flow: REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other,
@@ -127,6 +167,55 @@ function seedDb() {
     clients: CLIENTS,
     workers: WORKERS,
     reviews: [],
+    referrals: [
+      {
+        id: 1,
+        code: "BRGEO201",
+        type: "worker_invites_worker",
+        referrerUserId: 201,
+        referredUserId: 202,
+        status: "rewarded",
+        qualifiedRepairCount: 2,
+        createdAt: "2026-07-01T09:00:00.000Z",
+        rewards: [
+          {
+            id: 1,
+            referralId: 1,
+            rewardType: "worker_visibility_boost_30d",
+            status: "active",
+            startsAt: "2026-07-15T00:00:00.000Z",
+            endsAt: referralRewardEndsAt,
+          },
+        ],
+      },
+      {
+        id: 2,
+        code: "BRELE202",
+        type: "worker_invites_worker",
+        referrerUserId: 202,
+        referredUserId: null,
+        status: "created",
+        qualifiedRepairCount: 0,
+        createdAt: "2026-07-10T09:00:00.000Z",
+        rewards: [],
+      },
+    ],
+    media: [
+      { id: 1, kind: "worker_avatar", ownerUserId: 201, publicUrl: "/media_files/maistor.png", moderationStatus: "approved", createdAt: nowIso() },
+      { id: 2, kind: "worker_gallery", ownerUserId: 202, publicUrl: "/media_files/images.jpg", moderationStatus: "pending", createdAt: nowIso() },
+      { id: 3, kind: "request_before", ownerUserId: 101, requestId: 1, publicUrl: "/media_files/banq.jpg", moderationStatus: "approved", createdAt: nowIso() },
+    ],
+    auditLogs: [
+      {
+        id: 1,
+        adminUserId: 1,
+        action: "dev_seed_loaded",
+        targetType: "mock",
+        targetId: null,
+        reason: "local best-of mock",
+        createdAt: nowIso(),
+      },
+    ],
     requests: [
       {
         id: 1,
@@ -315,6 +404,23 @@ function readDb() {
         writeDb(migrated);
         return migrated;
       }
+      if (Number(db?.mapSeedVersion || 0) < 5 || !Array.isArray(db?.admins) || !Array.isArray(db?.referrals)) {
+        const seeded = seedDb();
+        const migrated = {
+          ...db,
+          mapSeedVersion: 5,
+          nextUserId: Math.max(Number(db.nextUserId || 0), seeded.nextUserId),
+          nextWorkerId: Math.max(Number(db.nextWorkerId || 0), seeded.nextWorkerId),
+          nextReferralId: Math.max(Number(db.nextReferralId || 0), seeded.nextReferralId),
+          nextRewardId: Math.max(Number(db.nextRewardId || 0), seeded.nextRewardId),
+          admins: Array.isArray(db.admins) ? db.admins : seeded.admins,
+          referrals: Array.isArray(db.referrals) ? db.referrals : seeded.referrals,
+          media: Array.isArray(db.media) ? db.media : seeded.media,
+          auditLogs: Array.isArray(db.auditLogs) ? db.auditLogs : seeded.auditLogs,
+        };
+        writeDb(migrated);
+        return migrated;
+      }
       return db;
     }
   } catch {
@@ -366,7 +472,12 @@ function currentUser() {
   const role = localStorage.getItem("role") || "client";
   const id = Number(localStorage.getItem("userId")) || (role === "worker" ? 201 : 101);
   const db = readDb();
-  const user = role === "worker" ? db.workers.find((w) => Number(w.userId) === id) : db.clients.find((c) => Number(c.id) === id);
+  const user =
+    role === "worker"
+      ? db.workers.find((w) => Number(w.userId) === id)
+      : ["admin", "super_admin"].includes(role)
+      ? db.admins?.find((a) => Number(a.id) === id)
+      : db.clients.find((c) => Number(c.id) === id);
   return user || { id, userId: id, role, name: role === "worker" ? "Dev Worker" : "Dev Client" };
 }
 
@@ -565,12 +676,18 @@ function publicUser(user) {
     email: user.email,
     phone: user.phone,
     address: user.address,
+    status: user.status || "active",
     city: user.city,
     skills: user.skills || [],
     description: user.description,
     experience: user.experience,
     equipment: user.equipment,
     avatarUrl: user.avatarUrl || "",
+    approvalStatus: user.approvalStatus,
+    visibilityStatus: user.visibilityStatus,
+    isBoosted: Boolean(user.isBoosted),
+    boostSource: user.boostSource || null,
+    boostEndsAt: user.boostEndsAt || null,
     completedJobs: user.completedJobs || [],
   };
 }
@@ -595,7 +712,12 @@ export function isDevMockToken() {
 
 export function setDevIdentity(role, id) {
   const db = readDb();
-  const user = role === "worker" ? db.workers.find((w) => Number(w.userId) === Number(id)) : db.clients.find((c) => Number(c.id) === Number(id));
+  const user =
+    role === "worker"
+      ? db.workers.find((w) => Number(w.userId) === Number(id))
+      : ["admin", "super_admin"].includes(role)
+      ? db.admins?.find((a) => Number(a.id) === Number(id))
+      : db.clients.find((c) => Number(c.id) === Number(id));
   if (!user) return null;
 
   const userId = role === "worker" ? user.userId : user.id;
@@ -614,7 +736,93 @@ export function resetDevDb() {
 
 export function getDevIdentities() {
   const db = readDb();
-  return { clients: db.clients, workers: db.workers };
+  return { admins: db.admins || ADMINS, clients: db.clients, workers: db.workers };
+}
+
+function makeReferralCode(seed) {
+  const compact = String(seed || "BRICKY").replace(/[^a-z0-9]/gi, "").slice(0, 5).toUpperCase() || "BRICK";
+  return `BR${compact}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+}
+
+function getOrCreateWorkerReferral(db, workerUserId) {
+  const existing = db.referrals.find((referral) => Number(referral.referrerUserId) === Number(workerUserId) && !referral.referredUserId);
+  if (existing) return existing;
+
+  const worker = db.workers.find((w) => Number(w.userId) === Number(workerUserId));
+  const referral = {
+    id: db.nextReferralId++,
+    code: makeReferralCode(worker?.fullName || workerUserId),
+    type: "worker_invites_worker",
+    referrerUserId: Number(workerUserId),
+    referredUserId: null,
+    status: "created",
+    qualifiedRepairCount: 0,
+    createdAt: nowIso(),
+    rewards: [],
+  };
+  db.referrals.push(referral);
+  return referral;
+}
+
+function referralSummary(db, workerUserId) {
+  const ownCode = getOrCreateWorkerReferral(db, workerUserId);
+  const invites = db.referrals.filter((referral) => Number(referral.referrerUserId) === Number(workerUserId));
+  const rewards = invites.flatMap((referral) => referral.rewards || []);
+
+  return {
+    code: ownCode.code,
+    referralUrl: `${window.location.origin}/worker/register?ref=${ownCode.code}`,
+    invites,
+    rewards,
+  };
+}
+
+function addAudit(db, action, targetType, targetId, reason = "dev_mock") {
+  db.auditLogs = Array.isArray(db.auditLogs) ? db.auditLogs : [];
+  db.auditLogs.unshift({
+    id: db.auditLogs.length ? Math.max(...db.auditLogs.map((log) => Number(log.id) || 0)) + 1 : 1,
+    adminUserId: Number(localStorage.getItem("userId") || 1),
+    action,
+    targetType,
+    targetId,
+    reason,
+    createdAt: nowIso(),
+  });
+}
+
+function maybeActivateReferralReward(db, workerUserId) {
+  const referral = db.referrals.find((ref) => Number(ref.referredUserId) === Number(workerUserId));
+  if (!referral || referral.status === "rejected") return;
+
+  const completedForWorker = db.requests.filter((req) => Number(req.completedByWorkerId) === Number(workerUserId) && req.status === "завършена");
+  const uniqueClients = new Set(completedForWorker.map((req) => Number(req.clientUserId)));
+  referral.qualifiedRepairCount = Math.min(uniqueClients.size, 2);
+
+  if (referral.qualifiedRepairCount >= 2 && !(referral.rewards || []).some((reward) => reward.status === "active")) {
+    const startsAt = nowIso();
+    const endsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    referral.status = "rewarded";
+    referral.rewards = [
+      ...(referral.rewards || []),
+      {
+        id: db.nextRewardId++,
+        referralId: referral.id,
+        rewardType: "worker_visibility_boost_30d",
+        status: "active",
+        startsAt,
+        endsAt,
+      },
+    ];
+
+    const referrer = db.workers.find((worker) => Number(worker.userId) === Number(referral.referrerUserId));
+    if (referrer) {
+      referrer.isBoosted = true;
+      referrer.boostSource = "referral";
+      referrer.boostEndsAt = endsAt;
+    }
+  } else if (referral.referredUserId) {
+    referral.status = "accepted";
+  }
 }
 
 export async function mockRequest(method, url, data) {
@@ -625,14 +833,191 @@ export async function mockRequest(method, url, data) {
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
 
   if (method === "post" && path === "/auth/dev-login") {
-    const loginRole = data?.role === "worker" ? "worker" : "client";
-    const first = loginRole === "worker" ? db.workers[0] : db.clients[0];
+    const loginRole = ["worker", "admin", "super_admin"].includes(data?.role) ? data.role : "client";
+    const first =
+      loginRole === "worker"
+        ? db.workers[0]
+        : ["admin", "super_admin"].includes(loginRole)
+        ? db.admins[0]
+        : db.clients[0];
     setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
     return response({ token: localStorage.getItem("token"), user: publicUser(first) });
   }
 
+  if (method === "post" && path === "/auth/register") {
+    const registerRole = data?.role === "worker" ? "worker" : "client";
+    const email = String(data?.email || "").trim().toLowerCase();
+    if (!email) return fail("Email is required", 400);
+    if ([...db.clients, ...db.workers, ...(db.admins || [])].some((item) => String(item.email || "").toLowerCase() === email)) {
+      return fail("Email already exists", 409);
+    }
+
+    const newUserId = db.nextUserId++;
+    if (registerRole === "worker") {
+      const worker = {
+        id: db.nextWorkerId++,
+        userId: newUserId,
+        role: "worker",
+        fullName: data?.fullName || data?.name || "Нов майстор",
+        name: data?.fullName || data?.name || "Нов майстор",
+        email,
+        phone: data?.phone || "",
+        city: data?.city || "",
+        skills: Array.isArray(data?.skills) ? data.skills : [],
+        description: data?.description || "",
+        experience: data?.experience || "",
+        equipment: data?.equipment || "",
+        avatarUrl: "",
+        approvalStatus: "pending",
+        visibilityStatus: "hidden",
+        gallery: [],
+        completedJobs: [],
+        created_at: nowIso(),
+      };
+      db.workers.push(worker);
+
+      const code = String(data?.referralCode || "").trim().toUpperCase();
+      const referral = db.referrals.find((item) => item.code === code && !item.referredUserId && item.status !== "rejected");
+      if (referral) {
+        referral.referredUserId = newUserId;
+        referral.status = "accepted";
+        referral.acceptedAt = nowIso();
+      }
+
+      writeDb(db);
+      return response({ token: `local-dev-token-worker-${newUserId}`, user: publicUser(worker) }, 201);
+    }
+
+    const client = {
+      id: newUserId,
+      role: "client",
+      name: data?.name || data?.fullName || "Нов клиент",
+      email,
+      phone: data?.phone || "",
+      address: data?.address || "",
+      status: "active",
+      created_at: nowIso(),
+    };
+    db.clients.push(client);
+    writeDb(db);
+    return response({ token: `local-dev-token-client-${newUserId}`, user: publicUser(client) }, 201);
+  }
+
   if (method === "get" && path === "/client/me") return response(publicUser(user));
   if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
+  if (method === "get" && path === "/referrals/me") {
+    if (role !== "worker") return fail("Worker only", 403);
+    const summary = referralSummary(db, userId);
+    writeDb(db);
+    return response(summary);
+  }
+  if (method === "post" && path === "/referrals/me/code") {
+    if (role !== "worker") return fail("Worker only", 403);
+    const summary = referralSummary(db, userId);
+    writeDb(db);
+    return response(summary, 201);
+  }
+  if (method === "post" && path === "/referrals/validate") {
+    const code = String(data?.code || data?.referralCode || "").trim().toUpperCase();
+    const referral = db.referrals.find((item) => item.code === code && item.status !== "rejected");
+    return response({ valid: Boolean(referral), code, referral });
+  }
+  const referralValidateMatch = path.match(/^\/referrals\/validate\/([^/]+)$/);
+  if (method === "get" && referralValidateMatch) {
+    const code = decodeURIComponent(referralValidateMatch[1]).toUpperCase();
+    const referral = db.referrals.find((item) => item.code === code && item.status !== "rejected");
+    return response({ valid: Boolean(referral), code, referral });
+  }
+
+  if (path.startsWith("/admin/")) {
+    if (!["admin", "super_admin"].includes(role)) return fail("Admin only", 403);
+
+    if (method === "get" && path === "/admin/users") {
+      return response([
+        ...(db.clients || []).map(publicUser),
+        ...(db.workers || []).map(publicUser),
+        ...(db.admins || []).map(publicUser),
+      ]);
+    }
+    if (method === "get" && path === "/admin/workers") {
+      return response((db.workers || []).map((worker) => ({
+        ...publicUser(worker),
+        workerUserId: worker.userId,
+        publicName: worker.fullName || worker.name,
+      })));
+    }
+    if (method === "get" && path === "/admin/requests") return response(sortNewest(db.requests || []));
+    if (method === "get" && path === "/admin/media") return response(db.media || []);
+    if (method === "get" && path === "/admin/referrals") return response(db.referrals || []);
+    if (method === "get" && path === "/admin/audit") return response(db.auditLogs || []);
+
+    const userStatusMatch = path.match(/^\/admin\/users\/(\d+)\/status$/);
+    if (method === "post" && userStatusMatch) {
+      const targetId = Number(userStatusMatch[1]);
+      const target = [...(db.clients || []), ...(db.workers || []), ...(db.admins || [])].find((item) => Number(item.id) === targetId || Number(item.userId) === targetId);
+      if (!target) return fail("User not found", 404);
+      target.status = data?.status || "active";
+      addAudit(db, "user_status_changed", "user", targetId, data?.reason || target.status);
+      writeDb(db);
+      return response(publicUser(target));
+    }
+
+    const workerApprovalMatch = path.match(/^\/admin\/workers\/(\d+)\/approval$/);
+    if (method === "post" && workerApprovalMatch) {
+      const targetId = Number(workerApprovalMatch[1]);
+      const worker = db.workers.find((item) => Number(item.userId) === targetId || Number(item.id) === targetId);
+      if (!worker) return fail("Worker not found", 404);
+      worker.approvalStatus = data?.approvalStatus || data?.status || "approved";
+      worker.visibilityStatus = worker.approvalStatus === "approved" ? "public" : "hidden";
+      addAudit(db, "worker_approval_changed", "worker", worker.userId, worker.approvalStatus);
+      writeDb(db);
+      return response(publicUser(worker));
+    }
+
+    const requestStatusMatch = path.match(/^\/admin\/requests\/(\d+)\/status$/);
+    if (method === "post" && requestStatusMatch) {
+      const request = db.requests.find((item) => Number(item.id) === Number(requestStatusMatch[1]));
+      if (!request) return fail("Request not found", 404);
+      request.status = data?.status || request.status;
+      request.statusKey = data?.status || request.statusKey;
+      addAudit(db, "request_status_changed", "request", request.id, request.status);
+      writeDb(db);
+      return response(request);
+    }
+
+    const mediaModerationMatch = path.match(/^\/admin\/media\/(\d+)\/moderation$/);
+    if (method === "post" && mediaModerationMatch) {
+      const media = db.media.find((item) => Number(item.id) === Number(mediaModerationMatch[1]));
+      if (!media) return fail("Media not found", 404);
+      media.moderationStatus = data?.moderationStatus || "approved";
+      addAudit(db, "media_moderation_changed", "media", media.id, media.moderationStatus);
+      writeDb(db);
+      return response(media);
+    }
+
+    const referralRejectMatch = path.match(/^\/admin\/referrals\/(\d+)\/reject$/);
+    if (method === "post" && referralRejectMatch) {
+      const referral = db.referrals.find((item) => Number(item.id) === Number(referralRejectMatch[1]));
+      if (!referral) return fail("Referral not found", 404);
+      referral.status = "rejected";
+      referral.rejectionReason = data?.reason || "admin_review";
+      addAudit(db, "referral_rejected", "referral", referral.id, referral.rejectionReason);
+      writeDb(db);
+      return response(referral);
+    }
+
+    const referralRewardActionMatch = path.match(/^\/admin\/referrals\/(\d+)\/(revoke-reward|restore-reward)$/);
+    if (method === "post" && referralRewardActionMatch) {
+      const referral = db.referrals.find((item) => Number(item.id) === Number(referralRewardActionMatch[1]));
+      if (!referral) return fail("Referral not found", 404);
+      const nextStatus = referralRewardActionMatch[2] === "revoke-reward" ? "revoked" : "active";
+      referral.rewards = (referral.rewards || []).map((reward) => ({ ...reward, status: nextStatus }));
+      addAudit(db, `referral_reward_${nextStatus}`, "referral", referral.id, data?.reason || "admin_review");
+      writeDb(db);
+      return response(referral);
+    }
+  }
+
   if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId)));
   if (method === "get" && path === "/workers") return response(db.workers.map(publicUser));
 
@@ -811,6 +1196,7 @@ export async function mockRequest(method, url, data) {
       created_at: nowIso(),
     };
     db.reviews.push(review);
+    maybeActivateReferralReward(db, review.workerUserId);
     writeDb(db);
     return response(review, 201);
   }

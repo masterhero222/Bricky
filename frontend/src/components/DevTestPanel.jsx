@@ -18,7 +18,7 @@ export default function DevTestPanel() {
 
   if (!import.meta.env.DEV) return null;
 
-  const { clients, workers } = getDevIdentities();
+  const { admins, clients, workers } = getDevIdentities();
   const activeRole = localStorage.getItem("role") || "none";
   const activeUserId = localStorage.getItem("userId") || "";
   const activeName = localStorage.getItem("userName") || "няма";
@@ -26,7 +26,11 @@ export default function DevTestPanel() {
 
   const login = (role, id) => {
     setDevIdentity(role, id);
-    window.location.href = role === "worker" ? "/worker/profile" : "/client/profile";
+    window.location.href = ["admin", "super_admin"].includes(role)
+      ? "/admin"
+      : role === "worker"
+      ? "/worker/profile"
+      : "/client/profile";
   };
 
   return (
@@ -40,13 +44,29 @@ export default function DevTestPanel() {
       </button>
 
       {visible && (
-        <div className="mt-3 w-80 rounded-xl border border-fuchsia-500/40 bg-gray-950 p-4 shadow-2xl">
+        <div className="mt-3 w-[44rem] max-w-[calc(100vw-2rem)] rounded-xl border border-fuchsia-500/40 bg-gray-950 p-4 shadow-2xl">
           <div className="mb-3 text-sm">
             <div className="font-bold text-fuchsia-200">Активен: {activeName}</div>
             <div className="text-gray-400">role={activeRole}, userId={activeUserId || "-"}, mock={String(activeMock)}</div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase text-gray-400">Admin</div>
+              <div className="space-y-2">
+                {(admins || []).map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => login(a.role || "admin", a.id)}
+                    className="w-full rounded bg-blue-700 px-3 py-2 text-left text-xs font-semibold hover:bg-blue-600"
+                  >
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <div className="mb-2 text-xs font-bold uppercase text-gray-400">Клиенти</div>
               <div className="space-y-2">

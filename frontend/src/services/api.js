@@ -28,8 +28,13 @@ function shouldUseMock(url) {
     import.meta.env.DEV &&
     (isDevMockToken() ||
       path.includes("/auth/dev-login") ||
+      path === "/auth/register" ||
       path === "/repair-categories" ||
       path === "/workers" ||
+      path.startsWith("/admin/") ||
+      path.startsWith("/referrals") ||
+      path.startsWith("/requests") ||
+      path.startsWith("/reviews") ||
       /^\/workers\/\d+/.test(path))
   );
 }
