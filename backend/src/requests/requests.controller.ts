@@ -70,6 +70,13 @@ export class RequestsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post(':id/withdraw')
+  async withdraw(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.withdrawApplication(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post(':id/assign')
   async assign(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');

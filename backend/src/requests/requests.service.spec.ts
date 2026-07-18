@@ -200,4 +200,75 @@ describe('RequestsService v2 data core', () => {
 
     expect(feed.map((request) => request.id)).toEqual([1]);
   });
+
+  it('lets a worker withdraw an application before being selected', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: null,
+      status: 'applied',
+      archivedAt: null,
+      createdAt: new Date(),
+      client: {},
+    };
+    const application: any = { requestId: 1, workerUserId: 201, status: 'applied' };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(application),
+      find: jest.fn().mockResolvedValue([application]),
+      save: jest.fn(async (value) => value),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+
+    await service.withdrawApplication(1, 201);
+
+    expect(application.status).toBe('withdrawn');
+    expect(repairRequestsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'published' }));
+  });
+
+  it('blocks worker withdrawal after the client selected that worker', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'worker_selected',
+        archivedAt: null,
+        client: {},
+      }),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+
+    await expect(service.withdrawApplication(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('blocks client unassign after the worker started work', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'in_progress',
+        client: {},
+      }),
+    });
+    const service = serviceWith({ repairRequestsRepo });
+
+    await expect(service.unassignWorker(1, 101)).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

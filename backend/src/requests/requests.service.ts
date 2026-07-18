@@ -320,6 +320,38 @@ export class RequestsService {
     return this.toDto(req);
   }
 
+  async withdrawApplication(requestId: number, workerUserId: number) {
+    await this.assertWorkerCanTakeJobs(workerUserId);
+
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+    if (['completed', 'canceled', 'archived'].includes(req.status) || req.archivedAt) {
+      throw new BadRequestException('Request is closed');
+    }
+    if (Number(req.assignedWorkerUserId) === Number(workerUserId)) {
+      throw new BadRequestException('Cannot withdraw after the client selected you');
+    }
+
+    const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
+    if (!application) throw new NotFoundException('Application not found');
+    if (application.status === 'assigned') {
+      throw new BadRequestException('Cannot withdraw after the client selected you');
+    }
+    if (['withdrawn', 'rejected'].includes(application.status)) return this.toDto(req);
+
+    application.status = 'withdrawn';
+    await this.applicationsRepo.save(application);
+
+    if (!req.assignedWorkerUserId) {
+      const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
+      req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
+      await this.repairRequestsRepo.save(req);
+    }
+
+    await this.addEvent(requestId, workerUserId, 'application.withdrawn', {});
+    return this.toDto(req);
+  }
+
   async assignWorker(requestId: number, clientUserId: number, workerUserId: number) {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
@@ -406,6 +438,10 @@ export class RequestsService {
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
     if (req.status === 'completed') throw new BadRequestException('Already completed');
+    if (!req.assignedWorkerUserId) throw new BadRequestException('No assigned worker');
+    if (['in_progress', 'work_finished', 'ready_for_client_confirmation'].includes(req.status)) {
+      throw new BadRequestException('Cannot unassign after the worker started work');
+    }
 
     const assignedWorkerId = Number(req.assignedWorkerUserId);
     req.assignedWorkerUserId = null;

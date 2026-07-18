@@ -131,6 +131,7 @@ export default function WorkerProfile() {
   const [reqError, setReqError] = useState("");
 
   const [applyingId, setApplyingId] = useState(null);
+  const [withdrawingId, setWithdrawingId] = useState(null);
   const [applyMsg, setApplyMsg] = useState("");
 
   // ✅ COMPLETE state
@@ -285,6 +286,10 @@ export default function WorkerProfile() {
 
   function canComplete(req) {
     return false;
+  }
+
+  function canWithdrawApplication(req) {
+    return hasApplied(req) && !isAssignedToMe(req) && !toNum(req.assignedWorkerId) && !isClosed(req);
   }
 
   function workerStepAction(req) {
@@ -731,6 +736,27 @@ export default function WorkerProfile() {
     });
   }
 
+  async function withdrawApplication(requestId) {
+    try {
+      setApplyMsg("");
+      setWithdrawingId(requestId);
+
+      await apiPost(`/requests/${requestId}/withdraw`, {});
+
+      setApplyMsg(`Кандидатурата по заявка #${requestId} е оттеглена.`);
+      await loadRequests();
+    } catch (err) {
+      console.error("withdrawApplication error:", err);
+      const status = err?.response?.status;
+
+      if (status === 401) setApplyMsg("401: Нямаш валиден токен. Логни се пак.");
+      else if (status === 403) setApplyMsg("403: Нямаш права (трябва worker).");
+      else setApplyMsg(err?.response?.data?.message || "Неуспешно оттегляне на кандидатурата.");
+    } finally {
+      setWithdrawingId(null);
+    }
+  }
+
   async function advanceWorkerStep(req) {
     const action = workerStepAction(req);
     if (!action) return;
@@ -953,6 +979,7 @@ export default function WorkerProfile() {
                     const closed = isClosed(r);
                     const hasAssigned = !!toNum(r.assignedWorkerId);
                     const assignedToMe = isAssignedToMe(r);
+                    const canWithdraw = canWithdrawApplication(r);
 
                       const profileCannotApply = !canApplyToJobs();
                       const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === r.id;
@@ -1021,6 +1048,21 @@ export default function WorkerProfile() {
 
                           {assignedToMe && (
                             <span className="text-green-400 text-sm font-bold">Назначен</span>
+                          )}
+
+                          {canWithdraw && (
+                            <button
+                              type="button"
+                              onClick={() => withdrawApplication(r.id)}
+                              disabled={withdrawingId === r.id}
+                              className={
+                                withdrawingId === r.id
+                                  ? "bg-gray-700 text-gray-300 px-4 py-2 rounded-lg font-bold cursor-not-allowed"
+                                  : "bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg font-bold"
+                              }
+                            >
+                              {withdrawingId === r.id ? "Оттеглям..." : "Оттегли кандидатура"}
+                            </button>
                           )}
 
                           {/* ✅ Complete button */}
@@ -1145,6 +1187,7 @@ export default function WorkerProfile() {
                   const closed = isClosed(req);
                   const hasAssigned = !!toNum(req.assignedWorkerId);
                   const assignedToMe = isAssignedToMe(req);
+                  const canWithdraw = canWithdrawApplication(req);
 
                   const profileCannotApply = !canApplyToJobs();
                   const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === req.id;
@@ -1239,6 +1282,21 @@ export default function WorkerProfile() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {canWithdraw && (
+                            <button
+                              type="button"
+                              onClick={() => withdrawApplication(req.id)}
+                              disabled={withdrawingId === req.id}
+                              className={
+                                withdrawingId === req.id
+                                  ? "bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed"
+                                  : "bg-yellow-600 hover:bg-yellow-700 px-5 py-2 rounded-lg font-bold"
+                              }
+                            >
+                              {withdrawingId === req.id ? "Оттеглям..." : "Оттегли кандидатура"}
+                            </button>
+                          )}
+
                           {showAfterPhotos && (
                             <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
                               <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>

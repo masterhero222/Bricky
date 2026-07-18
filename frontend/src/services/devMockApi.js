@@ -1184,6 +1184,24 @@ export async function mockRequest(method, url, data) {
     return response(req);
   }
 
+  const withdrawMatch = path.match(/^\/requests\/(\d+)\/withdraw$/);
+  if (method === "post" && withdrawMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+
+    const req = db.requests.find((r) => Number(r.id) === Number(withdrawMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (["completed", "canceled", "archived"].includes(requestStatusKey(req)) || req.archivedAt) return fail("Request is closed", 400);
+    if (Number(req.assignedWorkerId) === userId) return fail("Cannot withdraw after the client selected you", 400);
+
+    req.appliedWorkers = (req.appliedWorkers || []).map(Number).filter((id) => id !== userId);
+    if (!req.assignedWorkerId && req.appliedWorkers.length === 0) setMockRequestStatus(req, "published");
+    else if (!req.assignedWorkerId) setMockRequestStatus(req, "applied");
+    writeDb(db);
+    return response(req);
+  }
+
   const assignMatch = path.match(/^\/requests\/(\d+)\/assign$/);
   if (method === "post" && assignMatch) {
     if (role !== "client") return fail("Client only", 400);
@@ -1199,6 +1217,22 @@ export async function mockRequest(method, url, data) {
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
     setMockRequestStatus(req, "worker_selected");
+    writeDb(db);
+    return response(req);
+  }
+
+  const unassignMatch = path.match(/^\/requests\/(\d+)\/unassign$/);
+  if (method === "post" && unassignMatch) {
+    if (role !== "client") return fail("Client only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(unassignMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+    if (!req.assignedWorkerId) return fail("No assigned worker", 400);
+    if (["in_progress", "work_finished", "ready_for_client_confirmation", "completed"].includes(requestStatusKey(req))) {
+      return fail("Cannot unassign after the worker started work", 400);
+    }
+    req.assignedWorkerId = null;
+    setMockRequestStatus(req, (req.appliedWorkers || []).length ? "applied" : "published");
     writeDb(db);
     return response(req);
   }

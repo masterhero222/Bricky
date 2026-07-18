@@ -128,6 +128,7 @@ export default function ClientProfile() {
   const [locationMessage, setLocationMessage] = useState("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
   const [actionMsg, setActionMsg] = useState("");
   const [assigningKey, setAssigningKey] = useState("");
+  const [unassigningId, setUnassigningId] = useState(null);
 
   // ✅ reviews state (real, not session-fantasy)
   const [reviewDraft, setReviewDraft] = useState({}); // { [requestId]: { rating, comment } }
@@ -378,6 +379,25 @@ export default function ClientProfile() {
     }
   }
 
+  function canUnassignWorker(statusKey) {
+    return ["worker_selected", "assigned", "worker_confirmed", "worker_on_site", "inspected"].includes(statusKey);
+  }
+
+  async function unassignWorker(requestId) {
+    try {
+      setActionMsg("");
+      setUnassigningId(requestId);
+      await apiPost(`/requests/${requestId}/unassign`, {});
+      setActionMsg(`Майсторът е премахнат от заявка #${requestId}.`);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setActionMsg(err?.response?.data?.message || "Не успях да премахна майстора.");
+    } finally {
+      setUnassigningId(null);
+    }
+  }
+
   async function confirmWork(requestId) {
     try {
       setActionMsg("");
@@ -514,6 +534,7 @@ export default function ClientProfile() {
                   const statusKey = r.statusKey || "";
                   const canConfirmWork = statusKey === "ready_for_client_confirmation";
                   const isCompleted = statusKey === "completed" && Boolean(r.archivedAt || r.isArchived);
+                  const canUnassign = assignedUserId && canUnassignWorker(statusKey);
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem || statusKey === "reviewed";
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
@@ -542,6 +563,20 @@ export default function ClientProfile() {
                           <div className="mt-3 text-sm text-slate-400">
                             {assignedUserId ? <><span>Избран майстор: </span><span className="font-bold text-green-300">{workersMap[assignedUserId]?.fullName || `userId ${assignedUserId}`}</span></> : "Няма избран майстор"}
                           </div>
+                          {canUnassign && (
+                            <button
+                              type="button"
+                              onClick={() => unassignWorker(r.id)}
+                              disabled={unassigningId === r.id}
+                              className={
+                                unassigningId === r.id
+                                  ? "mt-3 rounded-lg bg-gray-700 px-4 py-2 text-sm font-bold text-gray-300 cursor-not-allowed"
+                                  : "mt-3 rounded-lg bg-yellow-600 px-4 py-2 text-sm font-bold text-white hover:bg-yellow-700"
+                              }
+                            >
+                              {unassigningId === r.id ? "Премахвам..." : "Премахни майстора"}
+                            </button>
+                          )}
                         </div>
                       </div>
 
