@@ -141,4 +141,47 @@ describe('WorkersService media moderation', () => {
 
     expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/approved.jpg');
   });
+
+  it('keeps the previous approved avatar on legacy worker summaries while a new avatar is pending', async () => {
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 11,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/new-pending.jpg',
+          storageKey: '/uploads/users/201/avatar/new-pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-18T10:02:00Z'),
+        },
+        {
+          id: 10,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/old-approved.jpg',
+          storageKey: '/uploads/users/201/avatar/old-approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-18T10:00:00Z'),
+        },
+      ]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({
+      media,
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerProfilesRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+      workerRepository: repo({
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          userId: 201,
+          fullName: 'Legacy Worker',
+          avatarUrl: '/uploads/users/201/avatar/very-old.jpg',
+        }),
+      }),
+      requestRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+    });
+
+    const worker = await service.findByUserId(201);
+
+    expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/old-approved.jpg');
+  });
 });

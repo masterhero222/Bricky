@@ -364,14 +364,16 @@ export class WorkersService {
     const userId = Number(worker?.userId);
     if (!userId) return worker;
 
-    const [gallery, completedJobs] = await Promise.all([
+    const [gallery, completedJobs, mediaRows] = await Promise.all([
       this.getGalleryByUserId(userId, options).catch(() => []),
       this.getHistoryByUserId(userId).catch(() => []),
+      this.media.findByWorker(userId).catch(() => [] as any[]),
     ]);
+    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
 
     return {
       ...worker,
-      avatarUrl: this.normalizeUploadUrl(worker.avatarUrl),
+      avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
       gallery,
       completedJobs,
     };

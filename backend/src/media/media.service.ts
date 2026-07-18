@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { MediaAssetEntity } from './media-asset.entity';
 
 type CreateMediaAssetInput = {
@@ -67,7 +67,32 @@ export class MediaService {
 
   async setModerationStatus(id: number, moderationStatus: string) {
     await this.mediaRepo.update({ id }, { moderationStatus });
-    return this.mediaRepo.findOne({ where: { id } });
+    const media = await this.mediaRepo.findOne({ where: { id } });
+
+    const avatarWorkerUserId = media?.workerUserId || media?.ownerUserId;
+
+    if (media?.kind === 'worker_avatar' && moderationStatus === 'approved' && avatarWorkerUserId) {
+      await this.mediaRepo.update(
+        {
+          id: Not(media.id),
+          workerUserId: avatarWorkerUserId,
+          kind: 'worker_avatar',
+          moderationStatus: 'approved',
+        },
+        { moderationStatus: 'rejected' },
+      );
+      await this.mediaRepo.update(
+        {
+          id: Not(media.id),
+          ownerUserId: avatarWorkerUserId,
+          kind: 'worker_avatar',
+          moderationStatus: 'approved',
+        },
+        { moderationStatus: 'rejected' },
+      );
+    }
+
+    return media;
   }
 
   async setRequestMediaModeration(requestId: number, kind: string, moderationStatus: string) {

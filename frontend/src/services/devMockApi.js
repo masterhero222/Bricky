@@ -416,7 +416,7 @@ export function saveDevWorkerProfile(data = {}) {
   });
 
   writeDb(db);
-  return publicUser(worker);
+  return publicUser(worker, db);
 }
 
 export async function uploadDevWorkerAvatar(file) {
@@ -425,9 +425,20 @@ export async function uploadDevWorkerAvatar(file) {
   if (!worker || !file) return null;
 
   const url = await fileToDataUrl(file);
-  worker.avatarUrl = url;
+  db.media = Array.isArray(db.media) ? db.media : [];
+  db.media.push({
+    id: nextMockMediaId(db),
+    kind: "worker_avatar",
+    ownerUserId: worker.userId,
+    workerUserId: worker.userId,
+    publicUrl: url,
+    storageKey: url,
+    fileName: file.name,
+    moderationStatus: "pending",
+    createdAt: nowIso(),
+  });
   writeDb(db);
-  return publicUser(worker);
+  return publicUser(worker, db);
 }
 
 export async function uploadDevWorkerGallery(files = []) {
@@ -438,17 +449,23 @@ export async function uploadDevWorkerGallery(files = []) {
   const clean = Array.from(files).filter((file) => String(file?.type || "").startsWith("image/"));
   const images = await Promise.all(
     clean.map(async (file) => ({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: nextMockMediaId(db),
+      kind: "worker_gallery",
+      ownerUserId: worker.userId,
+      workerUserId: worker.userId,
       userId: worker.userId,
-      name: file.name,
-      url: await fileToDataUrl(file),
+      fileName: file.name,
+      publicUrl: await fileToDataUrl(file),
+      storageKey: file.name,
+      moderationStatus: "pending",
       created_at: nowIso(),
+      createdAt: nowIso(),
     }))
   );
 
-  worker.gallery = [...(Array.isArray(worker.gallery) ? worker.gallery : []), ...images];
+  db.media = [...(Array.isArray(db.media) ? db.media : []), ...images];
   writeDb(db);
-  return worker.gallery;
+  return workerGallery(db, worker, true);
 }
 
 export function deleteDevWorkerGalleryImage(imageId) {
@@ -457,8 +474,16 @@ export function deleteDevWorkerGalleryImage(imageId) {
   if (!worker) return [];
 
   worker.gallery = (Array.isArray(worker.gallery) ? worker.gallery : []).filter((img) => String(img.id) !== String(imageId));
+  db.media = (Array.isArray(db.media) ? db.media : []).filter(
+    (media) =>
+      !(
+        String(media.id) === String(imageId) &&
+        Number(media.ownerUserId || media.workerUserId) === Number(worker.userId) &&
+        media.kind === "worker_gallery"
+      )
+  );
   writeDb(db);
-  return worker.gallery;
+  return workerGallery(db, worker, true);
 }
 function response(data, status = 200) {
   return Promise.resolve({ data, status, statusText: "OK", headers: {}, config: {} });
@@ -532,6 +557,84 @@ function setRequestMediaModeration(db, requestId, kind, moderationStatus) {
       media.moderationStatus = moderationStatus;
     }
   });
+}
+
+function approvedWorkerAvatarUrl(db, worker) {
+  const workerUserId = Number(worker?.userId || worker?.id);
+  const avatarMedia = (Array.isArray(db?.media) ? db.media : [])
+    .filter((media) => media.kind === "worker_avatar")
+    .filter((media) => Number(media.workerUserId || media.ownerUserId) === workerUserId);
+  const approvedAvatar = avatarMedia
+    .filter((media) => media.moderationStatus === "approved")
+    .sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))[0];
+
+  if (approvedAvatar) return approvedAvatar.publicUrl || approvedAvatar.url || "";
+
+  const legacyUrl = worker?.avatarUrl || "";
+  const legacyUrlIsRejectedOrPendingMedia = avatarMedia.some(
+    (media) => (media.publicUrl || media.url) === legacyUrl && media.moderationStatus !== "approved",
+  );
+
+  return legacyUrlIsRejectedOrPendingMedia ? "" : legacyUrl;
+}
+
+function workerGallery(db, worker, includeUnapproved = false) {
+  const workerUserId = Number(worker?.userId || worker?.id);
+  const mediaPhotos = (Array.isArray(db?.media) ? db.media : [])
+    .filter((media) => media.kind === "worker_gallery")
+    .filter((media) => Number(media.workerUserId || media.ownerUserId) === workerUserId)
+    .filter((media) => includeUnapproved || media.moderationStatus === "approved")
+    .map((media) => ({
+      id: media.id,
+      userId: workerUserId,
+      name: media.fileName || media.name || `media-${media.id}`,
+      url: media.publicUrl || media.url,
+      publicUrl: media.publicUrl || media.url,
+      storageKey: media.storageKey,
+      moderationStatus: media.moderationStatus || "pending",
+      created_at: media.created_at || media.createdAt || nowIso(),
+      createdAt: media.createdAt || media.created_at || nowIso(),
+    }));
+
+  const legacyPhotos = (Array.isArray(worker?.gallery) ? worker.gallery : []).map((photo) => ({
+    ...photo,
+    moderationStatus: photo.moderationStatus || "approved",
+  }));
+
+  return [...mediaPhotos, ...legacyPhotos].sort(
+    (a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0),
+  );
+}
+
+function applyMockMediaModeration(db, media, moderationStatus) {
+  media.moderationStatus = moderationStatus;
+
+  if (media.kind === "worker_avatar" && moderationStatus === "approved") {
+    const workerUserId = Number(media.workerUserId || media.ownerUserId);
+    (Array.isArray(db.media) ? db.media : []).forEach((item) => {
+      if (
+        Number(item.id) !== Number(media.id) &&
+        item.kind === "worker_avatar" &&
+        Number(item.workerUserId || item.ownerUserId) === workerUserId &&
+        item.moderationStatus === "approved"
+      ) {
+        item.moderationStatus = "rejected";
+      }
+    });
+
+    const worker = db.workers.find((item) => Number(item.userId) === workerUserId);
+    if (worker) worker.avatarUrl = media.publicUrl || media.url || worker.avatarUrl || "";
+  }
+
+  if (media.kind === "worker_avatar" && moderationStatus === "rejected") {
+    const workerUserId = Number(media.workerUserId || media.ownerUserId);
+    const worker = db.workers.find((item) => Number(item.userId) === workerUserId);
+    if (worker && worker.avatarUrl === (media.publicUrl || media.url)) {
+      worker.avatarUrl = approvedWorkerAvatarUrl(db, worker);
+    }
+  }
+
+  return media;
 }
 
 function completionDurationDays(req, completedAt = nowIso()) {
@@ -618,9 +721,10 @@ function skillLabel(value) {
   return option?.shortLabel || option?.label || value;
 }
 
-function publicUser(user) {
+function publicUser(user, db = null) {
   if (!user) return null;
   const skillKeys = (Array.isArray(user.skills) ? user.skills : []).map(normalizeSkillKey);
+  const avatarUrl = user.role === "worker" && db ? approvedWorkerAvatarUrl(db, user) : user.avatarUrl || "";
   return {
     id: user.id || user.userId,
     userId: user.userId || user.id,
@@ -637,7 +741,7 @@ function publicUser(user) {
     description: user.description,
     experience: user.experience,
     equipment: user.equipment,
-    avatarUrl: user.avatarUrl || "",
+    avatarUrl,
     approvalStatus: user.approvalStatus,
     visibilityStatus: user.visibilityStatus,
     isBoosted: Boolean(user.isBoosted),
@@ -681,7 +785,7 @@ export function setDevIdentity(role, id) {
   localStorage.setItem("userId", String(userId));
   localStorage.setItem("userName", user.name || user.fullName || "Dev User");
   window.dispatchEvent(new Event("bricky-dev-identity-changed"));
-  return publicUser(user);
+  return publicUser(user, db);
 }
 
 export function resetDevDb() {
@@ -845,7 +949,7 @@ export async function mockRequest(method, url, data) {
         ? db.admins[0]
         : db.clients[0];
     setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
-    return response({ token: localStorage.getItem("token"), user: publicUser(first) });
+    return response({ token: localStorage.getItem("token"), user: publicUser(first, db) });
   }
 
   if (method === "post" && path === "/auth/register") {
@@ -889,7 +993,7 @@ export async function mockRequest(method, url, data) {
       }
 
       writeDb(db);
-      return response({ token: `local-dev-token-worker-${newUserId}`, user: publicUser(worker) }, 201);
+      return response({ token: `local-dev-token-worker-${newUserId}`, user: publicUser(worker, db) }, 201);
     }
 
     const client = {
@@ -907,7 +1011,7 @@ export async function mockRequest(method, url, data) {
     return response({ token: `local-dev-token-client-${newUserId}`, user: publicUser(client) }, 201);
   }
 
-  if (method === "get" && path === "/client/me") return response(publicUser(user));
+  if (method === "get" && path === "/client/me") return response(publicUser(user, db));
   if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
   if (method === "get" && path === "/referrals/me") {
     if (role !== "worker") return fail("Worker only", 403);
@@ -939,13 +1043,13 @@ export async function mockRequest(method, url, data) {
     if (method === "get" && path === "/admin/users") {
       return response([
         ...(db.clients || []).map(publicUser),
-        ...(db.workers || []).map(publicUser),
+        ...(db.workers || []).map((worker) => publicUser(worker, db)),
         ...(db.admins || []).map(publicUser),
       ]);
     }
     if (method === "get" && path === "/admin/workers") {
       return response((db.workers || []).map((worker) => ({
-        ...publicUser(worker),
+        ...publicUser(worker, db),
         workerUserId: worker.userId,
         publicName: worker.fullName || worker.name,
       })));
@@ -974,7 +1078,7 @@ export async function mockRequest(method, url, data) {
       target.status = data?.status || "active";
       addAudit(db, "user_status_changed", "user", targetId, data?.reason || target.status);
       writeDb(db);
-      return response(publicUser(target));
+      return response(publicUser(target, db));
     }
 
     const workerApprovalMatch = path.match(/^\/admin\/workers\/(\d+)\/approval$/);
@@ -986,7 +1090,7 @@ export async function mockRequest(method, url, data) {
       worker.visibilityStatus = worker.approvalStatus === "approved" ? "public" : "hidden";
       addAudit(db, "worker_approval_changed", "worker", worker.userId, worker.approvalStatus);
       writeDb(db);
-      return response(publicUser(worker));
+      return response(publicUser(worker, db));
     }
 
     const requestStatusMatch = path.match(/^\/admin\/requests\/(\d+)\/status$/);
@@ -1006,7 +1110,7 @@ export async function mockRequest(method, url, data) {
     if (method === "post" && mediaModerationMatch) {
       const media = db.media.find((item) => Number(item.id) === Number(mediaModerationMatch[1]));
       if (!media) return fail("Media not found", 404);
-      media.moderationStatus = data?.moderationStatus || "approved";
+      applyMockMediaModeration(db, media, data?.moderationStatus || "approved");
       addAudit(db, "media_moderation_changed", "media", media.id, media.moderationStatus);
       writeDb(db);
       return response(media);
@@ -1035,24 +1139,24 @@ export async function mockRequest(method, url, data) {
     }
   }
 
-  if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId)));
-  if (method === "get" && path === "/workers") return response(db.workers.map(publicUser));
+  if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId), db));
+  if (method === "get" && path === "/workers") return response(db.workers.map((worker) => publicUser(worker, db)));
 
   const workerById = path.match(/^\/workers\/(\d+)$/);
   if (method === "get" && workerById) {
     const id = Number(workerById[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return worker ? response(publicUser(worker)) : fail("Worker not found", 404);
+    return worker ? response(publicUser(worker, db)) : fail("Worker not found", 404);
   }
 
   if (method === "get" && /^\/workers\/\d+\/gallery$/.test(path)) {
     const id = Number(path.match(/^\/workers\/(\d+)\/gallery$/)?.[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return response(Array.isArray(worker?.gallery) ? worker.gallery : []);
+    return response(worker ? workerGallery(db, worker, false) : []);
   }
   if (method === "get" && path === "/workers/me/gallery") {
     const worker = currentWorker(db);
-    return response(Array.isArray(worker?.gallery) ? worker.gallery : []);
+    return response(worker ? workerGallery(db, worker, true) : []);
   }
 
   if (method === "get" && path === "/workers/me/history") {
