@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 320" role="img" aria-label="">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#061525"/>
+      <stop offset="1" stop-color="#09233a"/>
+    </linearGradient>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M44 0H0v44" fill="none" stroke="#1e5f83" stroke-width="1" opacity=".32"/>
+    </pattern>
+  </defs>
+  <rect width="1920" height="320" fill="url(#bg)"/>
+  <rect width="1920" height="320" fill="url(#grid)"/>
+  <g fill="none" stroke="#35d7f5" stroke-linecap="round" stroke-linejoin="round" opacity=".84">
+    <path d="M500 212h300c58 0 58-92 0-92H646" stroke-width="18"/>
+    <path d="M1010 76v102c0 48 39 86 86 86h214" stroke-width="18"/>
+    <path d="M1172 92h162v64h-162z" stroke-width="5"/>
+    <circle cx="690" cy="120" r="38" stroke-width="5"/>
+    <path d="M650 120h80m-40-40v80" stroke-width="5"/>
+    <path d="M1350 242c42-34 72-70 72-116h-124c0 46 16 84 52 116z" stroke-width="5"/>
+    <path d="M1446 126h60m-30-31v31" stroke-width="5"/>
+  </g>
+  <g stroke="#8cecff" stroke-width="1.5" opacity=".25">
+    <path d="M210 76h290M1450 70h260M248 252h260M1460 258h220"/>
+  </g>
+</svg>
