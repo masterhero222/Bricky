@@ -27,6 +27,7 @@ export default function Navbar() {
           <NavLink to="/" end className={navClass}>Начало</NavLink>
           <NavLink to="/workers" className={navClass}>Майсторите</NavLink>
           {role === "worker" && <NavLink to="/repair-map" className={navClass}>Карта</NavLink>}
+          <NavLink to="/blog" className={navClass}>Блог</NavLink>
           <NavLink to="/about" className={navClass}>За нас</NavLink>
         </nav>
 
@@ -54,6 +55,7 @@ export default function Navbar() {
             <Link to="/" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Начало</Link>
             <Link to="/workers" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Майсторите</Link>
             {role === "worker" && <Link to="/repair-map" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Карта</Link>}
+            <Link to="/blog" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Блог</Link>
             <Link to="/about" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">За нас</Link>
             {!role ? (
               <div className="mt-3 grid grid-cols-2 gap-3">

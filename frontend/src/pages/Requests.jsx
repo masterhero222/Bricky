@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Bath,
   Brush,
@@ -98,7 +98,12 @@ export default function Requests() {
 
 export function RequestFlow({ embedded = false, onCreated }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showLogin } = useAuthModal();
+  const presetCategoryKey = searchParams.get("category");
+  const initialCategoryKey = REPAIR_CATEGORY_OPTIONS.some((item) => item.key === presetCategoryKey)
+    ? presetCategoryKey
+    : "bathroom_renovation";
   const [isLogged, setIsLogged] = useState(false);
   const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
@@ -108,7 +113,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
   const locationAskedRef = useRef(false);
 
   const [form, setForm] = useState({
-    categoryKey: "bathroom_renovation",
+    categoryKey: initialCategoryKey,
     activities: [],
     quantity: "",
     exactAreaM2: "",
@@ -129,6 +134,28 @@ export function RequestFlow({ embedded = false, onCreated }) {
   useEffect(() => {
     setIsLogged(Boolean(localStorage.getItem("token")));
   }, []);
+
+  useEffect(() => {
+    const categoryKey = searchParams.get("category");
+
+    if (!REPAIR_CATEGORY_OPTIONS.some((item) => item.key === categoryKey)) {
+      return;
+    }
+
+    setForm((prev) => {
+      if (prev.categoryKey === categoryKey) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        categoryKey,
+        activities: [],
+        quantity: "",
+        exactAreaM2: "",
+      };
+    });
+  }, [searchParams]);
 
   const category = useMemo(
     () => REPAIR_CATEGORY_OPTIONS.find((item) => item.key === form.categoryKey) || REPAIR_CATEGORY_OPTIONS[0],

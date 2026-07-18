@@ -5,6 +5,8 @@ import Layout from "./layouts/Layout";
 // BASIC PAGES
 import Home from "./pages/Home";
 import AboutUs from "./pages/AboutUs";
+import BlogIndex from "./pages/blog/BlogIndex";
+import BlogArticle from "./pages/blog/BlogArticle";
 
 // AUTH pages
 import AuthGate from "./pages/AuthGate";
@@ -43,6 +45,8 @@ export default function App() {
 
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<AboutUs />} />
+          <Route path="/blog" element={<BlogIndex />} />
+          <Route path="/blog/:slug" element={<BlogArticle />} />
           <Route
             path="/repair-map"
             element={
