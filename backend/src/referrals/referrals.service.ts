@@ -129,7 +129,7 @@ export class ReferralsService {
 
   async processCompletedRequest(requestId: number, workerUserId: number) {
     const request = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
-    if (!request || request.status !== 'completed') return null;
+    if (!request || !['reviewed', 'completed'].includes(request.status)) return null;
     if (Number(request.assignedWorkerUserId) !== Number(workerUserId)) return null;
     if (!request.clientUserId || Number(request.clientUserId) === Number(workerUserId)) return null;
 

@@ -177,7 +177,7 @@ export class RequestsService {
         longitude: dto.longitude == null ? null : String(dto.longitude),
         locationSource: dto.locationSource || 'manual',
         addressVisibility: 'exact_after_assignment',
-        status: 'published',
+        status: 'pending_admin',
         estimateMin: dto.estimateMin == null ? null : String(dto.estimateMin),
         estimateMax: dto.estimateMax == null ? null : String(dto.estimateMax),
         estimateCurrency: dto.estimateCurrency || 'EUR',
@@ -240,7 +240,7 @@ export class RequestsService {
 
     const requests = await this.repairRequestsRepo.find({
       where: [
-        { assignedWorkerUserId: IsNull(), status: Not('completed') },
+        { assignedWorkerUserId: IsNull(), status: Not('pending_admin') },
         { assignedWorkerUserId: workerUserId, status: Not('completed') },
       ],
       relations: ['client'],
@@ -249,7 +249,11 @@ export class RequestsService {
 
     return Promise.all(
       requests
-        .filter((request) => !['canceled', 'archived'].includes(request.status))
+        .filter((request) => {
+          if (['canceled', 'archived', 'draft', 'pending_admin'].includes(request.status)) return false;
+          if (!request.assignedWorkerUserId) return ['published', 'applied'].includes(request.status);
+          return Number(request.assignedWorkerUserId) === Number(workerUserId);
+        })
         .map((request) => this.toDto(request)),
     );
   }
@@ -270,7 +274,7 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (req.assignedWorkerUserId) throw new BadRequestException('Request already has assigned worker');
-    if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
+    if (!['published', 'applied'].includes(req.status)) throw new BadRequestException('Request is not open for applications');
 
     const existing = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
     if (existing) {
@@ -313,7 +317,7 @@ export class RequestsService {
     }
 
     req.assignedWorkerUserId = workerUserId;
-    req.status = 'in_progress';
+    req.status = 'worker_selected';
     req.completedAt = null;
     await this.repairRequestsRepo.save(req);
 
@@ -321,6 +325,55 @@ export class RequestsService {
     await this.applicationsRepo.save(application);
     await this.addEvent(requestId, clientUserId, 'request.assigned', { workerUserId });
 
+    return this.toDto(req);
+  }
+
+  async workerConfirm(requestId: number, workerUserId: number) {
+    return this.workerTransition(requestId, workerUserId, ['worker_selected', 'assigned'], 'worker_confirmed', 'worker.confirmed');
+  }
+
+  async markWorkerOnSite(requestId: number, workerUserId: number) {
+    return this.workerTransition(requestId, workerUserId, ['worker_confirmed'], 'worker_on_site', 'worker.on_site');
+  }
+
+  async markInspected(requestId: number, workerUserId: number) {
+    return this.workerTransition(requestId, workerUserId, ['worker_on_site'], 'inspected', 'worker.inspected');
+  }
+
+  async startWork(requestId: number, workerUserId: number) {
+    return this.workerTransition(requestId, workerUserId, ['inspected'], 'in_progress', 'worker.started_work');
+  }
+
+  async finishWork(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
+    await this.workerTransition(requestId, workerUserId, ['in_progress'], 'work_finished', 'worker.finished_work');
+    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
+
+    const updated = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!updated) throw new NotFoundException('Request not found');
+    return this.toDto(updated);
+  }
+
+  async readyForClientConfirmation(requestId: number, workerUserId: number) {
+    return this.workerTransition(
+      requestId,
+      workerUserId,
+      ['work_finished'],
+      'ready_for_client_confirmation',
+      'worker.ready_for_client_confirmation',
+    );
+  }
+
+  async clientConfirmWork(requestId: number, clientUserId: number) {
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (req.status !== 'ready_for_client_confirmation') {
+      throw new BadRequestException('Request is not ready for client confirmation');
+    }
+
+    req.status = 'client_confirmed';
+    await this.repairRequestsRepo.save(req);
+    await this.addEvent(requestId, clientUserId, 'client.confirmed_work', {});
     return this.toDto(req);
   }
 
@@ -356,15 +409,17 @@ export class RequestsService {
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
     if (req.status === 'completed') return this.toDto(req);
-    if (['canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
+    if (req.status !== 'reviewed') throw new BadRequestException('Request must be reviewed before closing');
 
     const completedAt = new Date();
     req.status = 'completed';
     req.completedAt = completedAt;
     await this.repairRequestsRepo.save(req);
 
-    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
-    await this.addEvent(requestId, workerUserId, 'request.completed', {});
+    if (Array.isArray(afterPhotos) && afterPhotos.length) {
+      await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
+    }
+    await this.addEvent(requestId, workerUserId, 'request.closed_by_worker', {});
 
     return this.toDto(req);
   }
@@ -412,6 +467,29 @@ export class RequestsService {
         metadataJson: metadata || {},
       }),
     );
+  }
+
+  private async workerTransition(
+    requestId: number,
+    workerUserId: number,
+    allowedStatuses: RepairRequestStatus[],
+    nextStatus: RepairRequestStatus,
+    eventType: string,
+  ) {
+    await this.assertWorkerCanTakeJobs(workerUserId);
+
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (!allowedStatuses.includes(req.status)) {
+      throw new BadRequestException(`Invalid request status transition from ${req.status} to ${nextStatus}`);
+    }
+
+    const from = req.status;
+    req.status = nextStatus;
+    await this.repairRequestsRepo.save(req);
+    await this.addEvent(requestId, workerUserId, eventType, { from, to: nextStatus });
+    return this.toDto(req);
   }
 
   private async assertWorkerCanTakeJobs(workerUserId: number) {
@@ -493,10 +571,19 @@ export class RequestsService {
   private legacyStatus(status: RepairRequestStatus) {
     const map: Record<RepairRequestStatus, string> = {
       draft: 'чернова',
+      pending_admin: 'чака одобрение',
       published: 'нова',
       applied: 'кандидатствана',
-      assigned: 'в процес',
+      assigned: 'избран майстор',
+      worker_selected: 'избран майстор',
+      worker_confirmed: 'майсторът потвърди',
+      worker_on_site: 'майсторът е на адреса',
+      inspected: 'огледана',
       in_progress: 'в процес',
+      work_finished: 'работата е свършена',
+      ready_for_client_confirmation: 'чака потвърждение от клиента',
+      client_confirmed: 'клиентът потвърди',
+      reviewed: 'оставен отзив',
       completed: 'завършена',
       canceled: 'отказана',
       archived: 'архивирана',

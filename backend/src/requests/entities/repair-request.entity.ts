@@ -12,10 +12,19 @@ import { UserEntity } from '../../users/user.entity';
 
 export type RepairRequestStatus =
   | 'draft'
+  | 'pending_admin'
   | 'published'
   | 'applied'
   | 'assigned'
+  | 'worker_selected'
+  | 'worker_confirmed'
+  | 'worker_on_site'
+  | 'inspected'
   | 'in_progress'
+  | 'work_finished'
+  | 'ready_for_client_confirmation'
+  | 'client_confirmed'
+  | 'reviewed'
   | 'completed'
   | 'canceled'
   | 'archived';
@@ -63,8 +72,26 @@ export class RepairRequestEntity {
   @Index()
   @Column({
     type: 'enum',
-    enum: ['draft', 'published', 'applied', 'assigned', 'in_progress', 'completed', 'canceled', 'archived'],
-    default: 'published',
+    enum: [
+      'draft',
+      'pending_admin',
+      'published',
+      'applied',
+      'assigned',
+      'worker_selected',
+      'worker_confirmed',
+      'worker_on_site',
+      'inspected',
+      'in_progress',
+      'work_finished',
+      'ready_for_client_confirmation',
+      'client_confirmed',
+      'reviewed',
+      'completed',
+      'canceled',
+      'archived',
+    ],
+    default: 'pending_admin',
   })
   status: RepairRequestStatus;
 

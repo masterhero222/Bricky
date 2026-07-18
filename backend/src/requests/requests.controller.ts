@@ -84,7 +84,55 @@ export class RequestsController {
     return this.requests.unassignWorker(Number(id), Number(req.user.id));
   }
 
-  // ? worker ������� ������
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/worker-confirm')
+  async workerConfirm(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.workerConfirm(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/on-site')
+  async onSite(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.markWorkerOnSite(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/inspect')
+  async inspect(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.markInspected(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/start')
+  async startWork(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.startWork(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/finish')
+  async finishWork(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.finishWork(Number(id), Number(req.user.id), body?.afterPhotos || []);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/ready')
+  async readyForClient(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.readyForClientConfirmation(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/client-confirm')
+  async clientConfirm(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    return this.requests.clientConfirmWork(Number(id), Number(req.user.id));
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post(':id/complete')
   async complete(@Req() req: any, @Param('id') id: string, @Body() body: any) {

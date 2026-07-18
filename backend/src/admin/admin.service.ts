@@ -56,7 +56,25 @@ export class AdminService {
   async setRequestStatus(actorUserId: number, requestId: number, status: RepairRequestStatus, reason?: string) {
     this.assertOneOf(
       status,
-      ['draft', 'published', 'applied', 'assigned', 'in_progress', 'completed', 'canceled', 'archived'],
+      [
+        'draft',
+        'pending_admin',
+        'published',
+        'applied',
+        'assigned',
+        'worker_selected',
+        'worker_confirmed',
+        'worker_on_site',
+        'inspected',
+        'in_progress',
+        'work_finished',
+        'ready_for_client_confirmation',
+        'client_confirmed',
+        'reviewed',
+        'completed',
+        'canceled',
+        'archived',
+      ],
       'Invalid request status',
     );
     const request = await this.requests.adminSetStatus(requestId, status, actorUserId, reason);

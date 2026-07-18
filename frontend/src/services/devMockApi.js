@@ -2,6 +2,26 @@ import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel
 
 const STORAGE_KEY = "bricky.dev.db";
 
+const REQUEST_STATUS_LABELS = {
+  draft: "чернова",
+  pending_admin: "чака одобрение",
+  published: "нова",
+  applied: "кандидатствана",
+  assigned: "избран майстор",
+  worker_selected: "избран майстор",
+  worker_confirmed: "майсторът потвърди",
+  worker_on_site: "майсторът е на адреса",
+  inspected: "огледана",
+  in_progress: "в процес",
+  work_finished: "работата е свършена",
+  ready_for_client_confirmation: "чака потвърждение от клиента",
+  client_confirmed: "клиентът потвърди",
+  reviewed: "оставен отзив",
+  completed: "завършена",
+  canceled: "отказана",
+  archived: "архивирана",
+};
+
 const CLIENTS = [
   {
     "id": 101,
@@ -152,8 +172,8 @@ function guessRepairCategory(text) {
 function seedDb() {
   const referralRewardEndsAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
   return {
-    mapSeedVersion: 5,
-    nextRequestId: 7,
+    mapSeedVersion: 6,
+    nextRequestId: 1,
     nextReviewId: 1,
     nextUserId: 301,
     nextWorkerId: 4,
@@ -203,7 +223,6 @@ function seedDb() {
     media: [
       { id: 1, kind: "worker_avatar", ownerUserId: 201, publicUrl: "/media_files/maistor.png", moderationStatus: "approved", createdAt: nowIso() },
       { id: 2, kind: "worker_gallery", ownerUserId: 202, publicUrl: "/media_files/images.jpg", moderationStatus: "pending", createdAt: nowIso() },
-      { id: 3, kind: "request_before", ownerUserId: 101, requestId: 1, publicUrl: "/media_files/banq.jpg", moderationStatus: "approved", createdAt: nowIso() },
     ],
     auditLogs: [
       {
@@ -216,162 +235,7 @@ function seedDb() {
         createdAt: nowIso(),
       },
     ],
-    requests: [
-      {
-        id: 1,
-        clientUserId: 101,
-        clientName: CLIENTS[0].name,
-        email: CLIENTS[0].email,
-        phone: CLIENTS[0].phone,
-        address: "София, ул. Граф Игнатиев 18",
-        latitude: 42.690781,
-        longitude: 23.326193,
-        locationSource: "seed",
-        category: "ВиК",
-        description: "Тече под мивката в кухнята.",
-        status: "нова",
-        photos: [
-          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
-          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
-        ],
-        beforePhotos: [
-          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
-          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 2,
-        clientUserId: 102,
-        clientName: CLIENTS[1].name,
-        email: CLIENTS[1].email,
-        phone: CLIENTS[1].phone,
-        address: "София, бул. Витоша 72",
-        latitude: 42.687389,
-        longitude: 23.319482,
-        locationSource: "seed",
-        category: "Електро",
-        description: "Няколко контакта не работят след ремонт.",
-        status: "кандидатствана",
-        photos: [
-          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
-        ],
-        beforePhotos: [
-          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [202],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 3,
-        clientUserId: 103,
-        clientName: CLIENTS[2].name,
-        email: CLIENTS[2].email,
-        phone: CLIENTS[2].phone,
-        address: "София, ул. Цар Симеон 143",
-        latitude: 42.704901,
-        longitude: 23.312384,
-        locationSource: "seed",
-        category: "Плочки",
-        description: "Лепене на плочки в малка баня.",
-        status: "в процес",
-        photos: [
-          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
-          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
-        ],
-        beforePhotos: [
-          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
-          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [203],
-        assignedWorkerId: 203,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 4,
-        clientUserId: 101,
-        clientName: CLIENTS[0].name,
-        email: CLIENTS[0].email,
-        phone: CLIENTS[0].phone,
-        address: "София, ул. Козяк 12",
-        latitude: 42.661811,
-        longitude: 23.333928,
-        locationSource: "seed",
-        category: "Освежителен ремонт",
-        description: "Освежаване на дневна и коридор, нужни са шпакловка и боя.",
-        status: "нова",
-        photos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 5,
-        clientUserId: 102,
-        clientName: CLIENTS[1].name,
-        email: CLIENTS[1].email,
-        phone: CLIENTS[1].phone,
-        address: "София, ул. Фредерик Жолио-Кюри 9",
-        latitude: 42.671482,
-        longitude: 23.350402,
-        locationSource: "seed",
-        category: "Ремонт на бани",
-        description: "Смяна на плочки и душ зона в малка баня.",
-        status: "нова",
-        photos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 6,
-        clientUserId: 103,
-        clientName: CLIENTS[2].name,
-        email: CLIENTS[2].email,
-        phone: CLIENTS[2].phone,
-        address: "София, бул. Черни връх 100",
-        latitude: 42.658832,
-        longitude: 23.316522,
-        locationSource: "seed",
-        category: "Електро инсталация",
-        description: "Проверка на табло и добавяне на нов кръг за кухня.",
-        status: "нова",
-        photos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-    ],
+    requests: [],
   };
 }
 
@@ -417,6 +281,18 @@ function readDb() {
           referrals: Array.isArray(db.referrals) ? db.referrals : seeded.referrals,
           media: Array.isArray(db.media) ? db.media : seeded.media,
           auditLogs: Array.isArray(db.auditLogs) ? db.auditLogs : seeded.auditLogs,
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 6) {
+        const seeded = seedDb();
+        const migrated = {
+          ...db,
+          mapSeedVersion: 6,
+          nextRequestId: Math.max(Number(db.nextRequestId || 0), seeded.nextRequestId),
+          requests: (Array.isArray(db.requests) ? db.requests : []).filter((request) => request?.locationSource !== "seed"),
+          media: (Array.isArray(db.media) ? db.media : []).filter((media) => media?.kind !== "request_before" || !media?.requestId),
         };
         writeDb(migrated);
         return migrated;
@@ -794,7 +670,10 @@ function maybeActivateReferralReward(db, workerUserId) {
   const referral = db.referrals.find((ref) => Number(ref.referredUserId) === Number(workerUserId));
   if (!referral || referral.status === "rejected") return;
 
-  const completedForWorker = db.requests.filter((req) => Number(req.completedByWorkerId) === Number(workerUserId) && req.status === "завършена");
+  const completedForWorker = db.requests.filter((req) => {
+    const status = requestStatusKey(req);
+    return Number(req.completedByWorkerId) === Number(workerUserId) && ["reviewed", "completed"].includes(status);
+  });
   const uniqueClients = new Set(completedForWorker.map((req) => Number(req.clientUserId)));
   referral.qualifiedRepairCount = Math.min(uniqueClients.size, 2);
 
@@ -838,6 +717,36 @@ function ensureMockWorkerCanTakeJobs(db, workerUserId) {
     return fail("Worker profile is not visible", 403);
   }
   return null;
+}
+
+function requestStatusKey(req) {
+  if (req?.statusKey) return req.statusKey;
+  const label = String(req?.status || "").toLowerCase();
+  return Object.entries(REQUEST_STATUS_LABELS).find(([, value]) => value === label)?.[0] || label || "pending_admin";
+}
+
+function setMockRequestStatus(req, statusKey) {
+  req.statusKey = statusKey;
+  req.status = REQUEST_STATUS_LABELS[statusKey] || statusKey;
+}
+
+function ensureMockRequestStatus(req, allowedStatuses, message = "Invalid request status") {
+  if (!allowedStatuses.includes(requestStatusKey(req))) return fail(message, 400);
+  return null;
+}
+
+function completeMockWorkerStep(db, req, workerUserId, allowedStatuses, nextStatus, afterPhotos = null) {
+  if (Number(req.assignedWorkerId) !== Number(workerUserId)) return fail("Not your job", 403);
+  const statusGuard = ensureMockRequestStatus(req, allowedStatuses, "Invalid request status transition");
+  if (statusGuard) return statusGuard;
+  setMockRequestStatus(req, nextStatus);
+  if (Array.isArray(afterPhotos)) {
+    req.afterPhotos = normalizePhotos(afterPhotos);
+    const worker = findMockWorker(db, workerUserId);
+    if (worker) addRequestPhotosToWorkerGallery(worker, req);
+  }
+  writeDb(db);
+  return response(req);
 }
 
 export async function mockRequest(method, url, data) {
@@ -993,8 +902,7 @@ export async function mockRequest(method, url, data) {
     if (method === "post" && requestStatusMatch) {
       const request = db.requests.find((item) => Number(item.id) === Number(requestStatusMatch[1]));
       if (!request) return fail("Request not found", 404);
-      request.status = data?.status || request.status;
-      request.statusKey = data?.status || request.statusKey;
+      setMockRequestStatus(request, data?.status || requestStatusKey(request));
       addAudit(db, "request_status_changed", "request", request.id, request.status);
       writeDb(db);
       return response(request);
@@ -1086,14 +994,16 @@ export async function mockRequest(method, url, data) {
 
     const items = db.requests.filter((r) => {
       const assigned = Number(r.assignedWorkerId || 0);
-      const closed = ["завършена", "отказана"].includes(String(r.status || "").toLowerCase());
-      return !closed && (!assigned || assigned === userId);
+      const status = requestStatusKey(r);
+      if (["draft", "pending_admin", "canceled", "archived", "completed"].includes(status)) return false;
+      if (!assigned) return ["published", "applied"].includes(status);
+      return assigned === userId;
     });
     return response(sortNewest(items));
   }
 
   if (method === "get" && path === "/requests/worker/completed") {
-    return response(sortNewest(db.requests.filter((r) => Number(r.assignedWorkerId) === userId && r.status === "завършена")));
+    return response(sortNewest(db.requests.filter((r) => Number(r.assignedWorkerId) === userId && requestStatusKey(r) === "completed")));
   }
 
   if (method === "post" && path === "/requests") {
@@ -1116,7 +1026,8 @@ export async function mockRequest(method, url, data) {
       estimateMax: Number.isFinite(Number(data.estimateMax)) ? Number(data.estimateMax) : null,
       estimateCurrency: data.estimateCurrency || null,
       pricingSnapshot: data.pricingSnapshot || null,
-      status: "нова",
+      status: REQUEST_STATUS_LABELS.pending_admin,
+      statusKey: "pending_admin",
       photos: normalizePhotos(data.photos),
       beforePhotos: normalizePhotos(data.photos),
       afterPhotos: [],
@@ -1141,8 +1052,10 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === Number(applyMatch[1]));
     if (!req) return fail("Request not found", 404);
     if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
+    const statusGuard = ensureMockRequestStatus(req, ["published", "applied"], "Request is not open for applications");
+    if (statusGuard) return statusGuard;
     req.appliedWorkers = Array.from(new Set([...(req.appliedWorkers || []), userId]));
-    req.status = "кандидатствана";
+    setMockRequestStatus(req, "applied");
     writeDb(db);
     return response(req);
   }
@@ -1157,9 +1070,72 @@ export async function mockRequest(method, url, data) {
     if (!workerUserId) return fail("Missing workerUserId", 400);
     const guard = ensureMockWorkerCanTakeJobs(db, workerUserId);
     if (guard) return guard;
+    const statusGuard = ensureMockRequestStatus(req, ["published", "applied"], "Request is not assignable");
+    if (statusGuard) return statusGuard;
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
-    req.status = "в процес";
+    setMockRequestStatus(req, "worker_selected");
+    writeDb(db);
+    return response(req);
+  }
+
+  const workerConfirmMatch = path.match(/^\/requests\/(\d+)\/worker-confirm$/);
+  if (method === "post" && workerConfirmMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(workerConfirmMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_selected", "assigned"], "worker_confirmed");
+  }
+
+  const onSiteMatch = path.match(/^\/requests\/(\d+)\/on-site$/);
+  if (method === "post" && onSiteMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(onSiteMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_confirmed"], "worker_on_site");
+  }
+
+  const inspectMatch = path.match(/^\/requests\/(\d+)\/inspect$/);
+  if (method === "post" && inspectMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(inspectMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_on_site"], "inspected");
+  }
+
+  const startMatch = path.match(/^\/requests\/(\d+)\/start$/);
+  if (method === "post" && startMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(startMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["inspected"], "in_progress");
+  }
+
+  const finishMatch = path.match(/^\/requests\/(\d+)\/finish$/);
+  if (method === "post" && finishMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(finishMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["in_progress"], "work_finished", data?.afterPhotos || []);
+  }
+
+  const readyMatch = path.match(/^\/requests\/(\d+)\/ready$/);
+  if (method === "post" && readyMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(readyMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["work_finished"], "ready_for_client_confirmation");
+  }
+
+  const clientConfirmMatch = path.match(/^\/requests\/(\d+)\/client-confirm$/);
+  if (method === "post" && clientConfirmMatch) {
+    if (role !== "client") return fail("Client only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(clientConfirmMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+    const statusGuard = ensureMockRequestStatus(req, ["ready_for_client_confirmation"], "Request is not ready for confirmation");
+    if (statusGuard) return statusGuard;
+    setMockRequestStatus(req, "client_confirmed");
     writeDb(db);
     return response(req);
   }
@@ -1170,12 +1146,16 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === Number(completeMatch[1]));
     if (!req) return fail("Request not found", 404);
     if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
+    const statusGuard = ensureMockRequestStatus(req, ["reviewed"], "Request must be reviewed before closing");
+    if (statusGuard) return statusGuard;
 
     const completedAt = nowIso();
-    req.status = "завършена";
+    setMockRequestStatus(req, "completed");
     req.completedAt = completedAt;
     req.completedByWorkerId = userId;
-    req.afterPhotos = normalizePhotos(data?.afterPhotos);
+    if (Array.isArray(data?.afterPhotos) && data.afterPhotos.length) {
+      req.afterPhotos = normalizePhotos(data.afterPhotos);
+    }
     req.durationDays = completionDurationDays(req, completedAt);
 
     const worker = db.workers.find((w) => Number(w.userId) === userId);
@@ -1206,7 +1186,7 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === requestId);
     if (!req) return fail("Request not found", 404);
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
-    if (req.status !== "завършена") return fail("Request is not completed", 400);
+    if (requestStatusKey(req) !== "client_confirmed") return fail("Client must confirm the work before review", 400);
     const exists = db.reviews.find((r) => Number(r.requestId) === requestId);
     if (exists) return fail("Already reviewed", 400);
     const review = {
@@ -1219,6 +1199,7 @@ export async function mockRequest(method, url, data) {
       created_at: nowIso(),
     };
     db.reviews.push(review);
+    setMockRequestStatus(req, "reviewed");
     maybeActivateReferralReward(db, review.workerUserId);
     writeDb(db);
     return response(review, 201);

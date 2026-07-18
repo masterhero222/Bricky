@@ -360,7 +360,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
       }
 
       await apiPost("/requests", requestPayload);
-      setStatus("Заявката е записана в mock средата.");
+      setStatus("Заявката е изпратена за одобрение от админ.");
       if (onCreated) onCreated();
       else navigate("/client/profile?tab=requests", { replace: true });
       setStep(0);

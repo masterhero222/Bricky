@@ -334,7 +334,8 @@ export default function RepairMap() {
     activeRequest &&
     Array.isArray(activeRequest.appliedWorkers) &&
     activeRequest.appliedWorkers.map(Number).includes(currentUserId);
-  const isClosed = ["завършена", "отказана"].includes(String(activeRequest?.status || "").toLowerCase());
+  const activeStatusKey = activeRequest?.statusKey || String(activeRequest?.status || "").toLowerCase();
+  const isClosed = ["completed", "canceled", "archived", "завършена", "отказана", "архивирана"].includes(activeStatusKey);
   const activePhotos = Array.isArray(activeRequest?.photos) ? activeRequest.photos : [];
 
   return (

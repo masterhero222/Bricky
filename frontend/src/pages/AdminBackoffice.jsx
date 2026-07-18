@@ -160,11 +160,11 @@ function RequestsTable({ items, run }) {
         request.statusKey || request.status || "-",
         request.assignedWorkerUserId || request.assignedWorkerId || "-",
         <div className="flex gap-2" key={request.id}>
-          <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "archived" }))}>
-            Archive
-          </SmallButton>
           <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}>
-            Publish
+            Одобри
+          </SmallButton>
+          <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "archived" }))}>
+            Архивирай
           </SmallButton>
         </div>,
       ])}

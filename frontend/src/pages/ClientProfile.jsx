@@ -184,11 +184,11 @@ export default function ClientProfile() {
 
       await hydrateWorkers(reqs);
 
-      // ✅ ensure drafts exist for completed + assigned requests
+      // Ensure drafts exist for client-confirmed + assigned requests.
       setReviewDraft((prev) => {
         const next = { ...prev };
         reqs.forEach((r) => {
-          const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+          const isCompleted = r.statusKey === "client_confirmed";
           const assignedUserId = Number(r.assignedWorkerId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
 
@@ -371,7 +371,19 @@ export default function ClientProfile() {
     }
   }
 
-  // ✅ Create review (request must be completed; backend checks ownership + status + duplicates)
+  async function confirmWork(requestId) {
+    try {
+      setActionMsg("");
+      await apiPost(`/requests/${requestId}/client-confirm`, {});
+      setActionMsg(`Потвърди завършената работа по заявка #${requestId}.`);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setActionMsg(err?.response?.data?.message || "Не успях да потвърдя работата.");
+    }
+  }
+
+  // Create review after the client confirms the finished work.
   async function submitReview(requestId) {
     try {
       setReviewMsg((p) => ({ ...p, [requestId]: "" }));
@@ -480,9 +492,11 @@ export default function ClientProfile() {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
-                  const isCompleted = String(r.status || "").toLowerCase() === "завършена";
+                  const statusKey = r.statusKey || "";
+                  const canConfirmWork = statusKey === "ready_for_client_confirmation";
+                  const isCompleted = statusKey === "client_confirmed";
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
-                  const alreadyReviewed = !!reviewedItem;
+                  const alreadyReviewed = !!reviewedItem || statusKey === "reviewed" || statusKey === "completed";
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
 
                   const draft = reviewDraft[r.id] || { rating: 5, comment: "" };
@@ -525,8 +539,22 @@ export default function ClientProfile() {
                         </div>
                       </div>
 
+                      {canConfirmWork && assignedUserId && (
+                        <div className="mt-6 rounded-xl border border-green-500/30 bg-green-950/25 p-4">
+                          <h3 className="font-bold text-lg text-green-200">Майсторът е маркирал работата като готова</h3>
+                          <p className="mt-2 text-sm text-slate-300">Потвърди само ако работата наистина е приключена и си я приел.</p>
+                          <button
+                            type="button"
+                            onClick={() => confirmWork(r.id)}
+                            className="mt-4 rounded-lg bg-green-600 px-5 py-3 font-bold hover:bg-green-700"
+                          >
+                            Потвърждавам работата
+                          </button>
+                        </div>
+                      )}
+
                       {/* ✅ REVIEW SECTION */}
-                      {isCompleted && assignedUserId && (
+                      {(isCompleted || alreadyReviewed) && assignedUserId && (
                         <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-4">
                           <h3 className="font-bold text-lg">Отзив за майстора</h3>
 

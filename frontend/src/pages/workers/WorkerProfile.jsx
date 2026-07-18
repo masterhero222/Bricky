@@ -271,8 +271,7 @@ export default function WorkerProfile() {
   }
 
   function isClosed(req) {
-    const st = String(req.status || "").toLowerCase();
-    return st.includes("завърш") || st.includes("отказ");
+    return ["completed", "canceled", "archived"].includes(requestStatusKey(req));
   }
 
   function isAssignedToMe(req) {
@@ -280,9 +279,27 @@ export default function WorkerProfile() {
     return Number(req?.assignedWorkerId) === Number(myUserId);
   }
 
+  function requestStatusKey(req) {
+    return req?.statusKey || "";
+  }
+
   function canComplete(req) {
-    const st = String(req.status || "").toLowerCase();
-    return isAssignedToMe(req) && (st === "в процес" || st === "назначена");
+    return isAssignedToMe(req) && requestStatusKey(req) === "reviewed";
+  }
+
+  function workerStepAction(req) {
+    if (!isAssignedToMe(req)) return null;
+    const actions = {
+      worker_selected: { endpoint: "worker-confirm", label: "Потвърждавам заявката" },
+      assigned: { endpoint: "worker-confirm", label: "Потвърждавам заявката" },
+      worker_confirmed: { endpoint: "on-site", label: "На адрес съм" },
+      worker_on_site: { endpoint: "inspect", label: "Огледах обекта" },
+      inspected: { endpoint: "start", label: "Започнах работа" },
+      in_progress: { endpoint: "finish", label: "Свърших работа", needsPhotos: true },
+      work_finished: { endpoint: "ready", label: "Готово за клиента" },
+      reviewed: { endpoint: "complete", label: "Затвори поръчката" },
+    };
+    return actions[requestStatusKey(req)] || null;
   }
 
   async function handleCompletionPhotos(requestId, files) {
@@ -309,8 +326,9 @@ export default function WorkerProfile() {
 
       await apiPost(`/requests/${requestId}/complete`, { afterPhotos: completionPhotos[requestId] || [] });
 
-      setApplyMsg(`Заявка #${requestId} е затворена ✅`);
+      setApplyMsg(`Поръчка #${requestId} е затворена ✅`);
       await loadRequests();
+      await loadCompletedRequests();
     } catch (err) {
       console.error("completeRequest error:", err);
       const status = err?.response?.status;
@@ -714,6 +732,26 @@ export default function WorkerProfile() {
     });
   }
 
+  async function advanceWorkerStep(req) {
+    const action = workerStepAction(req);
+    if (!action) return;
+
+    try {
+      setApplyMsg("");
+      setCompletingId(req.id);
+      const payload = action.needsPhotos ? { afterPhotos: completionPhotos[req.id] || [] } : {};
+      await apiPost(`/requests/${req.id}/${action.endpoint}`, payload);
+      setApplyMsg(`Заявка #${req.id}: ${action.label}.`);
+      await loadRequests();
+      await loadCompletedRequests();
+    } catch (err) {
+      console.error("advanceWorkerStep error:", err);
+      setApplyMsg(err?.response?.data?.message || "Неуспешна промяна на статуса.");
+    } finally {
+      setCompletingId(null);
+    }
+  }
+
   function canApplyToJobs() {
     return profile.approvalStatus === "approved" && !["hidden", "suspended"].includes(String(profile.visibilityStatus || "").toLowerCase());
   }
@@ -920,7 +958,9 @@ export default function WorkerProfile() {
                       const profileCannotApply = !canApplyToJobs();
                       const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === r.id;
                       const showContact = assignedToMe;
-                      const showComplete = canComplete(r);
+                      const stageAction = workerStepAction(r);
+                      const showComplete = Boolean(stageAction);
+                      const showAfterPhotos = Boolean(stageAction?.needsPhotos);
                       const beforePhotos = requestPhotos(r);
 
                       return (
@@ -985,7 +1025,7 @@ export default function WorkerProfile() {
                           )}
 
                           {/* ✅ Complete button */}
-                          {showComplete && (
+                          {showAfterPhotos && (
                             <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
                               <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
                               <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(r.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
@@ -1004,7 +1044,7 @@ export default function WorkerProfile() {
 
                           {showComplete && (
                             <button
-                              onClick={() => completeRequest(r.id)}
+                              onClick={() => (stageAction.endpoint === "complete" ? completeRequest(r.id) : advanceWorkerStep(r))}
                               disabled={completingId === r.id}
                               className={
                                 completingId === r.id
@@ -1012,7 +1052,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === r.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === r.id ? "Записвам..." : stageAction.label}
                             </button>
                           )}
 
@@ -1110,7 +1150,9 @@ export default function WorkerProfile() {
                   const profileCannotApply = !canApplyToJobs();
                   const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === req.id;
                   const showContact = assignedToMe;
-                  const showComplete = canComplete(req);
+                  const stageAction = workerStepAction(req);
+                  const showComplete = Boolean(stageAction);
+                  const showAfterPhotos = Boolean(stageAction?.needsPhotos);
                   const beforePhotos = requestPhotos(req);
 
                   return (
@@ -1198,7 +1240,7 @@ export default function WorkerProfile() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {showComplete && (
+                          {showAfterPhotos && (
                             <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
                               <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
                               <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(req.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
@@ -1217,7 +1259,7 @@ export default function WorkerProfile() {
 
                           {showComplete && (
                             <button
-                              onClick={() => completeRequest(req.id)}
+                              onClick={() => (stageAction.endpoint === "complete" ? completeRequest(req.id) : advanceWorkerStep(req))}
                               disabled={completingId === req.id}
                               className={
                                 completingId === req.id
@@ -1225,7 +1267,7 @@ export default function WorkerProfile() {
                                   : "bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg font-bold"
                               }
                             >
-                              {completingId === req.id ? "Затварям..." : "Затвори заявка"}
+                              {completingId === req.id ? "Записвам..." : stageAction.label}
                             </button>
                           )}
 
