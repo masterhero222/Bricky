@@ -1,4 +1,9 @@
 import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel } from "../constants/repairCatalog";
+import {
+  DEFAULT_WORKER_BANNER_KEY,
+  WORKER_BANNER_CATALOG,
+  isWorkerBannerAllowed,
+} from "../constants/workerBannerCatalog";
 
 const STORAGE_KEY = "bricky.dev.db";
 
@@ -76,6 +81,7 @@ const WORKERS = [
     "experience": "8 години",
     "equipment": "Професионални инструменти за ВиК диагностика.",
     "avatarUrl": "/media_files/maistor.png",
+    "profileBannerKey": "blueprint_plumbing_v1",
     "approvalStatus": "approved",
     "visibilityStatus": "public",
     "gallery": [
@@ -99,6 +105,7 @@ const WORKERS = [
     "experience": "6 години",
     "equipment": "Тестер, инструменти за ел. инсталации.",
     "avatarUrl": "/media_files/worker_1011_1781367743213.jpg",
+    "profileBannerKey": "blueprint_electrical_v1",
     "approvalStatus": "approved",
     "visibilityStatus": "public",
     "gallery": [
@@ -126,6 +133,7 @@ const WORKERS = [
     "experience": "10 години",
     "equipment": "Машина за рязане на плочки, лазерен нивелир.",
     "avatarUrl": "/media_files/worker_1010_1771026735538.png",
+    "profileBannerKey": "blueprint_tiles_v1",
     "approvalStatus": "pending",
     "visibilityStatus": "hidden",
     "gallery": [
@@ -417,6 +425,31 @@ export function saveDevWorkerProfile(data = {}) {
 
   writeDb(db);
   return publicUser(worker, db);
+}
+
+export async function updateDevWorkerAppearance(data = {}) {
+  const db = readDb();
+  const worker = currentWorker(db);
+  if (!worker) throw new Error("Worker not found");
+
+  const key = String(data?.profileBannerKey || "").trim();
+  const skillKeys = (Array.isArray(worker.skills) ? worker.skills : []).map(normalizeSkillKey);
+
+  if (!WORKER_BANNER_CATALOG[key]) {
+    const error = new Error("Unknown banner key");
+    error.response = { status: 400, data: { message: "Unknown banner key" } };
+    throw error;
+  }
+
+  if (!isWorkerBannerAllowed(key, skillKeys)) {
+    const error = new Error("Banner is not allowed for this worker");
+    error.response = { status: 403, data: { message: "Banner is not allowed for this worker" } };
+    throw error;
+  }
+
+  worker.profileBannerKey = key;
+  writeDb(db);
+  return { profileBannerKey: key };
 }
 
 export async function uploadDevWorkerAvatar(file) {
@@ -748,6 +781,9 @@ function publicUser(user, db = null) {
     boostSource: user.boostSource || null,
     boostEndsAt: user.boostEndsAt || null,
     completedJobs: user.completedJobs || [],
+    profileBannerKey: WORKER_BANNER_CATALOG[user.profileBannerKey]
+      ? user.profileBannerKey
+      : DEFAULT_WORKER_BANNER_KEY,
   };
 }
 
@@ -1136,6 +1172,14 @@ export async function mockRequest(method, url, data) {
       addAudit(db, `referral_reward_${nextStatus}`, "referral", referral.id, data?.reason || "admin_review");
       writeDb(db);
       return response(referral);
+    }
+  }
+
+  if (method === "put" && path === "/workers/me/appearance") {
+    try {
+      return response(await updateDevWorkerAppearance(data));
+    } catch (error) {
+      return fail(error?.response?.data?.message || error?.message || "Appearance update failed", error?.response?.status || 400);
     }
   }
 

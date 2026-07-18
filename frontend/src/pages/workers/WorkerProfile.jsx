@@ -4,8 +4,10 @@ import axios from "axios";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import LogoutButton from "../../components/LogoutButton";
+import WorkerBannerSettings from "../../components/workers/WorkerBannerSettings";
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
+import { DEFAULT_WORKER_BANNER_KEY } from "../../constants/workerBannerCatalog";
 
 const PRICE_TABLE = {
   Баня: { material: 140 },
@@ -115,6 +117,9 @@ export default function WorkerProfile() {
     equipment: "",
     avatar: null,
     avatarUrl: "",
+    profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
+    skills: [],
+    skillKeys: [],
     approvalStatus: "",
     visibilityStatus: "",
   });
@@ -254,6 +259,9 @@ export default function WorkerProfile() {
         experience: w.experience || "",
         equipment: w.equipment || "",
         avatarUrl: w.avatarUrl || "",
+        profileBannerKey: w.profileBannerKey || DEFAULT_WORKER_BANNER_KEY,
+        skills: Array.isArray(w.skills) ? w.skills : [],
+        skillKeys: Array.isArray(w.skillKeys) ? w.skillKeys : [],
         approvalStatus: w.approvalStatus || (w.isApproved ? "approved" : "pending"),
         visibilityStatus: w.visibilityStatus || "",
         avatar: null,
@@ -1798,7 +1806,12 @@ export default function WorkerProfile() {
         {activeTab === "settings" && (
           <div className="text-center mt-10">
             <h1 className="text-3xl font-bold mb-4">Настройки</h1>
-            <p className="text-gray-400">(placeholder)</p>
+            <WorkerBannerSettings
+              worker={profile}
+              onSaved={(profileBannerKey) => {
+                setProfile((current) => ({ ...current, profileBannerKey }));
+              }}
+            />
           </div>
         )}
 

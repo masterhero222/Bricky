@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
@@ -9,6 +9,12 @@ import { RequestEntity } from '../requests/entities/request.entity';
 import { MediaService } from '../media/media.service';
 import { ReferralRewardEntity } from '../referrals/referral-reward.entity';
 import { REPAIR_CATEGORY_BY_KEY, REPAIR_CATEGORY_KEYS, RepairCategoryKey } from '../requests/repair-catalog';
+import {
+  DEFAULT_WORKER_BANNER_KEY,
+  WORKER_BANNER_POLICY_BY_KEY,
+  isWorkerBannerAllowed,
+  resolveWorkerBannerKey,
+} from './worker-banner.catalog';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -157,6 +163,7 @@ export class WorkersService {
       equipment: data.equipment ?? null,
       approvalStatus: 'pending',
       visibilityStatus: 'private',
+      profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
     });
 
     const saved = await this.workerProfilesRepo.save(worker);
@@ -227,6 +234,26 @@ export class WorkersService {
     }
 
     return this.findByUserId(userId);
+  }
+
+  async updateAppearanceByUserId(userId: number, data: { profileBannerKey?: string }) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId: uid } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+
+    const key = String(data?.profileBannerKey || '').trim();
+    if (!WORKER_BANNER_POLICY_BY_KEY[key]) throw new BadRequestException('Unknown worker banner key');
+
+    const skills = await this.workerSkillsRepo.find({ where: { workerUserId: uid } });
+    const categoryKeys = skills.map((skill) => skill.categoryKey).filter(Boolean);
+    if (!isWorkerBannerAllowed(key, categoryKeys)) {
+      throw new ForbiddenException('Worker banner is not allowed for this worker categories');
+    }
+
+    await this.workerProfilesRepo.update({ userId: uid }, { profileBannerKey: key });
+    return { profileBannerKey: key };
   }
 
   async getAll(options: WorkerMediaVisibilityOptions = {}) {
@@ -374,6 +401,7 @@ export class WorkersService {
     return {
       ...worker,
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
+      profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
       gallery,
       completedJobs,
     };
@@ -418,6 +446,7 @@ export class WorkersService {
       bio: profile.bio,
       experience: profile.experience,
       equipment: profile.equipment,
+      profileBannerKey: resolveWorkerBannerKey(profile.profileBannerKey),
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl),
       isApproved: profile.approvalStatus === 'approved',
       approvalStatus: profile.approvalStatus,
@@ -437,7 +466,10 @@ export class WorkersService {
       .map((skill) => String(skill || '').trim())
       .filter(Boolean);
 
-    if (!clean.length) return [];
+    if (!clean.length) {
+      await this.resetIneligibleWorkerBanner(workerUserId, []);
+      return [];
+    }
 
     const rows = clean.map((skill) => {
         const categoryKey = this.skillToKey(skill);
@@ -456,9 +488,22 @@ export class WorkersService {
       });
     const uniqueRows = Array.from(new Map(rows.map((row) => [`${row.categoryKey}:${row.activityKey || ''}`, row])).values());
 
-    return this.workerSkillsRepo.save(
-      uniqueRows,
+    const saved = await this.workerSkillsRepo.save(uniqueRows);
+    await this.resetIneligibleWorkerBanner(
+      workerUserId,
+      saved.map((row) => row.categoryKey).filter(Boolean),
     );
+    return saved;
+  }
+
+  private async resetIneligibleWorkerBanner(workerUserId: number, categoryKeys: string[]) {
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) return;
+
+    const currentKey = resolveWorkerBannerKey(profile.profileBannerKey);
+    if (isWorkerBannerAllowed(currentKey, categoryKeys)) return;
+
+    await this.workerProfilesRepo.update({ userId: workerUserId }, { profileBannerKey: DEFAULT_WORKER_BANNER_KEY });
   }
 
   private skillToKey(skill: string): RepairCategoryKey {

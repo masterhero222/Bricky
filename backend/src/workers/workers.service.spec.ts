@@ -184,4 +184,74 @@ describe('WorkersService media moderation', () => {
 
     expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/old-approved.jpg');
   });
+
+  it('saves an allowed worker banner immediately', async () => {
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 202,
+        publicName: 'Electrical Worker',
+        profileBannerKey: 'blueprint_general_v1',
+      }),
+      update: jest.fn(),
+    });
+    const workerSkillsRepo = repo({
+      find: jest.fn().mockResolvedValue([{ workerUserId: 202, categoryKey: 'electro', activityKey: null }]),
+    });
+    const service = serviceWith({ workerProfilesRepo, workerSkillsRepo });
+
+    const result = await service.updateAppearanceByUserId(202, {
+      profileBannerKey: 'blueprint_electrical_v1',
+    });
+
+    expect(result).toEqual({ profileBannerKey: 'blueprint_electrical_v1' });
+    expect(workerProfilesRepo.update).toHaveBeenCalledWith(
+      { userId: 202 },
+      { profileBannerKey: 'blueprint_electrical_v1' },
+    );
+  });
+
+  it('rejects a banner that does not match the worker categories', async () => {
+    const service = serviceWith({
+      workerProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({
+          userId: 202,
+          publicName: 'Electrical Worker',
+          profileBannerKey: 'blueprint_general_v1',
+        }),
+      }),
+      workerSkillsRepo: repo({
+        find: jest.fn().mockResolvedValue([{ workerUserId: 202, categoryKey: 'electro', activityKey: null }]),
+      }),
+    });
+
+    await expect(
+      service.updateAppearanceByUserId(202, {
+        profileBannerKey: 'blueprint_plumbing_v1',
+      }),
+    ).rejects.toThrow('Worker banner is not allowed');
+  });
+
+  it('falls back to the universal banner for unknown stored values', async () => {
+    const service = serviceWith({
+      media: { createAsset: jest.fn(), findByWorker: jest.fn().mockResolvedValue([]), deleteAsset: jest.fn() },
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({
+          userId: 203,
+          publicName: 'Worker',
+          profileBannerKey: 'https://bad.example/banner.jpg',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-18T09:00:00Z'),
+        }),
+      }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      requestRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      referralRewardsRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+    });
+
+    const worker = await service.findByUserId(203);
+
+    expect(worker.profileBannerKey).toBe('blueprint_general_v1');
+  });
 });

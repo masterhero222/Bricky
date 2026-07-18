@@ -11,9 +11,11 @@ import {
   UploadedFiles,
   UseInterceptors,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UpdateWorkerAppearanceDto } from './dto/update-worker-appearance.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -52,6 +54,17 @@ export class WorkersController {
   async updateMe(@Req() req: any, @Body() data: any) {
     const userId = Number(req.user.id);
     return this.workersService.updateProfileByUserId(userId, data);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('me/appearance')
+  async updateMyAppearance(@Req() req: any, @Body() data: UpdateWorkerAppearanceDto) {
+    if (String(req.user?.role || '') !== 'worker') {
+      throw new ForbiddenException('Worker role required');
+    }
+
+    const userId = Number(req.user.id);
+    return this.workersService.updateAppearanceByUserId(userId, data);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -39,6 +39,9 @@ export class WorkerProfileEntity {
   @Column({ name: 'visibility_status', default: 'private' })
   visibilityStatus: string;
 
+  @Column({ name: 'profile_banner_key', length: 64, default: 'blueprint_general_v1' })
+  profileBannerKey: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
