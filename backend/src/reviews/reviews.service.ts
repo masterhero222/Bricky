@@ -34,8 +34,8 @@ export class ReviewsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (req.status !== 'client_confirmed') {
-      throw new BadRequestException('Client must confirm the work before review');
+    if (req.status !== 'completed' || !req.archivedAt) {
+      throw new BadRequestException('Request must be completed before review');
     }
 
     const workerUserId = Number(req.assignedWorkerUserId || 0);
@@ -53,8 +53,6 @@ export class ReviewsService {
     });
 
     const saved = await this.reviewsRepo.save(review);
-    req.status = 'reviewed';
-    await this.repairRequestsRepo.save(req);
     await this.referrals.processCompletedRequest(requestId, workerUserId).catch(() => null);
     return saved;
   }

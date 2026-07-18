@@ -32,9 +32,9 @@ export class AdminController {
   }
 
   @Get('requests')
-  requests(@Req() req: any) {
+  requests(@Req() req: any, @Query('queue') queue?: string) {
     this.assertAdmin(req.user);
-    return this.admin.listRequests();
+    return this.admin.listRequests(queue);
   }
 
   @Post('requests/:requestId/status')

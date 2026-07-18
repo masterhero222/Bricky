@@ -594,6 +594,11 @@ function asPath(url) {
   return String(url || "").split("?")[0].replace(/^\/api/, "");
 }
 
+function queryParam(url, key) {
+  const [, query = ""] = String(url || "").split("?");
+  return new URLSearchParams(query).get(key);
+}
+
 function repairCategoryOption(value) {
   const raw = String(value || "").trim();
   return (
@@ -746,7 +751,7 @@ function maybeActivateReferralReward(db, workerUserId) {
 
   const completedForWorker = db.requests.filter((req) => {
     const status = requestStatusKey(req);
-    return Number(req.completedByWorkerId) === Number(workerUserId) && ["reviewed", "completed"].includes(status);
+    return Number(req.completedByWorkerId) === Number(workerUserId) && status === "completed" && Boolean(req.archivedAt);
   });
   const uniqueClients = new Set(completedForWorker.map((req) => Number(req.clientUserId)));
   referral.qualifiedRepairCount = Math.min(uniqueClients.size, 2);
@@ -826,6 +831,7 @@ function completeMockWorkerStep(db, req, workerUserId, allowedStatuses, nextStat
 export async function mockRequest(method, url, data) {
   const db = readDb();
   const path = asPath(url);
+  const scope = queryParam(url, "scope");
   const user = currentUser();
   const role = localStorage.getItem("role") || user.role;
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
@@ -944,7 +950,18 @@ export async function mockRequest(method, url, data) {
         publicName: worker.fullName || worker.name,
       })));
     }
-    if (method === "get" && path === "/admin/requests") return response(sortNewest(db.requests || []));
+    if (method === "get" && path === "/admin/requests") {
+      const requests = db.requests || [];
+      const filtered =
+        scope === "moderation"
+          ? requests.filter((request) => ["draft", "pending_admin"].includes(requestStatusKey(request)) && !request.archivedAt)
+          : scope === "active"
+          ? requests.filter((request) => !request.archivedAt && !["draft", "pending_admin", "completed", "canceled", "archived"].includes(requestStatusKey(request)))
+          : scope === "completed"
+          ? requests.filter((request) => requestStatusKey(request) === "completed" && request.archivedAt)
+          : requests;
+      return response(sortNewest(filtered));
+    }
     if (method === "get" && path === "/admin/media") return response(db.media || []);
     if (method === "get" && path === "/admin/referrals") return response(db.referrals || []);
     if (method === "get" && path === "/admin/audit") return response(db.auditLogs || []);
@@ -1058,7 +1075,11 @@ export async function mockRequest(method, url, data) {
   if (method === "post" && path === "/requests/draft") return response(draftRequest(data));
 
   if (method === "get" && path === "/requests/client") {
-    return response(sortNewest(db.requests.filter((r) => Number(r.clientUserId) === userId)));
+    const items = db.requests.filter((r) => {
+      if (Number(r.clientUserId) !== userId) return false;
+      return scope === "history" ? Boolean(r.archivedAt) : !r.archivedAt;
+    });
+    return response(sortNewest(items));
   }
 
   if (method === "get" && path === "/requests/map") {
@@ -1069,9 +1090,18 @@ export async function mockRequest(method, url, data) {
     const guard = ensureMockWorkerCanTakeJobs(db, userId);
     if (guard) return guard;
 
+    if (scope === "history") {
+      return response(
+        sortNewest(
+          db.requests.filter((r) => Number(r.assignedWorkerId) === userId && requestStatusKey(r) === "completed" && Boolean(r.archivedAt)),
+        ),
+      );
+    }
+
     const items = db.requests.filter((r) => {
       const assigned = Number(r.assignedWorkerId || 0);
       const status = requestStatusKey(r);
+      if (r.archivedAt) return false;
       if (["draft", "pending_admin", "canceled", "archived", "completed"].includes(status)) return false;
       if (!assigned) return ["published", "applied"].includes(status);
       return assigned === userId;
@@ -1080,7 +1110,7 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/requests/worker/completed") {
-    return response(sortNewest(db.requests.filter((r) => Number(r.assignedWorkerId) === userId && requestStatusKey(r) === "completed")));
+    return response(sortNewest(db.requests.filter((r) => Number(r.assignedWorkerId) === userId && requestStatusKey(r) === "completed" && Boolean(r.archivedAt))));
   }
 
   if (method === "post" && path === "/requests") {
@@ -1112,6 +1142,11 @@ export async function mockRequest(method, url, data) {
       appliedWorkers: [],
       assignedWorkerId: null,
       completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
       completedByWorkerId: null,
       durationDays: null,
       created_at: nowIso(),
@@ -1222,9 +1257,24 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === Number(clientConfirmMatch[1]));
     if (!req) return fail("Request not found", 404);
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+    if (requestStatusKey(req) === "completed" && req.archivedAt) return response(req);
     const statusGuard = ensureMockRequestStatus(req, ["ready_for_client_confirmation"], "Request is not ready for confirmation");
     if (statusGuard) return statusGuard;
-    setMockRequestStatus(req, "client_confirmed");
+    const completedAt = nowIso();
+    setMockRequestStatus(req, "completed");
+    req.clientConfirmedAt = req.clientConfirmedAt || completedAt;
+    req.completedAt = req.completedAt || completedAt;
+    req.archivedAt = req.archivedAt || completedAt;
+    req.archiveReason = req.archiveReason || "completed";
+    req.archiveSource = req.archiveSource || "system";
+    req.archivedByUserId = req.archivedByUserId || userId;
+    req.completedByWorkerId = Number(req.assignedWorkerId || 0) || null;
+    req.durationDays = completionDurationDays(req, req.completedAt);
+    const worker = db.workers.find((w) => Number(w.userId) === Number(req.assignedWorkerId));
+    if (worker) {
+      ensureWorkerJobHistory(worker, req);
+      addRequestPhotosToWorkerGallery(worker, req);
+    }
     writeDb(db);
     return response(req);
   }
@@ -1235,6 +1285,7 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === Number(completeMatch[1]));
     if (!req) return fail("Request not found", 404);
     if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
+    if (requestStatusKey(req) === "completed" && req.archivedAt) return response(req);
     const statusGuard = ensureMockRequestStatus(req, ["reviewed"], "Request must be reviewed before closing");
     if (statusGuard) return statusGuard;
 
@@ -1275,7 +1326,7 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === requestId);
     if (!req) return fail("Request not found", 404);
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
-    if (requestStatusKey(req) !== "client_confirmed") return fail("Client must confirm the work before review", 400);
+    if (requestStatusKey(req) !== "completed" || !req.archivedAt) return fail("Request must be completed before review", 400);
     const exists = db.reviews.find((r) => Number(r.requestId) === requestId);
     if (exists) return fail("Already reviewed", 400);
     const review = {
@@ -1288,7 +1339,6 @@ export async function mockRequest(method, url, data) {
       created_at: nowIso(),
     };
     db.reviews.push(review);
-    setMockRequestStatus(req, "reviewed");
     maybeActivateReferralReward(db, review.workerUserId);
     writeDb(db);
     return response(review, 201);

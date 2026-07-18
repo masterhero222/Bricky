@@ -204,7 +204,7 @@ export default function WorkerProfile() {
   async function loadCompletedRequests() {
     try {
       const [completedRes, historyRes] = await Promise.all([
-        apiGet("/requests/worker/completed").catch(() => ({ data: [] })),
+        apiGet("/requests/worker?scope=history").catch(() => apiGet("/requests/worker/completed").catch(() => ({ data: [] }))),
         apiGet("/workers/me/history").catch(() => ({ data: [] })),
       ]);
       const completed = Array.isArray(completedRes.data) ? completedRes.data : [];
@@ -284,7 +284,7 @@ export default function WorkerProfile() {
   }
 
   function canComplete(req) {
-    return isAssignedToMe(req) && requestStatusKey(req) === "reviewed";
+    return false;
   }
 
   function workerStepAction(req) {
@@ -297,7 +297,6 @@ export default function WorkerProfile() {
       inspected: { endpoint: "start", label: "Започнах работа" },
       in_progress: { endpoint: "finish", label: "Свърших работа", needsPhotos: true },
       work_finished: { endpoint: "ready", label: "Готово за клиента" },
-      reviewed: { endpoint: "complete", label: "Затвори поръчката" },
     };
     return actions[requestStatusKey(req)] || null;
   }

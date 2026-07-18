@@ -114,6 +114,22 @@ export class RepairRequestEntity {
   @Column({ name: 'completed_at', type: 'datetime', nullable: true })
   completedAt: Date | null;
 
+  @Column({ name: 'client_confirmed_at', type: 'datetime', nullable: true })
+  clientConfirmedAt: Date | null;
+
+  @Index()
+  @Column({ name: 'archived_at', type: 'datetime', nullable: true })
+  archivedAt: Date | null;
+
+  @Column({ name: 'archive_reason', length: 40, nullable: true })
+  archiveReason: string | null;
+
+  @Column({ name: 'archive_source', length: 40, nullable: true })
+  archiveSource: string | null;
+
+  @Column({ name: 'archived_by_user_id', type: 'int', nullable: true })
+  archivedByUserId: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

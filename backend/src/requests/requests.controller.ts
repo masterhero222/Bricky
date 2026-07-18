@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
   BadRequestException,
@@ -33,8 +34,9 @@ export class RequestsController {
 
   @UseGuards(JwtAuthGuard)
   @Get('client')
-  async myRequests(@Req() req: any) {
+  async myRequests(@Req() req: any, @Query('scope') scope?: string) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    if (scope === 'history') return this.requests.getHistoryByClientUserId(Number(req.user.id));
     return this.requests.getByClientUserId(Number(req.user.id));
   }
 
@@ -46,8 +48,9 @@ export class RequestsController {
 
   @UseGuards(JwtAuthGuard)
   @Get('worker')
-  async workerFeed(@Req() req: any) {
+  async workerFeed(@Req() req: any, @Query('scope') scope?: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    if (scope === 'history') return this.requests.getCompletedForWorker(Number(req.user.id));
     return this.requests.getForWorkersFeed(Number(req.user.id));
   }
 

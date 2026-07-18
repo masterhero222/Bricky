@@ -49,8 +49,8 @@ export class AdminService {
     return worker;
   }
 
-  listRequests() {
-    return this.requests.adminListRequests();
+  listRequests(queue?: string) {
+    return this.requests.adminListRequests(queue);
   }
 
   async setRequestStatus(actorUserId: number, requestId: number, status: RepairRequestStatus, reason?: string) {

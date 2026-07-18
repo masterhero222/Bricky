@@ -103,6 +103,7 @@ export default function ClientProfile() {
   });
 
   const [requests, setRequests] = useState([]);
+  const [requestHistory, setRequestHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // keyed by worker.userId (users.id)
@@ -160,9 +161,15 @@ export default function ClientProfile() {
         // ok - no endpoint
       }
 
-      const reqRes = await apiGet("/requests/client");
+      const [reqRes, historyRes] = await Promise.all([
+        apiGet("/requests/client"),
+        apiGet("/requests/client?scope=history").catch(() => ({ data: [] })),
+      ]);
       const reqs = Array.isArray(reqRes.data) ? reqRes.data : [];
+      const historyReqs = Array.isArray(historyRes.data) ? historyRes.data : [];
       setRequests(reqs);
+      setRequestHistory(historyReqs);
+      const allReqs = [...reqs, ...historyReqs];
 
       // ✅ (optional) load my reviews so UI knows "already rated"
       // If endpoint missing, UI still works (backend prevents duplicates).
@@ -182,13 +189,13 @@ export default function ClientProfile() {
         setReviewMap({});
       }
 
-      await hydrateWorkers(reqs);
+      await hydrateWorkers(allReqs);
 
       // Ensure drafts exist for client-confirmed + assigned requests.
       setReviewDraft((prev) => {
         const next = { ...prev };
-        reqs.forEach((r) => {
-          const isCompleted = r.statusKey === "client_confirmed";
+        allReqs.forEach((r) => {
+          const isCompleted = (r.statusKey || "") === "completed" && Boolean(r.archivedAt || r.isArchived);
           const assignedUserId = Number(r.assignedWorkerId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
 
@@ -425,6 +432,18 @@ export default function ClientProfile() {
     return [...requests].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [requests]);
 
+  const requestHistorySorted = useMemo(() => {
+    return [...requestHistory].sort((a, b) => new Date(b.completedAt || b.archivedAt || b.created_at) - new Date(a.completedAt || a.archivedAt || a.created_at));
+  }, [requestHistory]);
+
+  const visibleRequests = useMemo(
+    () => [
+      ...requestsSorted.map((request) => ({ ...request, _archiveScope: "active" })),
+      ...requestHistorySorted.map((request) => ({ ...request, _archiveScope: "history" })),
+    ],
+    [requestsSorted, requestHistorySorted],
+  );
+
   if (loading) {
     return <div className="text-white text-center pt-32">Зареждане...</div>;
   }
@@ -484,19 +503,19 @@ export default function ClientProfile() {
 
             {actionMsg && <div className="mb-4 text-yellow-300 font-bold">{actionMsg}</div>}
 
-            {requestsSorted.length === 0 ? (
+            {visibleRequests.length === 0 ? (
               <p className="text-gray-400">Нямате заявки.</p>
             ) : (
               <div className="space-y-6">
-                {requestsSorted.map((r) => {
+                {visibleRequests.map((r) => {
                   const appliedList = uniqNums(r.appliedWorkers || []);
                   const assignedUserId = Number(r.assignedWorkerId || 0) || null;
 
                   const statusKey = r.statusKey || "";
                   const canConfirmWork = statusKey === "ready_for_client_confirmation";
-                  const isCompleted = statusKey === "client_confirmed";
+                  const isCompleted = statusKey === "completed" && Boolean(r.archivedAt || r.isArchived);
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
-                  const alreadyReviewed = !!reviewedItem || statusKey === "reviewed" || statusKey === "completed";
+                  const alreadyReviewed = !!reviewedItem || statusKey === "reviewed";
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
 
                   const draft = reviewDraft[r.id] || { rating: 5, comment: "" };
@@ -505,7 +524,7 @@ export default function ClientProfile() {
                   const saving = !!reviewSaving[r.id];
 
                   return (
-                    <div key={r.id} className="bricky-card overflow-hidden rounded-[20px] p-5 sm:p-8">
+                    <div key={`${r._archiveScope}-${r.id}`} className="bricky-card overflow-hidden rounded-[20px] p-5 sm:p-8">
                       <div className="flex flex-col justify-between gap-6 border-b border-slate-400/15 pb-7 md:flex-row md:items-start">
                         <div className="flex min-w-0 items-start gap-4">
                           <span className="grid h-14 min-w-16 place-items-center rounded-2xl border border-blue-400/20 bg-blue-500/15 px-4 text-xl font-extrabold text-blue-100">#{r.id}</span>

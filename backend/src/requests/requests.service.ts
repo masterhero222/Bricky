@@ -184,6 +184,11 @@ export class RequestsService {
         pricingSnapshotId: null,
         assignedWorkerUserId: null,
         completedAt: null,
+        clientConfirmedAt: null,
+        archivedAt: null,
+        archiveReason: null,
+        archiveSource: null,
+        archivedByUserId: null,
       }),
     );
 
@@ -217,9 +222,19 @@ export class RequestsService {
   async getByClientUserId(clientUserId: number) {
     if (!clientUserId) throw new BadRequestException('Missing client id');
     const requests = await this.repairRequestsRepo.find({
-      where: { clientUserId },
+      where: { clientUserId, archivedAt: IsNull() },
       relations: ['client'],
       order: { createdAt: 'DESC' },
+    });
+    return Promise.all(requests.map((request) => this.toDto(request)));
+  }
+
+  async getHistoryByClientUserId(clientUserId: number) {
+    if (!clientUserId) throw new BadRequestException('Missing client id');
+    const requests = await this.repairRequestsRepo.find({
+      where: { clientUserId, archivedAt: Not(IsNull()) },
+      relations: ['client'],
+      order: { completedAt: 'DESC', id: 'DESC' },
     });
     return Promise.all(requests.map((request) => this.toDto(request)));
   }
@@ -240,8 +255,8 @@ export class RequestsService {
 
     const requests = await this.repairRequestsRepo.find({
       where: [
-        { assignedWorkerUserId: IsNull(), status: Not('pending_admin') },
-        { assignedWorkerUserId: workerUserId, status: Not('completed') },
+        { assignedWorkerUserId: IsNull(), status: Not('pending_admin'), archivedAt: IsNull() },
+        { assignedWorkerUserId: workerUserId, status: Not('completed'), archivedAt: IsNull() },
       ],
       relations: ['client'],
       order: { createdAt: 'DESC' },
@@ -250,6 +265,7 @@ export class RequestsService {
     return Promise.all(
       requests
         .filter((request) => {
+          if (request.archivedAt) return false;
           if (['canceled', 'archived', 'draft', 'pending_admin'].includes(request.status)) return false;
           if (!request.assignedWorkerUserId) return ['published', 'applied'].includes(request.status);
           return Number(request.assignedWorkerUserId) === Number(workerUserId);
@@ -261,9 +277,9 @@ export class RequestsService {
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
     const requests = await this.repairRequestsRepo.find({
-      where: { assignedWorkerUserId: workerUserId, status: 'completed' },
+      where: { assignedWorkerUserId: workerUserId, status: 'completed', archivedAt: Not(IsNull()) },
       relations: ['client'],
-      order: { createdAt: 'DESC' },
+      order: { completedAt: 'DESC', id: 'DESC' },
     });
     return Promise.all(requests.map((request) => this.toDto(request)));
   }
@@ -367,13 +383,21 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (req.status === 'completed' && req.archivedAt) return this.toDto(req);
     if (req.status !== 'ready_for_client_confirmation') {
       throw new BadRequestException('Request is not ready for client confirmation');
     }
 
-    req.status = 'client_confirmed';
+    const completedAt = new Date();
+    req.status = 'completed';
+    req.clientConfirmedAt = req.clientConfirmedAt || completedAt;
+    req.completedAt = req.completedAt || completedAt;
+    req.archivedAt = req.archivedAt || completedAt;
+    req.archiveReason = req.archiveReason || 'completed';
+    req.archiveSource = req.archiveSource || 'system';
+    req.archivedByUserId = req.archivedByUserId || clientUserId;
     await this.repairRequestsRepo.save(req);
-    await this.addEvent(requestId, clientUserId, 'client.confirmed_work', {});
+    await this.addEvent(requestId, clientUserId, 'client.confirmed_work', { archivedAt: req.archivedAt });
     return this.toDto(req);
   }
 
@@ -408,12 +432,25 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
-    if (req.status === 'completed') return this.toDto(req);
+    if (req.status === 'completed') {
+      if (!req.archivedAt) {
+        req.archivedAt = req.completedAt || new Date();
+        req.archiveReason = req.archiveReason || 'completed';
+        req.archiveSource = req.archiveSource || 'legacy_worker_close';
+        req.archivedByUserId = req.archivedByUserId || workerUserId;
+        await this.repairRequestsRepo.save(req);
+      }
+      return this.toDto(req);
+    }
     if (req.status !== 'reviewed') throw new BadRequestException('Request must be reviewed before closing');
 
     const completedAt = new Date();
     req.status = 'completed';
     req.completedAt = completedAt;
+    req.archivedAt = req.archivedAt || completedAt;
+    req.archiveReason = req.archiveReason || 'completed';
+    req.archiveSource = req.archiveSource || 'legacy_worker_close';
+    req.archivedByUserId = req.archivedByUserId || workerUserId;
     await this.repairRequestsRepo.save(req);
 
     if (Array.isArray(afterPhotos) && afterPhotos.length) {
@@ -424,17 +461,43 @@ export class RequestsService {
     return this.toDto(req);
   }
 
-  async adminListRequests() {
-    const requests = await this.repairRequestsRepo.find({ relations: ['client'], order: { createdAt: 'DESC' }, take: 200 });
-    return Promise.all(requests.map((request) => this.toDto(request)));
+  async adminListRequests(queue?: string) {
+    const where =
+      queue === 'moderation'
+        ? { status: 'pending_admin' as RepairRequestStatus, archivedAt: IsNull() }
+        : queue === 'active'
+          ? { archivedAt: IsNull() }
+          : queue === 'completed'
+            ? { status: 'completed' as RepairRequestStatus, archivedAt: Not(IsNull()) }
+            : {};
+    const requests = await this.repairRequestsRepo.find({ where, relations: ['client'], order: { createdAt: 'DESC' }, take: 200 });
+    const filtered = queue === 'active'
+      ? requests.filter((request) => !['draft', 'pending_admin', 'completed', 'canceled', 'archived'].includes(request.status))
+      : requests;
+    return Promise.all(filtered.map((request) => this.toDto(request)));
   }
 
   async adminSetStatus(requestId: number, status: RepairRequestStatus, actorUserId: number, reason?: string) {
     const request = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Request not found');
     request.status = status;
-    if (status !== 'completed') request.completedAt = null;
-    if (status === 'completed' && !request.completedAt) request.completedAt = new Date();
+    if (status !== 'completed') {
+      request.completedAt = null;
+      request.clientConfirmedAt = null;
+      request.archivedAt = null;
+      request.archiveReason = null;
+      request.archiveSource = null;
+      request.archivedByUserId = null;
+    }
+    if (status === 'completed' && !request.completedAt) {
+      const completedAt = new Date();
+      request.completedAt = completedAt;
+      request.clientConfirmedAt = request.clientConfirmedAt || completedAt;
+      request.archivedAt = request.archivedAt || completedAt;
+      request.archiveReason = request.archiveReason || 'completed';
+      request.archiveSource = request.archiveSource || 'admin';
+      request.archivedByUserId = request.archivedByUserId || actorUserId;
+    }
     await this.repairRequestsRepo.save(request);
     if (status === 'published') {
       await this.media.setRequestMediaModeration(requestId, 'request_before', 'approved');
@@ -553,6 +616,12 @@ export class RequestsService {
       assignedWorkerId: request.assignedWorkerUserId,
       assignedWorkerUserId: request.assignedWorkerUserId,
       completedAt: request.completedAt,
+      clientConfirmedAt: request.clientConfirmedAt,
+      archivedAt: request.archivedAt,
+      archiveReason: request.archiveReason,
+      archiveSource: request.archiveSource,
+      archivedByUserId: request.archivedByUserId,
+      isArchived: Boolean(request.archivedAt),
       completedByWorkerId: request.status === 'completed' ? request.assignedWorkerUserId : null,
       durationDays: request.completedAt ? completionDurationDays(request.createdAt, request.completedAt) : null,
       created_at: request.createdAt,

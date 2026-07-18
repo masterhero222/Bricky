@@ -129,4 +129,75 @@ describe('RequestsService v2 data core', () => {
     expect(updated.statusKey).toBe('published');
     expect(media.setRequestMediaModeration).toHaveBeenCalledWith(1, 'request_before', 'approved');
   });
+
+  it('archives a request when the client confirms completed work', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'ready_for_client_confirmation',
+      createdAt: new Date('2026-07-18T08:00:00.000Z'),
+      completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
+      client: { name: 'Client', email: 'client@bricky.dev' },
+    };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const service = serviceWith({ repairRequestsRepo });
+
+    const updated = await service.clientConfirmWork(1, 101);
+
+    expect(updated.statusKey).toBe('completed');
+    expect(updated.isArchived).toBe(true);
+    expect(request.clientConfirmedAt).toBeInstanceOf(Date);
+    expect(request.completedAt).toBeInstanceOf(Date);
+    expect(request.archivedAt).toBeInstanceOf(Date);
+    expect(request.archiveReason).toBe('completed');
+    expect(request.archiveSource).toBe('system');
+    expect(request.archivedByUserId).toBe(101);
+  });
+
+  it('keeps archived completed requests out of the worker active feed', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          status: 'published',
+          assignedWorkerUserId: null,
+          archivedAt: null,
+          createdAt: new Date(),
+          client: {},
+        },
+        {
+          id: 2,
+          status: 'completed',
+          assignedWorkerUserId: 201,
+          archivedAt: new Date(),
+          createdAt: new Date(),
+          client: {},
+        },
+      ]),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+
+    const feed = await service.getForWorkersFeed(201);
+
+    expect(feed.map((request) => request.id)).toEqual([1]);
+  });
 });

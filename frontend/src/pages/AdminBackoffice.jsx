@@ -153,22 +153,34 @@ function RequestsTable({ items, run }) {
   return (
     <DataTable
       columns={["ID", "Категория", "Клиент", "Статус", "Майстор", "Снимки", "Действия"]}
-      rows={items.map((request) => [
-        request.id,
-        request.categoryKey || request.category || "-",
-        request.clientName || "-",
-        request.statusKey || request.status || "-",
-        request.assignedWorkerUserId || request.assignedWorkerId || "-",
-        <RequestPhotoStrip request={request} key={`photos-${request.id}`} />,
-        <div className="flex gap-2" key={`actions-${request.id}`}>
-          <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}>
-            Одобри
-          </SmallButton>
-          <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "archived" }))}>
-            Архивирай
-          </SmallButton>
-        </div>,
-      ])}
+      rows={items.map((request) => {
+        const status = request.statusKey || request.status || "-";
+        const canModerate = ["draft", "pending_admin"].includes(status) && !request.archivedAt;
+        const isCompleted = status === "completed" && Boolean(request.archivedAt || request.isArchived);
+
+        return [
+          request.id,
+          request.categoryKey || request.category || "-",
+          request.clientName || "-",
+          status,
+          request.assignedWorkerUserId || request.assignedWorkerId || "-",
+          <RequestPhotoStrip request={request} key={`photos-${request.id}`} />,
+          canModerate ? (
+            <div className="flex gap-2" key={`actions-${request.id}`}>
+              <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}>
+                Одобри
+              </SmallButton>
+              <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "archived" }))}>
+                Архивирай
+              </SmallButton>
+            </div>
+          ) : (
+            <span className="text-xs font-semibold uppercase text-slate-500" key={`actions-${request.id}`}>
+              {isCompleted ? "read-only completed" : "read-only"}
+            </span>
+          ),
+        ];
+      })}
     />
   );
 }
