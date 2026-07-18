@@ -39,7 +39,7 @@ export class AdminService {
   }
 
   listWorkers() {
-    return this.workers.getAll();
+    return this.workers.getAll({ includeUnapprovedMedia: true });
   }
 
   async setWorkerApproval(actorUserId: number, workerUserId: number, approvalStatus: string, reason?: string) {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
+import { mediaUrl, photoMediaUrl } from "../utils/mediaUrls";
 
 const tabs = [
   { key: "users", label: "Потребители" },
@@ -191,18 +192,23 @@ function RequestPhotoStrip({ request }) {
 
   return (
     <div className="flex max-w-xs flex-wrap gap-2">
-      {photos.slice(0, 4).map((photo) => (
-        <a
-          href={photo.url}
-          target="_blank"
-          rel="noreferrer"
-          className="block overflow-hidden rounded border border-slate-700 bg-slate-950"
-          key={photo.id || photo.url}
-          title={photo.moderationStatus || "pending"}
-        >
-          <img src={photo.url} alt="" className="h-12 w-16 object-cover" />
-        </a>
-      ))}
+      {photos.slice(0, 4).map((photo) => {
+        const url = photoMediaUrl(photo);
+        if (!url) return null;
+
+        return (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="block overflow-hidden rounded border border-slate-700 bg-slate-950"
+            key={photo.id || url}
+            title={photo.moderationStatus || "pending"}
+          >
+            <img src={url} alt="" className="h-12 w-16 object-cover" />
+          </a>
+        );
+      })}
       {photos.length > 4 && <span className="self-center text-xs text-slate-400">+{photos.length - 4}</span>}
     </div>
   );
@@ -211,25 +217,42 @@ function RequestPhotoStrip({ request }) {
 function MediaTable({ items, run }) {
   return (
     <DataTable
-      columns={["ID", "Kind", "Owner", "Request", "URL", "Moderation"]}
-      rows={items.map((media) => [
-        media.id,
-        media.kind,
-        media.ownerUserId,
-        media.requestId || "-",
-        <a key={media.id} className="text-blue-300 underline" href={media.publicUrl} target="_blank" rel="noreferrer">
-          отвори
-        </a>,
-        <div className="flex gap-2" key={media.id}>
-          <span>{media.moderationStatus}</span>
-          <SmallButton onClick={() => run(() => apiPost(`/admin/media/${media.id}/moderation`, { moderationStatus: "approved" }))}>
-            OK
-          </SmallButton>
-          <SmallButton onClick={() => run(() => apiPost(`/admin/media/${media.id}/moderation`, { moderationStatus: "rejected" }))}>
-            Reject
-          </SmallButton>
-        </div>,
-      ])}
+      columns={["ID", "Kind", "Owner", "Request", "Preview", "Moderation"]}
+      rows={items.map((media) => {
+        const url = mediaUrl(media.publicUrl || media.url || media.storageKey);
+
+        return [
+          media.id,
+          media.kind,
+          media.ownerUserId,
+          media.requestId || "-",
+          url ? (
+            <a
+              key={media.id}
+              className="flex items-center gap-3 text-blue-300 underline"
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img src={url} alt="" className="h-14 w-20 rounded border border-slate-700 object-cover" />
+              <span>отвори</span>
+            </a>
+          ) : (
+            <span key={media.id} className="text-slate-500">
+              няма URL
+            </span>
+          ),
+          <div className="flex gap-2" key={`moderation-${media.id}`}>
+            <span>{media.moderationStatus}</span>
+            <SmallButton onClick={() => run(() => apiPost(`/admin/media/${media.id}/moderation`, { moderationStatus: "approved" }))}>
+              OK
+            </SmallButton>
+            <SmallButton onClick={() => run(() => apiPost(`/admin/media/${media.id}/moderation`, { moderationStatus: "rejected" }))}>
+              Reject
+            </SmallButton>
+          </div>,
+        ];
+      })}
     />
   );
 }

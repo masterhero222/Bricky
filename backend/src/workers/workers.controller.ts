@@ -39,7 +39,7 @@ export class WorkersController {
   async me(@Req() req: any) {
     const userId = Number(req.user.id);
 
-    let worker: any = await this.workersService.findByUserId(userId);
+    let worker: any = await this.workersService.findByUserId(userId, { includeUnapprovedMedia: true });
     if (!worker) {
       worker = await this.workersService.createWorkerProfile({ userId, skills: [] });
     }
@@ -96,7 +96,7 @@ export class WorkersController {
   @Get('me/gallery')
   async myGallery(@Req() req: any) {
     const userId = Number(req.user.id);
-    return this.workersService.getGalleryByUserId(userId);
+    return this.workersService.getGalleryByUserId(userId, { includeUnapprovedMedia: true });
   }
 
   @UseGuards(JwtAuthGuard)

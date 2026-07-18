@@ -22,6 +22,10 @@ type CreateWorkerProfileInput = {
   equipment?: string | null;
 };
 
+type WorkerMediaVisibilityOptions = {
+  includeUnapprovedMedia?: boolean;
+};
+
 const SKILL_CATEGORY_ALIASES: Record<string, RepairCategoryKey> = {
   вик: 'vik',
   vik: 'vik',
@@ -104,12 +108,12 @@ export class WorkersService {
     return this.workerRepository.findOne({ where: { id } });
   }
 
-  async findByUserId(userId: number) {
+  async findByUserId(userId: number, options: WorkerMediaVisibilityOptions = {}) {
     const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
-    if (profile) return this.withV2WorkerSummary(profile);
+    if (profile) return this.withV2WorkerSummary(profile, options);
 
     const worker = await this.workerRepository.findOne({ where: { userId } });
-    return worker ? this.withGallerySummary(worker) : worker;
+    return worker ? this.withGallerySummary(worker, options) : worker;
   }
 
   /**
@@ -225,24 +229,25 @@ export class WorkersService {
     return this.findByUserId(userId);
   }
 
-  async getAll() {
+  async getAll(options: WorkerMediaVisibilityOptions = {}) {
     const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
     const profileUserIds = new Set(profiles.map((profile) => Number(profile.userId)));
     const legacyWorkers = await this.workerRepository.find();
     const legacyOnly = legacyWorkers.filter((worker) => !profileUserIds.has(Number(worker.userId)));
 
     return [
-      ...(await Promise.all(profiles.map((profile) => this.withV2WorkerSummary(profile)))),
-      ...(await Promise.all(legacyOnly.map((worker) => this.withGallerySummary(worker)))),
+      ...(await Promise.all(profiles.map((profile) => this.withV2WorkerSummary(profile, options)))),
+      ...(await Promise.all(legacyOnly.map((worker) => this.withGallerySummary(worker, options)))),
     ];
   }
 
   // =========================
   // ✅ GALLERY
   // =========================
-  async getGalleryByUserId(userId: number) {
+  async getGalleryByUserId(userId: number, options: WorkerMediaVisibilityOptions = {}) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
+    const includeUnapprovedMedia = Boolean(options.includeUnapprovedMedia);
 
     const [mediaRows, legacyRows] = await Promise.all([
       this.media.findByWorker(uid).catch(() => [] as any[]),
@@ -254,6 +259,7 @@ export class WorkersService {
 
     const galleryMedia = mediaRows
       .filter((row) => row.kind === 'worker_gallery')
+      .filter((row) => includeUnapprovedMedia || row.moderationStatus === 'approved')
       .map((row) => ({
         id: row.id,
         userId: uid,
@@ -266,6 +272,7 @@ export class WorkersService {
     const legacy = legacyRows.map((row) => ({
       ...row,
       url: this.normalizeUploadUrl(row.url),
+      moderationStatus: 'approved',
     }));
 
     return [...galleryMedia, ...legacy];
@@ -289,12 +296,12 @@ export class WorkersService {
           kind: 'worker_gallery',
           storageKey: url,
           publicUrl: url,
-          moderationStatus: 'approved',
+          moderationStatus: 'pending',
         }),
       ),
     );
 
-    return this.getGalleryByUserId(uid);
+    return this.getGalleryByUserId(uid, { includeUnapprovedMedia: true });
   }
 
   async setAvatar(userId: number, avatarUrl: string) {
@@ -307,10 +314,10 @@ export class WorkersService {
       kind: 'worker_avatar',
       storageKey: avatarUrl,
       publicUrl: avatarUrl,
-      moderationStatus: 'approved',
+      moderationStatus: 'pending',
     });
 
-    return this.findByUserId(uid);
+    return this.findByUserId(uid, { includeUnapprovedMedia: true });
   }
 
   async deleteGalleryImage(userId: number, imageId: number) {
@@ -320,7 +327,7 @@ export class WorkersService {
     if (!uid) throw new BadRequestException('Invalid userId');
     if (!id) throw new BadRequestException('Invalid imageId');
 
-    const gallery = await this.getGalleryByUserId(uid);
+    const gallery = await this.getGalleryByUserId(uid, { includeUnapprovedMedia: true });
     const img = gallery.find((row: any) => Number(row.id) === id);
     if (!img) throw new NotFoundException('Image not found');
 
@@ -353,12 +360,12 @@ export class WorkersService {
     return rows.filter((request) => this.isCompletedRequest(request, uid));
   }
 
-  private async withGallerySummary(worker: Worker) {
+  private async withGallerySummary(worker: Worker, options: WorkerMediaVisibilityOptions = {}) {
     const userId = Number(worker?.userId);
     if (!userId) return worker;
 
     const [gallery, completedJobs] = await Promise.all([
-      this.getGalleryByUserId(userId).catch(() => []),
+      this.getGalleryByUserId(userId, options).catch(() => []),
       this.getHistoryByUserId(userId).catch(() => []),
     ]);
 
@@ -370,11 +377,11 @@ export class WorkersService {
     };
   }
 
-  private async withV2WorkerSummary(profile: WorkerProfileEntity) {
+  private async withV2WorkerSummary(profile: WorkerProfileEntity, options: WorkerMediaVisibilityOptions = {}) {
     const userId = Number(profile.userId);
     const [skills, gallery, completedJobs, mediaRows, activeBoost] = await Promise.all([
       this.workerSkillsRepo.find({ where: { workerUserId: userId } }).catch(() => []),
-      this.getGalleryByUserId(userId).catch(() => []),
+      this.getGalleryByUserId(userId, options).catch(() => []),
       this.getHistoryByUserId(userId).catch(() => []),
       this.media.findByWorker(userId).catch(() => [] as any[]),
       this.referralRewardsRepo
@@ -390,7 +397,7 @@ export class WorkersService {
         .catch(() => null),
     ]);
 
-    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar');
+    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
     const boostApplies =
       !!activeBoost && profile.approvalStatus === 'approved' && profile.visibilityStatus !== 'hidden';
 
