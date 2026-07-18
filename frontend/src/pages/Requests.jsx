@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bath,
   Brush,
@@ -96,6 +97,7 @@ export default function Requests() {
 }
 
 export function RequestFlow({ embedded = false, onCreated }) {
+  const navigate = useNavigate();
   const { showLogin } = useAuthModal();
   const [isLogged, setIsLogged] = useState(false);
   const [step, setStep] = useState(0);
@@ -359,7 +361,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
       await apiPost("/requests", requestPayload);
       setStatus("Заявката е записана в mock средата.");
-      onCreated?.();
+      if (onCreated) onCreated();
+      else navigate("/client/profile?tab=requests", { replace: true });
       setStep(0);
       locationAskedRef.current = false;
       setLocationStatus("idle");

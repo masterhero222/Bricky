@@ -115,6 +115,8 @@ export default function WorkerProfile() {
     equipment: "",
     avatar: null,
     avatarUrl: "",
+    approvalStatus: "",
+    visibilityStatus: "",
   });
 
   // IMPORTANT: това е users.id на логнатия worker (userId)
@@ -251,6 +253,8 @@ export default function WorkerProfile() {
         experience: w.experience || "",
         equipment: w.equipment || "",
         avatarUrl: w.avatarUrl || "",
+        approvalStatus: w.approvalStatus || (w.isApproved ? "approved" : "pending"),
+        visibilityStatus: w.visibilityStatus || "",
         avatar: null,
       }));
 
@@ -322,6 +326,10 @@ export default function WorkerProfile() {
   async function applyToRequest(requestId) {
     try {
       setApplyMsg("");
+      if (!canApplyToJobs()) {
+        setApplyMsg("Профилът ти трябва да е одобрен и активен, за да кандидатстваш.");
+        return;
+      }
       setApplyingId(requestId);
 
       await apiPost(`/requests/${requestId}/apply`, {});
@@ -706,6 +714,10 @@ export default function WorkerProfile() {
     });
   }
 
+  function canApplyToJobs() {
+    return profile.approvalStatus === "approved" && !["hidden", "suspended"].includes(String(profile.visibilityStatus || "").toLowerCase());
+  }
+
   async function loadReferrals() {
     try {
       setReferralError("");
@@ -905,7 +917,8 @@ export default function WorkerProfile() {
                     const hasAssigned = !!toNum(r.assignedWorkerId);
                     const assignedToMe = isAssignedToMe(r);
 
-                      const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
+                      const profileCannotApply = !canApplyToJobs();
+                      const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === r.id;
                       const showContact = assignedToMe;
                       const showComplete = canComplete(r);
                       const beforePhotos = requestPhotos(r);
@@ -1017,6 +1030,8 @@ export default function WorkerProfile() {
                               ? "Назначен"
                               : applied
                               ? "Кандидатствал"
+                              : profileCannotApply
+                              ? "Чака одобрение"
                               : applyingId === r.id
                               ? "Кандидатствам..."
                               : "Кандидатствай"}
@@ -1092,7 +1107,8 @@ export default function WorkerProfile() {
                   const hasAssigned = !!toNum(req.assignedWorkerId);
                   const assignedToMe = isAssignedToMe(req);
 
-                  const disabledApply = applied || closed || hasAssigned || applyingId === req.id;
+                  const profileCannotApply = !canApplyToJobs();
+                  const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === req.id;
                   const showContact = assignedToMe;
                   const showComplete = canComplete(req);
                   const beforePhotos = requestPhotos(req);
@@ -1226,6 +1242,8 @@ export default function WorkerProfile() {
                               ? "Назначен"
                               : applied
                               ? "Кандидатствал"
+                              : profileCannotApply
+                              ? "Чака одобрение"
                               : applyingId === req.id
                               ? "Кандидатствам..."
                               : "Кандидатствай"}

@@ -825,6 +825,21 @@ function maybeActivateReferralReward(db, workerUserId) {
   }
 }
 
+function findMockWorker(db, workerUserId) {
+  return db.workers.find((worker) => Number(worker.userId) === Number(workerUserId));
+}
+
+function ensureMockWorkerCanTakeJobs(db, workerUserId) {
+  const worker = findMockWorker(db, workerUserId);
+  if (!worker) return fail("Worker account not found", 403);
+  if (worker.status && worker.status !== "active") return fail("Worker account is not active", 403);
+  if (worker.approvalStatus !== "approved") return fail("Worker profile is not approved", 403);
+  if (["hidden", "suspended"].includes(String(worker.visibilityStatus || "").toLowerCase())) {
+    return fail("Worker profile is not visible", 403);
+  }
+  return null;
+}
+
 export async function mockRequest(method, url, data) {
   const db = readDb();
   const path = asPath(url);
@@ -1066,6 +1081,9 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/requests/worker") {
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+
     const items = db.requests.filter((r) => {
       const assigned = Number(r.assignedWorkerId || 0);
       const closed = ["завършена", "отказана"].includes(String(r.status || "").toLowerCase());
@@ -1117,6 +1135,9 @@ export async function mockRequest(method, url, data) {
   const applyMatch = path.match(/^\/requests\/(\d+)\/apply$/);
   if (method === "post" && applyMatch) {
     if (role !== "worker") return fail("Worker only", 400);
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+
     const req = db.requests.find((r) => Number(r.id) === Number(applyMatch[1]));
     if (!req) return fail("Request not found", 404);
     if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
@@ -1134,6 +1155,8 @@ export async function mockRequest(method, url, data) {
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
     const workerUserId = Number(data?.workerUserId);
     if (!workerUserId) return fail("Missing workerUserId", 400);
+    const guard = ensureMockWorkerCanTakeJobs(db, workerUserId);
+    if (guard) return guard;
     if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
     req.assignedWorkerId = workerUserId;
     req.status = "в процес";

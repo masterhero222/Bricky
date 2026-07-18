@@ -90,7 +90,10 @@ function safeRatingValue(x) {
 }
 
 export default function ClientProfile() {
-  const [activeTab, setActiveTab] = useState("requests");
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return ["requests", "create", "profile", "settings"].includes(tab) ? tab : "requests";
+  });
 
   const [client, setClient] = useState({
     name: "",

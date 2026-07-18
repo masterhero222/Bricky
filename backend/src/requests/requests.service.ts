@@ -24,6 +24,8 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
 import { MediaAssetEntity } from '../media/media-asset.entity';
+import { UserEntity } from '../users/user.entity';
+import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 
 function extractResponseText(data: any): string {
   if (typeof data?.output_text === 'string') return data.output_text;
@@ -74,6 +76,10 @@ export class RequestsService {
     private readonly pricingSnapshotsRepo: Repository<RequestPricingSnapshotEntity>,
     @InjectRepository(RequestEventEntity)
     private readonly eventsRepo: Repository<RequestEventEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
+    @InjectRepository(WorkerProfileEntity)
+    private readonly workerProfilesRepo: Repository<WorkerProfileEntity>,
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
     private readonly media: MediaService,
@@ -230,6 +236,7 @@ export class RequestsService {
 
   async getForWorkersFeed(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
+    await this.assertWorkerCanTakeJobs(workerUserId);
 
     const requests = await this.repairRequestsRepo.find({
       where: [
@@ -258,6 +265,8 @@ export class RequestsService {
   }
 
   async applyToRequest(requestId: number, workerUserId: number) {
+    await this.assertWorkerCanTakeJobs(workerUserId);
+
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (req.assignedWorkerUserId) throw new BadRequestException('Request already has assigned worker');
@@ -296,6 +305,7 @@ export class RequestsService {
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
     if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
+    await this.assertWorkerCanTakeJobs(workerUserId);
 
     const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
     if (!application || ['withdrawn', 'rejected'].includes(application.status)) {
@@ -402,6 +412,24 @@ export class RequestsService {
         metadataJson: metadata || {},
       }),
     );
+  }
+
+  private async assertWorkerCanTakeJobs(workerUserId: number) {
+    const uid = Number(workerUserId);
+    if (!uid) throw new BadRequestException('Missing worker id');
+
+    const user = await this.usersRepo.findOne({ where: { id: uid } });
+    if (!user || user.role !== 'worker') throw new ForbiddenException('Worker account not found');
+    if (user.status !== 'active') throw new ForbiddenException('Worker account is not active');
+
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId: uid } });
+    if (!profile) throw new ForbiddenException('Worker profile is not approved');
+    if (profile.approvalStatus !== 'approved') {
+      throw new ForbiddenException('Worker profile is not approved');
+    }
+    if (['hidden', 'suspended'].includes(String(profile.visibilityStatus || '').toLowerCase())) {
+      throw new ForbiddenException('Worker profile is not visible');
+    }
   }
 
   private async toDto(request: RepairRequestEntity) {

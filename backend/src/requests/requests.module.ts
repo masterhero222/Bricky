@@ -14,6 +14,8 @@ import { AuthModule } from '../auth/auth.module';
 import { WorkersModule } from '../workers/workers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
+import { UserEntity } from '../users/user.entity';
+import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { MediaModule } from '../media/media.module';
       RequestImageEntity,
       RequestEventEntity,
       RequestPricingSnapshotEntity,
+      UserEntity,
+      WorkerProfileEntity,
     ]),
     MailModule,
     AuthModule,
