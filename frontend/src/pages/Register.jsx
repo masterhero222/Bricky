@@ -1,6 +1,13 @@
 ﻿import { useState } from "react";
 import { apiPost } from "../services/api";
 
+import { REPAIR_CATEGORY_OPTIONS } from "../constants/repairCatalog";
+
+const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
+  key: category.key,
+  label: category.shortLabel || category.label,
+}));
+
 export default function Register() {
   const [role, setRole] = useState("client");
   const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get("ref") || "");
@@ -138,16 +145,16 @@ export default function Register() {
             />
 
             <div className="flex gap-2 flex-wrap">
-              {["ВиК", "Електро", "Шпакловка", "Зидария", "Плочки"].map((s) => (
+              {WORKER_SKILL_OPTIONS.map((skill) => (
                 <button
                   type="button"
-                  key={s}
-                  onClick={() => toggleSkill(s)}
+                  key={skill.key}
+                  onClick={() => toggleSkill(skill.key)}
                   className={`px-3 py-1 rounded ${
-                    form.skills.includes(s) ? "bg-blue-600" : "bg-gray-700"
+                    form.skills.includes(skill.key) ? "bg-blue-600" : "bg-gray-700"
                   }`}
                 >
-                  {s}
+                  {skill.label}
                 </button>
               ))}
             </div>

@@ -8,6 +8,7 @@ import { WorkerSkillEntity } from './worker-skill.entity';
 import { RequestEntity } from '../requests/entities/request.entity';
 import { MediaService } from '../media/media.service';
 import { ReferralRewardEntity } from '../referrals/referral-reward.entity';
+import { REPAIR_CATEGORY_BY_KEY, REPAIR_CATEGORY_KEYS, RepairCategoryKey } from '../requests/repair-catalog';
 import * as bcrypt from 'bcrypt';
 
 type CreateWorkerProfileInput = {
@@ -19,6 +20,20 @@ type CreateWorkerProfileInput = {
   bio?: string | null;
   experience?: string | null;
   equipment?: string | null;
+};
+
+const SKILL_CATEGORY_ALIASES: Record<string, RepairCategoryKey> = {
+  вик: 'vik',
+  vik: 'vik',
+  електро: 'electro',
+  electro: 'electro',
+  ток: 'electro',
+  шпакловка: 'plaster',
+  'шпакловка и боя': 'plaster',
+  боя: 'painting',
+  боядисване: 'painting',
+  зидария: 'plaster',
+  плочки: 'tiles',
 };
 
 @Injectable()
@@ -388,7 +403,8 @@ export class WorkersService {
       email: null,
       phone: null,
       city: profile.city,
-      skills: skills.map((skill) => skill.activityKey || skill.categoryKey).filter(Boolean),
+      skills: skills.map((skill) => REPAIR_CATEGORY_BY_KEY[skill.categoryKey as RepairCategoryKey] || skill.activityKey || skill.categoryKey).filter(Boolean),
+      skillKeys: skills.map((skill) => skill.categoryKey).filter(Boolean),
       description: profile.bio,
       bio: profile.bio,
       experience: profile.experience,
@@ -414,24 +430,38 @@ export class WorkersService {
 
     if (!clean.length) return [];
 
-    return this.workerSkillsRepo.save(
-      clean.map((skill) =>
-        this.workerSkillsRepo.create({
+    const rows = clean.map((skill) => {
+        const categoryKey = this.skillToKey(skill);
+        const categoryLabel = REPAIR_CATEGORY_BY_KEY[categoryKey as RepairCategoryKey];
+        const normalizedInput = String(skill || '').trim().toLowerCase();
+        const isCategoryOnly =
+          REPAIR_CATEGORY_KEYS.includes(skill as RepairCategoryKey) ||
+          normalizedInput === String(categoryLabel || '').toLowerCase() ||
+          SKILL_CATEGORY_ALIASES[normalizedInput] === categoryKey;
+
+        return this.workerSkillsRepo.create({
           workerUserId,
-          categoryKey: this.skillToKey(skill),
-          activityKey: skill,
-        }),
-      ),
+          categoryKey,
+          activityKey: isCategoryOnly ? null : skill,
+        });
+      });
+    const uniqueRows = Array.from(new Map(rows.map((row) => [`${row.categoryKey}:${row.activityKey || ''}`, row])).values());
+
+    return this.workerSkillsRepo.save(
+      uniqueRows,
     );
   }
 
-  private skillToKey(skill: string) {
-    return String(skill || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9а-я]+/gi, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 80);
+  private skillToKey(skill: string): RepairCategoryKey {
+    const raw = String(skill || '').trim();
+    const normalized = raw.toLowerCase();
+    if (REPAIR_CATEGORY_KEYS.includes(raw as RepairCategoryKey)) return raw as RepairCategoryKey;
+    if (SKILL_CATEGORY_ALIASES[normalized]) return SKILL_CATEGORY_ALIASES[normalized];
+
+    const byLabel = Object.entries(REPAIR_CATEGORY_BY_KEY).find(([, label]) => label.toLowerCase() === normalized);
+    if (byLabel) return byLabel[0] as RepairCategoryKey;
+
+    return 'small_repairs';
   }
 
   private normalizeUploadUrl(value: any): string {

@@ -594,8 +594,28 @@ function asPath(url) {
   return String(url || "").split("?")[0].replace(/^\/api/, "");
 }
 
+function repairCategoryOption(value) {
+  const raw = String(value || "").trim();
+  return (
+    REPAIR_CATEGORY_OPTIONS.find(
+      (category) => category.key === raw || category.label === raw || category.shortLabel === raw,
+    ) || getRepairCategoryByLabel(raw)
+  );
+}
+
+function normalizeSkillKey(value) {
+  const option = repairCategoryOption(value);
+  return option?.key || "small_repairs";
+}
+
+function skillLabel(value) {
+  const option = repairCategoryOption(value);
+  return option?.shortLabel || option?.label || value;
+}
+
 function publicUser(user) {
   if (!user) return null;
+  const skillKeys = (Array.isArray(user.skills) ? user.skills : []).map(normalizeSkillKey);
   return {
     id: user.id || user.userId,
     userId: user.userId || user.id,
@@ -607,7 +627,8 @@ function publicUser(user) {
     address: user.address,
     status: user.status || "active",
     city: user.city,
-    skills: user.skills || [],
+    skills: skillKeys.map(skillLabel),
+    skillKeys,
     description: user.description,
     experience: user.experience,
     equipment: user.equipment,
@@ -840,7 +861,7 @@ export async function mockRequest(method, url, data) {
         email,
         phone: data?.phone || "",
         city: data?.city || "",
-        skills: Array.isArray(data?.skills) ? data.skills : [],
+        skills: Array.isArray(data?.skills) ? data.skills.map(normalizeSkillKey) : [],
         description: data?.description || "",
         experience: data?.experience || "",
         equipment: data?.equipment || "",

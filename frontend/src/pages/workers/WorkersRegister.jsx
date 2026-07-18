@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { apiPost } from "../../services/api";
 
+import { REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
+
+const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
+  key: category.key,
+  label: category.shortLabel || category.label,
+}));
+
 export default function WorkersRegister() {
   const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get("ref") || "");
   const [form, setForm] = useState({
@@ -15,8 +22,6 @@ export default function WorkersRegister() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  const skillsList = ["ВиК", "Електро", "Шпакловка и боя", "Зидария", "Плочки"];
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -113,13 +118,13 @@ export default function WorkersRegister() {
         <div>
           <p className="font-semibold mb-2">Специалности:</p>
           <div className="flex flex-wrap gap-3">
-            {skillsList.map((s) => (
-              <button key={s} type="button"
-                onClick={() => handleSkillToggle(s)}
+            {WORKER_SKILL_OPTIONS.map((skill) => (
+              <button key={skill.key} type="button"
+                onClick={() => handleSkillToggle(skill.key)}
                 className={`px-4 py-2 rounded-full border ${
-                  form.skills.includes(s) ? "bg-blue-600 border-blue-600" : "border-gray-600"
+                  form.skills.includes(skill.key) ? "bg-blue-600 border-blue-600" : "border-gray-600"
                 }`}>
-                {s}
+                {skill.label}
               </button>
             ))}
           </div>
