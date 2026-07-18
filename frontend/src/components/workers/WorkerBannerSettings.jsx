@@ -12,13 +12,8 @@ import WorkerBlueprintBanner from "./WorkerBlueprintBanner";
 import "./WorkerBannerSettings.css";
 
 export default function WorkerBannerSettings({ worker, onSaved }) {
-  const categoryKeys = useMemo(() => {
-    const keys = Array.isArray(worker?.skillKeys) ? worker.skillKeys : [];
-    return keys.map((key) => String(key || "").trim()).filter(Boolean);
-  }, [worker?.skillKeys]);
-
-  const allowedBanners = useMemo(() => getAllowedBanners(categoryKeys), [categoryKeys]);
-  const activeKey = isWorkerBannerAllowed(worker?.profileBannerKey, categoryKeys)
+  const allowedBanners = useMemo(() => getAllowedBanners(), []);
+  const activeKey = isWorkerBannerAllowed(worker?.profileBannerKey)
     ? worker.profileBannerKey
     : DEFAULT_WORKER_BANNER_KEY;
 

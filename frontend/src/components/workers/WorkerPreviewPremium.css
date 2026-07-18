@@ -48,15 +48,19 @@
 }
 
 .wpp-header {
+  position: relative;
   min-height: 128px;
   display: grid;
   grid-template-columns: 288px minmax(420px, 1fr) 238px;
   align-items: center;
   gap: 16px;
   padding: 12px 68px 16px 74px;
+  isolation: isolate;
 }
 
 .wpp-brand {
+  position: relative;
+  z-index: 3;
   min-width: 0;
 }
 
@@ -133,6 +137,8 @@
 }
 
 .wpp-verified {
+  position: relative;
+  z-index: 3;
   justify-self: end;
   display: inline-flex;
   align-items: center;
@@ -147,6 +153,38 @@
   width: 30px;
   height: 30px;
   stroke-width: 1.8;
+}
+
+.wpp-header .wpp-banner {
+  z-index: 1;
+  height: 118px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-2px);
+}
+
+.wpp-header .wpp-banner::before {
+  width: 24%;
+  background: linear-gradient(90deg, var(--wpp-shell) 0%, rgba(7, 23, 39, 0.82) 36%, transparent 100%);
+}
+
+.wpp-header .wpp-banner::after {
+  width: 24%;
+  background: linear-gradient(270deg, var(--wpp-shell) 0%, rgba(7, 23, 39, 0.82) 36%, transparent 100%);
+}
+
+.wpp-header .wpp-banner-image {
+  opacity: 0.72;
+  mix-blend-mode: screen;
+  filter: saturate(1.22) contrast(1.06) brightness(0.9);
+}
+
+.wpp-header .wpp-banner-glow {
+  inset: 4px 16%;
+  background: rgba(36, 212, 242, 0.16);
+  filter: blur(30px);
 }
 
 .wpp-main-grid {

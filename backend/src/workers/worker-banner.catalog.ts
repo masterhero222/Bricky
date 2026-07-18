@@ -41,11 +41,6 @@ export function resolveWorkerBannerKey(key: any): string {
   return WORKER_BANNER_POLICY_BY_KEY[raw] ? raw : DEFAULT_WORKER_BANNER_KEY;
 }
 
-export function isWorkerBannerAllowed(key: string, categoryKeys: string[] = []): boolean {
-  const policy = WORKER_BANNER_POLICY_BY_KEY[key];
-  if (!policy) return false;
-  if (!policy.categoryKeys.length) return true;
-
-  const offered = new Set(categoryKeys.map((categoryKey) => String(categoryKey || '').trim()));
-  return policy.categoryKeys.some((categoryKey) => offered.has(categoryKey));
+export function isWorkerBannerAllowed(key: string): boolean {
+  return Boolean(WORKER_BANNER_POLICY_BY_KEY[key]);
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
@@ -246,11 +246,7 @@ export class WorkersService {
     const key = String(data?.profileBannerKey || '').trim();
     if (!WORKER_BANNER_POLICY_BY_KEY[key]) throw new BadRequestException('Unknown worker banner key');
 
-    const skills = await this.workerSkillsRepo.find({ where: { workerUserId: uid } });
-    const categoryKeys = skills.map((skill) => skill.categoryKey).filter(Boolean);
-    if (!isWorkerBannerAllowed(key, categoryKeys)) {
-      throw new ForbiddenException('Worker banner is not allowed for this worker categories');
-    }
+    if (!isWorkerBannerAllowed(key)) throw new BadRequestException('Unknown worker banner key');
 
     await this.workerProfilesRepo.update({ userId: uid }, { profileBannerKey: key });
     return { profileBannerKey: key };
@@ -467,7 +463,7 @@ export class WorkersService {
       .filter(Boolean);
 
     if (!clean.length) {
-      await this.resetIneligibleWorkerBanner(workerUserId, []);
+      await this.resetIneligibleWorkerBanner(workerUserId);
       return [];
     }
 
@@ -489,19 +485,16 @@ export class WorkersService {
     const uniqueRows = Array.from(new Map(rows.map((row) => [`${row.categoryKey}:${row.activityKey || ''}`, row])).values());
 
     const saved = await this.workerSkillsRepo.save(uniqueRows);
-    await this.resetIneligibleWorkerBanner(
-      workerUserId,
-      saved.map((row) => row.categoryKey).filter(Boolean),
-    );
+    await this.resetIneligibleWorkerBanner(workerUserId);
     return saved;
   }
 
-  private async resetIneligibleWorkerBanner(workerUserId: number, categoryKeys: string[]) {
+  private async resetIneligibleWorkerBanner(workerUserId: number) {
     const profile = await this.workerProfilesRepo.findOne({ where: { userId: workerUserId } });
     if (!profile) return;
 
     const currentKey = resolveWorkerBannerKey(profile.profileBannerKey);
-    if (isWorkerBannerAllowed(currentKey, categoryKeys)) return;
+    if (isWorkerBannerAllowed(currentKey)) return;
 
     await this.workerProfilesRepo.update({ userId: workerUserId }, { profileBannerKey: DEFAULT_WORKER_BANNER_KEY });
   }

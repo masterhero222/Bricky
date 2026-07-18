@@ -2,7 +2,6 @@ import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel
 import {
   DEFAULT_WORKER_BANNER_KEY,
   WORKER_BANNER_CATALOG,
-  isWorkerBannerAllowed,
 } from "../constants/workerBannerCatalog";
 
 const STORAGE_KEY = "bricky.dev.db";
@@ -433,17 +432,9 @@ export async function updateDevWorkerAppearance(data = {}) {
   if (!worker) throw new Error("Worker not found");
 
   const key = String(data?.profileBannerKey || "").trim();
-  const skillKeys = (Array.isArray(worker.skills) ? worker.skills : []).map(normalizeSkillKey);
-
   if (!WORKER_BANNER_CATALOG[key]) {
     const error = new Error("Unknown banner key");
     error.response = { status: 400, data: { message: "Unknown banner key" } };
-    throw error;
-  }
-
-  if (!isWorkerBannerAllowed(key, skillKeys)) {
-    const error = new Error("Banner is not allowed for this worker");
-    error.response = { status: 403, data: { message: "Banner is not allowed for this worker" } };
     throw error;
   }
 

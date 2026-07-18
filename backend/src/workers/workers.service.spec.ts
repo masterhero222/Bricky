@@ -210,25 +210,31 @@ describe('WorkersService media moderation', () => {
     );
   });
 
-  it('rejects a banner that does not match the worker categories', async () => {
-    const service = serviceWith({
-      workerProfilesRepo: repo({
-        findOne: jest.fn().mockResolvedValue({
-          userId: 202,
-          publicName: 'Electrical Worker',
-          profileBannerKey: 'blueprint_general_v1',
-        }),
+  it('allows any trusted Bricky banner regardless of worker categories', async () => {
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 202,
+        publicName: 'Electrical Worker',
+        profileBannerKey: 'blueprint_general_v1',
       }),
+      update: jest.fn(),
+    });
+    const service = serviceWith({
+      workerProfilesRepo,
       workerSkillsRepo: repo({
         find: jest.fn().mockResolvedValue([{ workerUserId: 202, categoryKey: 'electro', activityKey: null }]),
       }),
     });
 
-    await expect(
-      service.updateAppearanceByUserId(202, {
-        profileBannerKey: 'blueprint_plumbing_v1',
-      }),
-    ).rejects.toThrow('Worker banner is not allowed');
+    const result = await service.updateAppearanceByUserId(202, {
+      profileBannerKey: 'blueprint_plumbing_v1',
+    });
+
+    expect(result).toEqual({ profileBannerKey: 'blueprint_plumbing_v1' });
+    expect(workerProfilesRepo.update).toHaveBeenCalledWith(
+      { userId: 202 },
+      { profileBannerKey: 'blueprint_plumbing_v1' },
+    );
   });
 
   it('falls back to the universal banner for unknown stored values', async () => {

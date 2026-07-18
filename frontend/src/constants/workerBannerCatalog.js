@@ -105,22 +105,12 @@ export function resolveWorkerBanner(key) {
   return WORKER_BANNER_CATALOG[key] || WORKER_BANNER_CATALOG[DEFAULT_WORKER_BANNER_KEY];
 }
 
-export function getAllowedBanners(categoryKeys = []) {
-  const offered = new Set(
-    (Array.isArray(categoryKeys) ? categoryKeys : [])
-      .map((key) => String(key || "").trim())
-      .filter(Boolean),
-  );
-
-  return Object.values(WORKER_BANNER_CATALOG).filter(
-    (banner) =>
-      banner.categoryKeys.length === 0 ||
-      banner.categoryKeys.some((key) => offered.has(key)),
-  );
+export function getAllowedBanners() {
+  return Object.values(WORKER_BANNER_CATALOG);
 }
 
-export function isWorkerBannerAllowed(key, categoryKeys = []) {
-  return getAllowedBanners(categoryKeys).some((banner) => banner.key === key);
+export function isWorkerBannerAllowed(key) {
+  return Boolean(WORKER_BANNER_CATALOG[key]);
 }
 
 export function bannerKeyForCategory(categoryKey) {
