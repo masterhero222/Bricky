@@ -24,7 +24,11 @@ describe('RequestsService v2 data core', () => {
       (overrides.workerProfilesRepo || repo()) as any,
       {} as any,
       {} as any,
-      (overrides.media || { createAsset: jest.fn(), findByRequest: jest.fn().mockResolvedValue([]) }) as any,
+      (overrides.media || {
+        createAsset: jest.fn(),
+        findByRequest: jest.fn().mockResolvedValue([]),
+        setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+      }) as any,
     );
   }
 
@@ -40,20 +44,26 @@ describe('RequestsService v2 data core', () => {
     const pricingSnapshotsRepo = repo({
       save: jest.fn(async (snapshot) => ({ id: 501, ...snapshot })),
     });
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+    };
 
-    const service = serviceWith({ repairRequestsRepo, pricingSnapshotsRepo });
+    const service = serviceWith({ repairRequestsRepo, pricingSnapshotsRepo, media });
     const created = await service.create(
       {
         category: 'ВиК',
         description: 'Теч под мивката',
         address: 'София',
-        photos: [],
+        photos: [{ url: '/uploads/request-before.jpg' }],
       } as any,
       101,
     );
 
     expect(savedRequests[0].status).toBe('pending_admin');
     expect(created.statusKey).toBe('pending_admin');
+    expect(media.createAsset).toHaveBeenCalledWith(expect.objectContaining({ kind: 'request_before', moderationStatus: 'pending' }));
   });
 
   it('rejects applications from suspended workers', async () => {
@@ -95,5 +105,28 @@ describe('RequestsService v2 data core', () => {
     const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
 
     await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('approves request photos when admin publishes a request', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        status: 'pending_admin',
+        completedAt: null,
+      }),
+      save: jest.fn(async (request) => request),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+    };
+
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    const updated = await service.adminSetStatus(1, 'published', 1, 'ok');
+
+    expect(updated.statusKey).toBe('published');
+    expect(media.setRequestMediaModeration).toHaveBeenCalledWith(1, 'request_before', 'approved');
   });
 });

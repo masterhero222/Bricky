@@ -208,7 +208,7 @@ export class RequestsService {
     request.pricingSnapshotId = snapshot.id;
     await this.repairRequestsRepo.save(request);
 
-    await this.saveMedia(request.id, clientUserId, 'request_before', dto.photos || []);
+    await this.saveMedia(request.id, clientUserId, 'request_before', dto.photos || [], 'pending');
     await this.addEvent(request.id, clientUserId, 'request.created', { categoryKey });
 
     return this.toDto(request);
@@ -436,11 +436,16 @@ export class RequestsService {
     if (status !== 'completed') request.completedAt = null;
     if (status === 'completed' && !request.completedAt) request.completedAt = new Date();
     await this.repairRequestsRepo.save(request);
+    if (status === 'published') {
+      await this.media.setRequestMediaModeration(requestId, 'request_before', 'approved');
+    } else if (status === 'archived') {
+      await this.media.setRequestMediaModeration(requestId, 'request_before', 'rejected');
+    }
     await this.addEvent(requestId, actorUserId, 'admin.status_changed', { status, reason: reason || null });
     return this.toDto(request);
   }
 
-  private async saveMedia(requestId: number, ownerUserId: number, kind: string, photos: any[]) {
+  private async saveMedia(requestId: number, ownerUserId: number, kind: string, photos: any[], moderationStatus = 'approved') {
     const normalized = normalizePhotos(photos);
     await Promise.all(
       normalized.map((photo) =>
@@ -452,7 +457,7 @@ export class RequestsService {
           publicUrl: photo.url,
           mimeType: photo.mimeType,
           sizeBytes: photo.sizeBytes,
-          moderationStatus: 'approved',
+          moderationStatus,
         }),
       ),
     );
@@ -563,6 +568,7 @@ export class RequestsService {
       storageKey: row.storageKey,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
+      moderationStatus: row.moderationStatus,
       kind: row.kind,
       created_at: row.createdAt,
     }));

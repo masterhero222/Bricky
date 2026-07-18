@@ -172,8 +172,9 @@ function guessRepairCategory(text) {
 function seedDb() {
   const referralRewardEndsAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
   return {
-    mapSeedVersion: 6,
+    mapSeedVersion: 7,
     nextRequestId: 1,
+    nextMediaId: 3,
     nextReviewId: 1,
     nextUserId: 301,
     nextWorkerId: 4,
@@ -294,6 +295,16 @@ function readDb() {
           requests: (Array.isArray(db.requests) ? db.requests : []).filter((request) => request?.locationSource !== "seed"),
           media: (Array.isArray(db.media) ? db.media : []).filter((media) => media?.kind !== "request_before" || !media?.requestId),
         };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 7 || !Number(db?.nextMediaId)) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 7,
+          nextMediaId: Math.max(Number(db.nextMediaId || 0), maxMediaId(db) + 1),
+        };
+        ensureRequestMediaRecords(migrated);
         writeDb(migrated);
         return migrated;
       }
@@ -479,6 +490,48 @@ function normalizePhotos(items = []) {
       url: photo.url,
       created_at: photo.photo?.created_at || photo.photo?.createdAt || nowIso(),
     }));
+}
+
+function maxMediaId(db) {
+  return Math.max(0, ...(Array.isArray(db?.media) ? db.media : []).map((media) => Number(media.id) || 0));
+}
+
+function nextMockMediaId(db) {
+  db.nextMediaId = Math.max(Number(db.nextMediaId || 0), maxMediaId(db) + 1);
+  return db.nextMediaId++;
+}
+
+function ensureRequestMediaRecords(db) {
+  db.media = Array.isArray(db.media) ? db.media : [];
+  (Array.isArray(db.requests) ? db.requests : []).forEach((req) => {
+    const status = requestStatusKey(req);
+    const moderationStatus = status === "archived" ? "rejected" : status === "pending_admin" ? "pending" : "approved";
+    normalizePhotos(req.beforePhotos || req.photos).forEach((photo) => {
+      const exists = db.media.some(
+        (media) => Number(media.requestId) === Number(req.id) && media.kind === "request_before" && media.publicUrl === photo.url,
+      );
+      if (exists) return;
+      db.media.push({
+        id: nextMockMediaId(db),
+        kind: "request_before",
+        ownerUserId: req.clientUserId,
+        requestId: req.id,
+        publicUrl: photo.url,
+        moderationStatus,
+        createdAt: photo.created_at || nowIso(),
+      });
+    });
+  });
+  return db.media;
+}
+
+function setRequestMediaModeration(db, requestId, kind, moderationStatus) {
+  db.media = Array.isArray(db.media) ? db.media : [];
+  db.media.forEach((media) => {
+    if (Number(media.requestId) === Number(requestId) && media.kind === kind) {
+      media.moderationStatus = moderationStatus;
+    }
+  });
 }
 
 function completionDurationDays(req, completedAt = nowIso()) {
@@ -902,7 +955,10 @@ export async function mockRequest(method, url, data) {
     if (method === "post" && requestStatusMatch) {
       const request = db.requests.find((item) => Number(item.id) === Number(requestStatusMatch[1]));
       if (!request) return fail("Request not found", 404);
-      setMockRequestStatus(request, data?.status || requestStatusKey(request));
+      const nextStatus = data?.status || requestStatusKey(request);
+      setMockRequestStatus(request, nextStatus);
+      if (nextStatus === "published") setRequestMediaModeration(db, request.id, "request_before", "approved");
+      if (nextStatus === "archived") setRequestMediaModeration(db, request.id, "request_before", "rejected");
       addAudit(db, "request_status_changed", "request", request.id, request.status);
       writeDb(db);
       return response(request);
@@ -1009,6 +1065,7 @@ export async function mockRequest(method, url, data) {
   if (method === "post" && path === "/requests") {
     if (role !== "client") return fail("Client only", 400);
     const client = db.clients.find((c) => Number(c.id) === userId) || user;
+    const beforePhotos = normalizePhotos(data.photos);
     const req = {
       id: db.nextRequestId++,
       clientUserId: userId,
@@ -1028,8 +1085,8 @@ export async function mockRequest(method, url, data) {
       pricingSnapshot: data.pricingSnapshot || null,
       status: REQUEST_STATUS_LABELS.pending_admin,
       statusKey: "pending_admin",
-      photos: normalizePhotos(data.photos),
-      beforePhotos: normalizePhotos(data.photos),
+      photos: beforePhotos,
+      beforePhotos,
       afterPhotos: [],
       appliedWorkers: [],
       assignedWorkerId: null,
@@ -1039,6 +1096,17 @@ export async function mockRequest(method, url, data) {
       created_at: nowIso(),
     };
     db.requests.push(req);
+    beforePhotos.forEach((photo) => {
+      db.media.push({
+        id: nextMockMediaId(db),
+        kind: "request_before",
+        ownerUserId: userId,
+        requestId: req.id,
+        publicUrl: photo.url,
+        moderationStatus: "pending",
+        createdAt: photo.created_at || nowIso(),
+      });
+    });
     writeDb(db);
     return response(req, 201);
   }

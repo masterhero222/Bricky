@@ -152,14 +152,15 @@ function WorkersTable({ items, run }) {
 function RequestsTable({ items, run }) {
   return (
     <DataTable
-      columns={["ID", "Категория", "Клиент", "Статус", "Майстор", "Действия"]}
+      columns={["ID", "Категория", "Клиент", "Статус", "Майстор", "Снимки", "Действия"]}
       rows={items.map((request) => [
         request.id,
         request.categoryKey || request.category || "-",
         request.clientName || "-",
         request.statusKey || request.status || "-",
         request.assignedWorkerUserId || request.assignedWorkerId || "-",
-        <div className="flex gap-2" key={request.id}>
+        <RequestPhotoStrip request={request} key={`photos-${request.id}`} />,
+        <div className="flex gap-2" key={`actions-${request.id}`}>
           <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}>
             Одобри
           </SmallButton>
@@ -169,6 +170,29 @@ function RequestsTable({ items, run }) {
         </div>,
       ])}
     />
+  );
+}
+
+function RequestPhotoStrip({ request }) {
+  const photos = Array.isArray(request.beforePhotos) && request.beforePhotos.length ? request.beforePhotos : request.photos || [];
+  if (!photos.length) return <span className="text-slate-500">няма</span>;
+
+  return (
+    <div className="flex max-w-xs flex-wrap gap-2">
+      {photos.slice(0, 4).map((photo) => (
+        <a
+          href={photo.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block overflow-hidden rounded border border-slate-700 bg-slate-950"
+          key={photo.id || photo.url}
+          title={photo.moderationStatus || "pending"}
+        >
+          <img src={photo.url} alt="" className="h-12 w-16 object-cover" />
+        </a>
+      ))}
+      {photos.length > 4 && <span className="self-center text-xs text-slate-400">+{photos.length - 4}</span>}
+    </div>
   );
 }
 

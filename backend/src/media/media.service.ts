@@ -70,6 +70,11 @@ export class MediaService {
     return this.mediaRepo.findOne({ where: { id } });
   }
 
+  async setRequestMediaModeration(requestId: number, kind: string, moderationStatus: string) {
+    await this.mediaRepo.update({ requestId, kind }, { moderationStatus });
+    return this.findByRequest(requestId);
+  }
+
   async deleteAsset(id: number) {
     await this.mediaRepo.delete({ id });
     return { ok: true };
