@@ -39,7 +39,7 @@ export class WorkersController {
   async me(@Req() req: any) {
     const userId = Number(req.user.id);
 
-    let worker = await this.workersService.findByUserId(userId);
+    let worker: any = await this.workersService.findByUserId(userId);
     if (!worker) {
       worker = await this.workersService.createWorkerProfile({ userId, skills: [] });
     }
@@ -60,7 +60,8 @@ export class WorkersController {
     FileInterceptor('avatar', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'workers');
+          const userId = (req as any)?.user?.id ?? 'unknown';
+          const dir = join(process.cwd(), 'uploads', 'users', String(userId), 'avatar');
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },
@@ -83,8 +84,8 @@ export class WorkersController {
     if (!file?.filename) {
       return this.workersService.findByUserId(userId);
     }
-    const avatarUrl = `/uploads/workers/${file.filename}`;
-    return this.workersService.updateProfileByUserId(userId, { avatarUrl });
+    const avatarUrl = `/uploads/users/${userId}/avatar/${file.filename}`;
+    return this.workersService.setAvatar(userId, avatarUrl);
   }
 
   // =========================
@@ -104,7 +105,8 @@ export class WorkersController {
     FilesInterceptor('images', 20, {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'workers', 'gallery');
+          const userId = (req as any)?.user?.id ?? 'unknown';
+          const dir = join(process.cwd(), 'uploads', 'workers', String(userId), 'gallery');
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },
@@ -129,7 +131,7 @@ export class WorkersController {
     if (!list.length) throw new BadRequestException('No images');
 
     const urls = list
-      .map((f) => (f?.filename ? `/uploads/workers/gallery/${f.filename}` : null))
+      .map((f) => (f?.filename ? `/uploads/workers/${userId}/gallery/${f.filename}` : null))
       .filter(Boolean);
 
     return this.workersService.addGalleryImages(userId, urls as string[]);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { apiPost } from "../../services/api";
 
 export default function WorkersRegister() {
+  const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get("ref") || "");
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -51,6 +52,7 @@ export default function WorkersRegister() {
       city: form.city,
       skills: form.skills,
     };
+    if (referralCode.trim()) payload.referralCode = referralCode.trim();
 
     try {
       await apiPost("/auth/register", { ...payload, role: "worker" });
@@ -96,6 +98,17 @@ export default function WorkersRegister() {
 
         <input name="city" value={form.city} placeholder="Населено място"
                onChange={handleChange} className="w-full p-3 rounded bg-gray-700" required />
+
+        <div className="rounded-lg border border-gray-700 bg-gray-900 p-3">
+          <label className="mb-2 block text-sm font-semibold text-gray-300">Referral код</label>
+          <input
+            value={referralCode}
+            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+            placeholder="Например BRABC123"
+            className="w-full rounded bg-gray-700 p-3"
+          />
+          {referralCode ? <p className="mt-2 text-sm text-green-300">Поканата е добавена.</p> : null}
+        </div>
 
         <div>
           <p className="font-semibold mb-2">Специалности:</p>

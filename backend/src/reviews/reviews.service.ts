@@ -8,15 +8,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ReviewEntity } from './entities/review.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
-import { RequestEntity } from '../requests/entities/request.entity';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
+import { ReferralsService } from '../referrals/referrals.service';
 
 @Injectable()
 export class ReviewsService {
   constructor(
     @InjectRepository(ReviewEntity)
     private readonly reviewsRepo: Repository<ReviewEntity>,
-    @InjectRepository(RequestEntity)
-    private readonly requestsRepo: Repository<RequestEntity>,
+    @InjectRepository(RepairRequestEntity)
+    private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
+    private readonly referrals: ReferralsService,
   ) {}
 
   async createReview(dto: CreateReviewDto, clientUserId: number) {
@@ -29,28 +31,15 @@ export class ReviewsService {
       throw new BadRequestException('Rating must be between 1 and 5');
     }
 
-    const req = await this.requestsRepo.findOne({
-      where: { id: requestId },
-      relations: ['client'],
-    });
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
     if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (req.status !== 'completed') throw new BadRequestException('Request must be completed before review');
 
-    // only owner client can rate
-    if (Number(req.client?.id) !== Number(clientUserId)) {
-      throw new ForbiddenException('Not your request');
-    }
-
-    // only after completion
-    if (req.status !== 'завършена') {
-      throw new BadRequestException('Request must be completed before review');
-    }
-
-    const workerUserId = Number(req.assignedWorkerId || 0);
+    const workerUserId = Number(req.assignedWorkerUserId || 0);
     if (!workerUserId) throw new BadRequestException('No assigned worker');
 
-    const existing = await this.reviewsRepo.findOne({
-      where: { requestId, clientUserId },
-    });
+    const existing = await this.reviewsRepo.findOne({ where: { requestId, clientUserId } });
     if (existing) throw new BadRequestException('Review already exists');
 
     const review = this.reviewsRepo.create({
@@ -61,10 +50,11 @@ export class ReviewsService {
       comment: dto.comment?.trim() ? dto.comment.trim() : null,
     });
 
-    return this.reviewsRepo.save(review);
+    const saved = await this.reviewsRepo.save(review);
+    await this.referrals.processCompletedRequest(requestId, workerUserId).catch(() => null);
+    return saved;
   }
 
-  // ✅ for frontend: know which requests are rated by this client
   async getByClient(clientUserId: number) {
     const cid = Number(clientUserId);
     if (!cid) throw new BadRequestException('Invalid clientUserId');
@@ -85,11 +75,11 @@ export class ReviewsService {
     });
 
     const total = items.length;
-    const avg =
+    const average =
       total === 0
         ? 0
-        : Math.round((items.reduce((s, r) => s + Number(r.rating || 0), 0) / total) * 10) / 10;
+        : Math.round((items.reduce((sum, review) => sum + Number(review.rating || 0), 0) / total) * 10) / 10;
 
-    return { total, average: avg, items };
+    return { total, average, items };
   }
 }

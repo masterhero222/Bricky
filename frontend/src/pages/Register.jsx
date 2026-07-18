@@ -3,6 +3,7 @@ import { apiPost } from "../services/api";
 
 export default function Register() {
   const [role, setRole] = useState("client");
+  const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get("ref") || "");
 
   const [form, setForm] = useState({
     name: "",
@@ -54,6 +55,8 @@ export default function Register() {
             city: form.city,
             skills: form.skills,
           };
+
+    if (referralCode.trim()) payload.referralCode = referralCode.trim();
 
     try {
       await apiPost(endpoint, payload);
@@ -150,6 +153,19 @@ export default function Register() {
             </div>
           </>
         )}
+
+        <div className="rounded-lg border border-gray-700 bg-gray-900 p-3">
+          <label className="mb-2 block text-sm font-semibold text-gray-300">Referral код</label>
+          <input
+            value={referralCode}
+            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+            placeholder="Например BRABC123"
+            className="w-full rounded bg-gray-700 p-3"
+          />
+          {referralCode ? (
+            <p className="mt-2 text-sm text-green-300">Покана от Bricky е добавена към регистрацията.</p>
+          ) : null}
+        </div>
 
         <input
           name="email"

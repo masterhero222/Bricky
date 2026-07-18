@@ -164,12 +164,17 @@ export default function WorkerProfile() {
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [albumViewer, setAlbumViewer] = useState(null); // { albumIndex, photoIndex }
+  const [referralInfo, setReferralInfo] = useState({ code: null, referralUrl: null, invites: [], rewards: [] });
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralMsg, setReferralMsg] = useState("");
+  const [referralError, setReferralError] = useState("");
 
   useEffect(() => {
     loadMeProfile();
     loadRequests();
     loadCompletedRequests();
     loadGallery();
+    loadReferrals();
   }, []);
 
   useEffect(() => {
@@ -701,6 +706,56 @@ export default function WorkerProfile() {
     });
   }
 
+  async function loadReferrals() {
+    try {
+      setReferralError("");
+      setReferralLoading(true);
+      const res = await apiGet("/referrals/me");
+      setReferralInfo(res.data || { code: null, referralUrl: null, invites: [], rewards: [] });
+    } catch (err) {
+      console.error("loadReferrals error:", err);
+      setReferralError("Не успях да заредя referral информацията.");
+    } finally {
+      setReferralLoading(false);
+    }
+  }
+
+  async function createReferralCode() {
+    try {
+      setReferralMsg("");
+      setReferralError("");
+      setReferralLoading(true);
+      const res = await apiPost("/referrals/me/code", {});
+      setReferralInfo((prev) => ({ ...prev, ...(res.data || {}) }));
+      await loadReferrals();
+    } catch (err) {
+      console.error("createReferralCode error:", err);
+      setReferralError(err?.response?.data?.message || "Не успях да създам referral код.");
+    } finally {
+      setReferralLoading(false);
+    }
+  }
+
+  async function copyReferralLink() {
+    const link = referralInfo.referralUrl || "";
+    if (!link) return;
+    await navigator.clipboard?.writeText(link);
+    setReferralMsg("Линкът е копиран.");
+  }
+
+  async function shareReferralLink() {
+    const link = referralInfo.referralUrl || "";
+    if (!link) return;
+    const text = `Покани добър майстор в Bricky. След като завърши успешно 2 ремонта, получаваш 30 дни подсилена видимост: ${link}`;
+    if (navigator.share) {
+      await navigator.share({ title: "Bricky referral", text, url: link });
+      setReferralMsg("Линкът е споделен.");
+    } else {
+      await navigator.clipboard?.writeText(text);
+      setReferralMsg("Текстът за споделяне е копиран.");
+    }
+  }
+
   async function deleteActiveGalleryPhoto() {
     if (!canDeleteActivePhoto) return;
     const imageId = activePhoto.id;
@@ -739,6 +794,7 @@ export default function WorkerProfile() {
             ["requests", "Заявки"],
             ["map", "Карта заявки"],
             ["profile", "Профил"],
+            ["referrals", "Покани майстор"],
             ["gallery", "Галерия"],
             ["calculator", "Калкулатор"],
             ["settings", "Настройки"],
@@ -1333,6 +1389,108 @@ export default function WorkerProfile() {
             >
               {saving ? "Запазване..." : "Запази промените"}
             </button>
+          </div>
+        )}
+
+        {activeTab === "referrals" && (
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-bold">Покани майстор</h1>
+                <p className="mt-2 text-gray-400">
+                  Покани добър майстор в Bricky. След като завърши успешно 2 ремонта от различни клиенти,
+                  получаваш 30 дни подсилена видимост.
+                </p>
+              </div>
+              <button onClick={loadReferrals} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">
+                Обнови
+              </button>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">Твоят referral линк</h2>
+
+                {referralLoading ? <p className="text-gray-400">Зареждане...</p> : null}
+                {referralError ? <p className="text-red-400 mb-3">{referralError}</p> : null}
+                {referralMsg ? <p className="text-green-300 mb-3">{referralMsg}</p> : null}
+
+                {!referralInfo.referralUrl ? (
+                  <button onClick={createReferralCode} className="bg-green-600 hover:bg-green-700 px-5 py-3 rounded-lg font-bold">
+                    Създай линк за покана
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-sm text-gray-400">Код</div>
+                      <div className="mt-1 rounded-lg bg-gray-900 px-4 py-3 text-2xl font-extrabold tracking-wider">
+                        {referralInfo.code}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-gray-400">Линк</div>
+                      <div className="mt-1 break-all rounded-lg bg-gray-900 px-4 py-3 text-sm text-blue-200">
+                        {referralInfo.referralUrl}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button onClick={copyReferralLink} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">
+                        Копирай линк
+                      </button>
+                      <button onClick={shareReferralLink} className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold">
+                        Сподели
+                      </button>
+                    </div>
+
+                    <p className="text-sm text-gray-400">
+                      Наградата не гарантира постоянно първо място. Тя дава подсилена видимост в ротация за релевантни категории.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">Прогрес</h2>
+                {(referralInfo.invites || []).length === 0 ? (
+                  <p className="text-gray-400">Още няма поканени майстори.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {(referralInfo.invites || []).map((invite) => (
+                      <div key={invite.id} className="rounded-xl border border-gray-700 bg-gray-900 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="font-bold">Код {invite.code}</div>
+                            <div className="text-sm text-gray-400">Статус: {invite.status}</div>
+                          </div>
+                          <div className="rounded-full bg-red-600/20 border border-red-500/40 px-4 py-2 font-bold text-red-200">
+                            {Math.min(Number(invite.qualifiedRepairCount || 0), 2)}/2 ремонта
+                          </div>
+                        </div>
+                        {invite.rejectionReason ? <p className="mt-2 text-sm text-red-300">{invite.rejectionReason}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(referralInfo.rewards || []).length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="font-bold mb-3">Активни/исторически награди</h3>
+                    <div className="space-y-2">
+                      {(referralInfo.rewards || []).map((reward) => (
+                        <div key={reward.id} className="rounded-lg bg-gray-900 px-4 py-3 text-sm">
+                          <div className="font-bold">{reward.rewardType}</div>
+                          <div className="text-gray-400">
+                            {reward.status} до {formatBG(reward.endsAt)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

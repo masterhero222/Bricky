@@ -33,6 +33,13 @@ export class RegisterUserDto {
   @IsArray()
   skills?: string[];
 
+  @IsOptional()
+  profile?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
   // COMMON
   @IsEmail()
   email: string;

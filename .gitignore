@@ -12,3 +12,10 @@ backend/nest
 # Accidental terminal capture files
 frontend/path
 Bricky__backup_*/frontend/path
+
+# Local Codex/worktree artifacts
+.codex-remote-attachments/
+.worktrees/
+
+# Local secrets/notes
+Брики админ акаунт.txt

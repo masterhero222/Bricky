@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-export type RequestApplicationStatus = 'applied' | 'assigned' | 'withdrawn' | 'rejected';
+export type RequestApplicationStatus = 'applied' | 'shortlisted' | 'assigned' | 'withdrawn' | 'rejected';
 
 @Entity('request_applications')
 @Index(['requestId', 'workerUserId'], { unique: true })
@@ -9,24 +9,24 @@ export class RequestApplicationEntity {
   id: number;
 
   @Index()
-  @Column({ type: 'int' })
+  @Column({ name: 'request_id', type: 'int' })
   requestId: number;
 
   @Index()
-  @Column({ type: 'int' })
+  @Column({ name: 'worker_user_id', type: 'int' })
   workerUserId: number;
 
   @Column({
     type: 'enum',
-    enum: ['applied', 'assigned', 'withdrawn', 'rejected'],
+    enum: ['applied', 'shortlisted', 'assigned', 'withdrawn', 'rejected'],
     default: 'applied',
   })
   status: RequestApplicationStatus;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'offer_min', type: 'decimal', precision: 10, scale: 2, nullable: true })
   offerMin: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'offer_max', type: 'decimal', precision: 10, scale: 2, nullable: true })
   offerMax: string | null;
 
   @Column({ type: 'text', nullable: true })

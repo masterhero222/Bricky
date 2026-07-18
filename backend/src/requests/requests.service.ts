@@ -6,10 +6,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { RequestEntity } from './entities/request.entity';
+import { RepairRequestEntity, RepairRequestStatus } from './entities/repair-request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
-import { RequestImageEntity, RequestImageKind } from './entities/request-image.entity';
+import { RequestEventEntity } from './entities/request-event.entity';
+import { RequestPricingSnapshotEntity } from './entities/request-pricing-snapshot.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import {
   REPAIR_CATEGORY_BY_KEY,
@@ -20,7 +22,8 @@ import {
 } from './repair-catalog';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { MediaService } from '../media/media.service';
+import { MediaAssetEntity } from '../media/media-asset.entity';
 
 function extractResponseText(data: any): string {
   if (typeof data?.output_text === 'string') return data.output_text;
@@ -34,32 +37,6 @@ function extractResponseText(data: any): string {
 
   return '';
 }
-const MAX_REQUEST_PHOTO_URL_CHARS = 35_000;
-const MAX_REQUEST_PHOTOS_JSON_CHARS = 58_000;
-
-function normalizePhotos(arr: any): any[] {
-  if (!Array.isArray(arr)) return [];
-  const normalized = arr
-    .filter((photo) => photo && typeof photo.url === 'string' && photo.url)
-    .map((photo, index) => ({
-      id: photo.id || `${Date.now()}-${index}`,
-      name: photo.name || 'Снимка',
-      url: photo.url,
-      created_at: photo.created_at || new Date().toISOString(),
-    }));
-
-  const safePhotos: any[] = [];
-  for (const photo of normalized) {
-    if (String(photo.url || '').length > MAX_REQUEST_PHOTO_URL_CHARS) continue;
-
-    const nextPhotos = [...safePhotos, photo];
-    if (JSON.stringify(nextPhotos).length > MAX_REQUEST_PHOTOS_JSON_CHARS) break;
-
-    safePhotos.push(photo);
-  }
-
-  return safePhotos;
-}
 
 function completionDurationDays(createdAt: any, completedAt: Date): number {
   const start = new Date(createdAt || completedAt).getTime();
@@ -67,113 +44,40 @@ function completionDurationDays(createdAt: any, completedAt: Date): number {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 1;
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 }
-function normalizeNumberArray(arr: any): number[] {
-  const a = Array.isArray(arr) ? arr : [];
-  const out = a.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
-  return Array.from(new Set(out));
+
+function normalizePhotos(arr: any): any[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((photo) => photo && typeof photo.url === 'string' && photo.url)
+    .map((photo, index) => ({
+      id: photo.id || `${Date.now()}-${index}`,
+      name: photo.name || 'Снимка',
+      url: photo.url,
+      storageKey: photo.storageKey || photo.url,
+      mimeType: photo.mimeType || null,
+      sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
+      created_at: photo.created_at || new Date().toISOString(),
+    }))
+    .filter((photo) => !/^data:/i.test(String(photo.url || '').trim()));
 }
 
 @Injectable()
 export class RequestsService {
   constructor(
     @InjectRepository(RequestEntity)
-    private readonly repo: Repository<RequestEntity>,
+    private readonly legacyRepo: Repository<RequestEntity>,
+    @InjectRepository(RepairRequestEntity)
+    private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
     @InjectRepository(RequestApplicationEntity)
     private readonly applicationsRepo: Repository<RequestApplicationEntity>,
-    @InjectRepository(RequestImageEntity)
-    private readonly imagesRepo: Repository<RequestImageEntity>,
+    @InjectRepository(RequestPricingSnapshotEntity)
+    private readonly pricingSnapshotsRepo: Repository<RequestPricingSnapshotEntity>,
+    @InjectRepository(RequestEventEntity)
+    private readonly eventsRepo: Repository<RequestEventEntity>,
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
+    private readonly media: MediaService,
   ) {}
-
-  private async saveRequestImages(
-    requestId: number,
-    uploaderUserId: number | null,
-    kind: RequestImageKind,
-    photos: any[],
-  ) {
-    const normalized = normalizePhotos(photos);
-    if (!requestId || normalized.length === 0) return [];
-
-    const rows = normalized.map((photo, index) =>
-      this.imagesRepo.create({
-        requestId,
-        uploaderUserId,
-        kind,
-        name: photo.name || null,
-        url: photo.url,
-        storageKey: photo.storageKey || null,
-        mimeType: photo.mimeType || null,
-        sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
-        sortOrder: index,
-        isApproved: true,
-      }),
-    );
-
-    return this.imagesRepo.save(rows);
-  }
-
-  private imageRowsToPhotos(rows: RequestImageEntity[]) {
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name || 'Снимка',
-      url: row.url,
-      storageKey: row.storageKey,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
-      kind: row.kind,
-      created_at: row.created_at,
-    }));
-  }
-
-  private async hydrateRequestImages(request: RequestEntity) {
-    if (!request?.id) return request;
-
-    const rows = await this.imagesRepo.find({
-      where: { requestId: request.id },
-      order: { kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
-    });
-
-    if (!rows.length) return request;
-
-    const beforePhotos = this.imageRowsToPhotos(rows.filter((row) => row.kind === 'before'));
-    const afterPhotos = this.imageRowsToPhotos(rows.filter((row) => row.kind === 'after'));
-    const generalPhotos = this.imageRowsToPhotos(rows.filter((row) => row.kind === 'general'));
-
-    request.beforePhotos = beforePhotos.length ? beforePhotos : request.beforePhotos;
-    request.afterPhotos = afterPhotos.length ? afterPhotos : request.afterPhotos;
-    request.photos = [...generalPhotos, ...beforePhotos];
-
-    return request;
-  }
-
-  private async hydrateManyRequestImages(requests: RequestEntity[]) {
-    return Promise.all(requests.map((request) => this.hydrateRequestImages(request)));
-  }
-
-  private async ensureApplication(requestId: number, workerUserId: number, status: 'applied' | 'assigned') {
-    const existing = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
-    if (existing) {
-      existing.status = existing.status === 'assigned' ? 'assigned' : status;
-      return this.applicationsRepo.save(existing);
-    }
-
-    return this.applicationsRepo.save(
-      this.applicationsRepo.create({
-        requestId,
-        workerUserId,
-        status,
-        offerMin: null,
-        offerMax: null,
-        message: null,
-      }),
-    );
-  }
-
-  private async hasActiveApplication(requestId: number, workerUserId: number) {
-    const existing = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
-    return !!existing && !['withdrawn', 'rejected'].includes(existing.status);
-  }
 
   async draftRequest(prompt: string, address?: string) {
     const trimmedPrompt = (prompt || '').trim();
@@ -199,7 +103,7 @@ export class RequestsService {
             'Convert the customer text into a short repair request draft in Bulgarian.',
             `Choose categoryKey from: ${REPAIR_CATEGORY_KEYS.join(', ')}.`,
             'Ask up to 3 practical follow-up questions only if useful.',
-      address ? `?????: ${address.trim()}` : '',
+            address ? `Address: ${address.trim()}` : '',
             `Customer text: ${trimmedPrompt}`,
           ]
             .filter(Boolean)
@@ -233,8 +137,7 @@ export class RequestsService {
       if (!response.ok) return fallback;
 
       const data = await response.json();
-      const text = extractResponseText(data);
-      const parsed = JSON.parse(text);
+      const parsed = JSON.parse(extractResponseText(data));
       const categoryKey = this.normalizeCategoryKey(parsed?.categoryKey);
 
       return {
@@ -249,56 +152,70 @@ export class RequestsService {
       return fallback;
     }
   }
+
   async create(dto: CreateRequestDto, clientUserId: number) {
     if (!clientUserId) throw new UnauthorizedException('Not logged in');
+
     const categoryKey = dto.categoryKey
       ? normalizeRepairCategoryKey(dto.categoryKey)
       : getRepairCategoryByLabel(dto.category).key;
 
-    const photos = normalizePhotos(dto.photos);
-    const request = this.repo.create({
-      client: { id: clientUserId } as any,
-      clientName: dto.clientName,
-      email: dto.email,
-      phone: dto.phone,
-      address: dto.address,
-      category: REPAIR_CATEGORY_BY_KEY[categoryKey],
-      categoryKey,
-      description: dto.description,
-      latitude: dto.latitude == null ? null : String(dto.latitude),
-      longitude: dto.longitude == null ? null : String(dto.longitude),
-      locationSource: dto.locationSource || 'manual',
-      estimateMin: dto.estimateMin == null ? null : String(dto.estimateMin),
-      estimateMax: dto.estimateMax == null ? null : String(dto.estimateMax),
-      estimateCurrency: dto.estimateCurrency || 'BGN',
-      photos,
-      beforePhotos: photos,
-      afterPhotos: [],
-      status: 'нова',
-      appliedWorkers: [],
-      assignedWorkerId: null,
-      completedAt: null,
-      completedByWorkerId: null,
-      durationDays: null,
-    });
+    const request = await this.repairRequestsRepo.save(
+      this.repairRequestsRepo.create({
+        clientUserId,
+        categoryKey,
+        title: REPAIR_CATEGORY_BY_KEY[categoryKey],
+        description: dto.description || null,
+        addressText: dto.address || null,
+        latitude: dto.latitude == null ? null : String(dto.latitude),
+        longitude: dto.longitude == null ? null : String(dto.longitude),
+        locationSource: dto.locationSource || 'manual',
+        addressVisibility: 'exact_after_assignment',
+        status: 'published',
+        estimateMin: dto.estimateMin == null ? null : String(dto.estimateMin),
+        estimateMax: dto.estimateMax == null ? null : String(dto.estimateMax),
+        estimateCurrency: dto.estimateCurrency || 'EUR',
+        pricingSnapshotId: null,
+        assignedWorkerUserId: null,
+        completedAt: null,
+      }),
+    );
 
-    const saved = await this.repo.save(request);
-    await this.saveRequestImages(saved.id, clientUserId, 'before', photos);
+    const snapshot = await this.pricingSnapshotsRepo.save(
+      this.pricingSnapshotsRepo.create({
+        requestId: request.id,
+        pricingVersion: 'v2-manual',
+        currency: request.estimateCurrency,
+        categoryKey,
+        activityKeysJson: [],
+        inputJson: {
+          estimateMin: dto.estimateMin ?? null,
+          estimateMax: dto.estimateMax ?? null,
+        },
+        resultJson: {
+          estimateMin: dto.estimateMin ?? null,
+          estimateMax: dto.estimateMax ?? null,
+          currency: request.estimateCurrency,
+        },
+      }),
+    );
+    request.pricingSnapshotId = snapshot.id;
+    await this.repairRequestsRepo.save(request);
 
-    // completion info
-    // this.mailService.sendRequestConfirmation(...).catch(() => null);
+    await this.saveMedia(request.id, clientUserId, 'request_before', dto.photos || []);
+    await this.addEvent(request.id, clientUserId, 'request.created', { categoryKey });
 
-    return this.hydrateRequestImages(saved);
+    return this.toDto(request);
   }
 
   async getByClientUserId(clientUserId: number) {
     if (!clientUserId) throw new BadRequestException('Missing client id');
-    const requests = await this.repo.find({
-      where: { client: { id: clientUserId } },
+    const requests = await this.repairRequestsRepo.find({
+      where: { clientUserId },
       relations: ['client'],
-      order: { created_at: 'DESC' },
+      order: { createdAt: 'DESC' },
     });
-    return this.hydrateManyRequestImages(requests);
+    return Promise.all(requests.map((request) => this.toDto(request)));
   }
 
   async getMapRequests(user: any) {
@@ -306,135 +223,109 @@ export class RequestsService {
     const userId = Number(user?.id);
     if (!userId) throw new BadRequestException('Missing user id');
 
-    if (role === 'client') {
-      return this.getByClientUserId(userId);
-    }
-
-    if (role === 'worker') {
-      return this.getForWorkersFeed(userId);
-    }
-
+    if (role === 'client') return this.getByClientUserId(userId);
+    if (role === 'worker') return this.getForWorkersFeed(userId);
     throw new BadRequestException('Unsupported role');
   }
 
-  /**
-   * Worker feed:
-   * - ???????? (assignedWorkerId IS NULL) + ???????????
-   * - ???? assigned ?? ???? worker + ???????????
-   */
   async getForWorkersFeed(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
 
-    const requests = await this.repo
-      .createQueryBuilder('r')
-      .leftJoinAndSelect('r.client', 'client')
-      .where(
-        new Brackets((qb) => {
-          qb.where('r.assignedWorkerId IS NULL')
-            .andWhere('r.status != :done', { done: 'завършена' })
-            .andWhere('r.status != :canceled', { canceled: 'отказана' });
-        }),
-      )
-      .orWhere(
-        new Brackets((qb) => {
-          qb.where('r.assignedWorkerId = :wid', { wid: workerUserId })
-            .andWhere('r.status != :done', { done: 'завършена' })
-            .andWhere('r.status != :canceled', { canceled: 'отказана' });
-        }),
-      )
-      .orderBy('r.created_at', 'DESC')
-      .getMany();
+    const requests = await this.repairRequestsRepo.find({
+      where: [
+        { assignedWorkerUserId: IsNull(), status: Not('completed') },
+        { assignedWorkerUserId: workerUserId, status: Not('completed') },
+      ],
+      relations: ['client'],
+      order: { createdAt: 'DESC' },
+    });
 
-    return this.hydrateManyRequestImages(requests);
+    return Promise.all(
+      requests
+        .filter((request) => !['canceled', 'archived'].includes(request.status))
+        .map((request) => this.toDto(request)),
+    );
   }
 
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
-    const requests = await this.repo.find({
-      where: { assignedWorkerId: workerUserId, status: 'завършена' },
+    const requests = await this.repairRequestsRepo.find({
+      where: { assignedWorkerUserId: workerUserId, status: 'completed' },
       relations: ['client'],
-      order: { created_at: 'DESC' },
+      order: { createdAt: 'DESC' },
     });
-
-    return this.hydrateManyRequestImages(requests);
+    return Promise.all(requests.map((request) => this.toDto(request)));
   }
 
   async applyToRequest(requestId: number, workerUserId: number) {
-    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
+    if (req.assignedWorkerUserId) throw new BadRequestException('Request already has assigned worker');
+    if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
 
-    if (req.assignedWorkerId) throw new BadRequestException('Request already has assigned worker');
-    if (req.status === 'завършена' || req.status === 'отказана') throw new BadRequestException('Request is closed');
-
-    const applied = normalizeNumberArray(req.appliedWorkers);
-
-    if (!applied.includes(workerUserId)) {
-      applied.push(workerUserId);
-      req.appliedWorkers = applied;
+    const existing = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
+    if (existing) {
+      if (['withdrawn', 'rejected'].includes(existing.status)) {
+        existing.status = 'applied';
+        await this.applicationsRepo.save(existing);
+      }
+    } else {
+      await this.applicationsRepo.save(
+        this.applicationsRepo.create({
+          requestId,
+          workerUserId,
+          status: 'applied',
+          offerMin: null,
+          offerMax: null,
+          message: null,
+        }),
+      );
     }
 
-    if ((req.status || '').toLowerCase() === 'нова') req.status = 'кандидатствана';
+    if (req.status === 'published') {
+      req.status = 'applied';
+      await this.repairRequestsRepo.save(req);
+    }
 
-    const saved = await this.repo.save(req);
-    await this.ensureApplication(requestId, workerUserId, 'applied');
-
-    return this.hydrateRequestImages(saved);
+    await this.addEvent(requestId, workerUserId, 'application.created', {});
+    return this.toDto(req);
   }
 
   async assignWorker(requestId: number, clientUserId: number, workerUserId: number) {
-    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
 
-    if (Number(req.client?.id) !== Number(clientUserId)) {
-      throw new ForbiddenException('Not your request');
-    }
-
-    if (req.status === 'завършена' || req.status === 'отказана') {
-      throw new BadRequestException('Request is closed');
-    }
-
-    const applied = normalizeNumberArray(req.appliedWorkers);
-    const hasApplication = await this.hasActiveApplication(requestId, workerUserId);
-    if (!applied.includes(workerUserId) && !hasApplication) {
+    const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
+    if (!application || ['withdrawn', 'rejected'].includes(application.status)) {
       throw new BadRequestException('This worker has not applied to this request');
     }
 
-    if (!applied.includes(workerUserId)) {
-      applied.push(workerUserId);
-      req.appliedWorkers = applied;
-    }
-
-    req.assignedWorkerId = workerUserId;
-    req.status = 'в процес';
+    req.assignedWorkerUserId = workerUserId;
+    req.status = 'in_progress';
     req.completedAt = null;
-    req.completedByWorkerId = null;
+    await this.repairRequestsRepo.save(req);
 
-    // completion info
-    // await this.notifications.notifyWorkerAssigned(workerUserId, req.id).catch(() => null);
+    application.status = 'assigned';
+    await this.applicationsRepo.save(application);
+    await this.addEvent(requestId, clientUserId, 'request.assigned', { workerUserId });
 
-    const saved = await this.repo.save(req);
-    await this.ensureApplication(requestId, workerUserId, 'assigned');
-
-    return this.hydrateRequestImages(saved);
+    return this.toDto(req);
   }
 
   async unassignWorker(requestId: number, clientUserId: number) {
-    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (req.status === 'completed') throw new BadRequestException('Already completed');
 
-    if (Number(req.client?.id) !== Number(clientUserId)) {
-      throw new ForbiddenException('Not your request');
-    }
+    const assignedWorkerId = Number(req.assignedWorkerUserId);
+    req.assignedWorkerUserId = null;
 
-    if (req.status === 'завършена') throw new BadRequestException('Already completed');
-
-    const assignedWorkerId = Number(req.assignedWorkerId);
-    req.assignedWorkerId = null;
-
-    const applied = normalizeNumberArray(req.appliedWorkers);
-    req.status = applied.length > 0 ? 'кандидатствана' : 'нова';
-
-    const saved = await this.repo.save(req);
+    const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
+    req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
+    await this.repairRequestsRepo.save(req);
 
     if (assignedWorkerId) {
       const application = await this.applicationsRepo.findOne({
@@ -446,51 +337,156 @@ export class RequestsService {
       }
     }
 
-    return this.hydrateRequestImages(saved);
+    await this.addEvent(requestId, clientUserId, 'request.unassigned', { assignedWorkerId });
+    return this.toDto(req);
   }
 
-  // completion info
   async completeRequest(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
-    if (!requestId) throw new BadRequestException('Missing request id');
-    if (!workerUserId) throw new BadRequestException('Missing worker id');
-
-    const req = await this.repo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
-
-    if (Number(req.assignedWorkerId) !== Number(workerUserId)) {
-      throw new ForbiddenException('Not your job');
-    }
-
-    if (req.status === 'завършена') return req;
-    if (req.status === 'отказана') throw new BadRequestException('Request canceled');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (req.status === 'completed') return this.toDto(req);
+    if (['canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
 
     const completedAt = new Date();
-    const normalizedAfterPhotos = normalizePhotos(afterPhotos);
-    req.status = 'завършена';
+    req.status = 'completed';
     req.completedAt = completedAt;
-    req.completedByWorkerId = workerUserId;
-    req.afterPhotos = normalizedAfterPhotos;
-    req.durationDays = completionDurationDays(req.created_at, completedAt);
+    await this.repairRequestsRepo.save(req);
 
-    const saved = await this.repo.save(req);
-    await this.saveRequestImages(requestId, workerUserId, 'after', normalizedAfterPhotos);
+    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
+    await this.addEvent(requestId, workerUserId, 'request.completed', {});
 
-    return this.hydrateRequestImages(saved);
+    return this.toDto(req);
   }
+
+  async adminListRequests() {
+    const requests = await this.repairRequestsRepo.find({ relations: ['client'], order: { createdAt: 'DESC' }, take: 200 });
+    return Promise.all(requests.map((request) => this.toDto(request)));
+  }
+
+  async adminSetStatus(requestId: number, status: RepairRequestStatus, actorUserId: number, reason?: string) {
+    const request = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Request not found');
+    request.status = status;
+    if (status !== 'completed') request.completedAt = null;
+    if (status === 'completed' && !request.completedAt) request.completedAt = new Date();
+    await this.repairRequestsRepo.save(request);
+    await this.addEvent(requestId, actorUserId, 'admin.status_changed', { status, reason: reason || null });
+    return this.toDto(request);
+  }
+
+  private async saveMedia(requestId: number, ownerUserId: number, kind: string, photos: any[]) {
+    const normalized = normalizePhotos(photos);
+    await Promise.all(
+      normalized.map((photo) =>
+        this.media.createAsset({
+          ownerUserId,
+          requestId,
+          kind,
+          storageKey: photo.storageKey || photo.url,
+          publicUrl: photo.url,
+          mimeType: photo.mimeType,
+          sizeBytes: photo.sizeBytes,
+          moderationStatus: 'approved',
+        }),
+      ),
+    );
+  }
+
+  private async addEvent(requestId: number, actorUserId: number, eventType: string, metadata: Record<string, any>) {
+    return this.eventsRepo.save(
+      this.eventsRepo.create({
+        requestId,
+        actorUserId,
+        eventType,
+        metadataJson: metadata || {},
+      }),
+    );
+  }
+
+  private async toDto(request: RepairRequestEntity) {
+    const [mediaRows, applications] = await Promise.all([
+      this.media.findByRequest(request.id).catch(() => [] as MediaAssetEntity[]),
+      this.applicationsRepo.find({ where: { requestId: request.id } }).catch(() => [] as RequestApplicationEntity[]),
+    ]);
+
+    const beforePhotos = this.mediaToPhotos(mediaRows.filter((row) => row.kind === 'request_before'));
+    const afterPhotos = this.mediaToPhotos(mediaRows.filter((row) => row.kind === 'request_after'));
+
+    return {
+      id: request.id,
+      clientName: request.client?.name || '',
+      email: request.client?.email || '',
+      phone: null,
+      address: request.addressText,
+      addressText: request.addressText,
+      addressVisibility: request.addressVisibility,
+      category: REPAIR_CATEGORY_BY_KEY[this.normalizeCategoryKey(request.categoryKey)],
+      categoryKey: request.categoryKey,
+      title: request.title,
+      description: request.description,
+      latitude: request.latitude,
+      longitude: request.longitude,
+      locationSource: request.locationSource,
+      estimateMin: request.estimateMin,
+      estimateMax: request.estimateMax,
+      estimateCurrency: request.estimateCurrency,
+      photos: beforePhotos,
+      beforePhotos,
+      afterPhotos,
+      status: this.legacyStatus(request.status),
+      statusKey: request.status,
+      appliedWorkers: applications
+        .filter((application) => !['withdrawn', 'rejected'].includes(application.status))
+        .map((application) => application.workerUserId),
+      assignedWorkerId: request.assignedWorkerUserId,
+      assignedWorkerUserId: request.assignedWorkerUserId,
+      completedAt: request.completedAt,
+      completedByWorkerId: request.status === 'completed' ? request.assignedWorkerUserId : null,
+      durationDays: request.completedAt ? completionDurationDays(request.createdAt, request.completedAt) : null,
+      created_at: request.createdAt,
+      updated_at: request.updatedAt,
+    };
+  }
+
+  private mediaToPhotos(rows: MediaAssetEntity[]) {
+    return rows.map((row) => ({
+      id: row.id,
+      name: 'Снимка',
+      url: row.publicUrl,
+      storageKey: row.storageKey,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      kind: row.kind,
+      created_at: row.createdAt,
+    }));
+  }
+
+  private legacyStatus(status: RepairRequestStatus) {
+    const map: Record<RepairRequestStatus, string> = {
+      draft: 'чернова',
+      published: 'нова',
+      applied: 'кандидатствана',
+      assigned: 'в процес',
+      in_progress: 'в процес',
+      completed: 'завършена',
+      canceled: 'отказана',
+      archived: 'архивирана',
+    };
+    return map[status] || status;
+  }
+
   private buildLocalDraft(prompt: string, address?: string) {
     const categoryKey = this.guessCategoryKey(prompt);
-    const details = [
-      prompt.trim(),
-      address ? `?????: ${address.trim()}` : '',
-    ].filter(Boolean);
+    const details = [prompt.trim(), address ? `Адрес: ${address.trim()}` : ''].filter(Boolean);
 
     return {
       category: REPAIR_CATEGORY_BY_KEY[categoryKey],
       categoryKey,
       description: details.join('\n'),
       questions: [
-        '???? ? ?????? ??????? ?? ????? ?? ??????',
-        '??? ?? ?????? ??? ??????? ?? ?????????',
+        'Има ли спешност и краен срок?',
+        'Има ли снимки или допълнителни размери?',
       ],
       confidence: categoryKey === 'small_repairs' ? 0.45 : 0.55,
       source: 'local',
@@ -499,25 +495,18 @@ export class RequestsService {
 
   private guessCategoryKey(prompt: string): RepairCategoryKey {
     const text = prompt.toLowerCase();
-
     if (/(vik|plumb|water|leak|pipe|sink|boiler|сифон|теч|тръб|мивк|бойлер|смесител)/i.test(text)) return 'vik';
     if (/(electro|electric|power|cable|switch|lamp|fuse|ток|контакт|кабел|табло|ламп|ключ)/i.test(text)) return 'electro';
-    if (/(install|installation|инсталац)/i.test(text) && /(electro|electric|ток|електро|кабел)/i.test(text)) return 'electro';
     if (/(bathroom|bath|баня|бани|санитар)/i.test(text)) return 'bathroom_renovation';
     if (/(tile|tiles|ceramic|плочк|фаянс|теракот|гранитогрес)/i.test(text)) return 'tiles';
     if (/(roof|покрив|керемид|улук)/i.test(text)) return 'roof_waterproofing';
     if (/(drywall|гипсокартон|окачен таван|преградна стена)/i.test(text)) return 'drywall';
     if (/(floor|ламинат|паркет|настилк|под)/i.test(text)) return 'flooring';
-    if (/(masonry|зидар|мазилк|тухл)/i.test(text)) return 'plaster';
-    if (/(insulation|изолац|хидроизолац|топлоизолац)/i.test(text)) return 'roof_waterproofing';
     if (/(window|door|дограма|врат|обков)/i.test(text)) return 'windows_doors';
     if (/(heating|cooling|климатик|радиатор|отоплен)/i.test(text)) return 'heating_cooling';
     if (/(demolition|кърт|извоз|демонтаж|отпад)/i.test(text)) return 'demolition_cleanup';
     if (/(major|основен|цялостен)/i.test(text)) return 'full_renovation';
-    if (/(refresh|освежител|лек ремонт)/i.test(text)) return 'painting';
-    if (/(repaint|пребоядис)/i.test(text)) return 'painting';
     if (/(paint|plaster|wall|ceiling|боя|шпаклов|стена|таван)/i.test(text)) return 'plaster';
-
     return 'small_repairs';
   }
 

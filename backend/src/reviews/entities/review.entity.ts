@@ -6,13 +6,13 @@ export class ReviewEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'int' })
+  @Column({ name: 'request_id', type: 'int' })
   requestId: number;
 
-  @Column({ type: 'int' })
+  @Column({ name: 'worker_user_id', type: 'int' })
   workerUserId: number;
 
-  @Column({ type: 'int' })
+  @Column({ name: 'client_user_id', type: 'int' })
   clientUserId: number;
 
   @Column({ type: 'int' })
@@ -24,10 +24,10 @@ export class ReviewEntity {
   @CreateDateColumn()
   created_at: Date;
 
-    @Column({ type: 'datetime', nullable: true })
+  @Column({ name: 'completed_at', type: 'datetime', nullable: true })
   completedAt: Date | null;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ name: 'completed_by_worker_id', type: 'int', nullable: true })
   completedByWorkerId: number | null;
 
 }

@@ -24,6 +24,7 @@ import Workers from "./pages/workers/Workers";
 
 // REQUESTS
 import Requests from "./pages/Requests";
+import AdminBackoffice from "./pages/AdminBackoffice";
 
 import DevTestPanel from "./components/DevTestPanel";
 
@@ -82,6 +83,15 @@ export default function App() {
           {/* REQUESTS LIST */}
           <Route path="/requests" element={<Requests />} />
 
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <AdminBackoffice />
+              </RequireAdmin>
+            }
+          />
+
             <Route path="/worker/:userId" element={<WorkerPreview />} />
             <Route path="/workers/:id" element={<WorkerPreview />} />
         </Route>
@@ -98,6 +108,12 @@ function RequireClient({ children }) {
 
 function RequireWorker({ children }) {
   return localStorage.getItem("role") === "worker"
+    ? children
+    : (window.location.href = "/auth");
+}
+
+function RequireAdmin({ children }) {
+  return ["admin", "super_admin"].includes(localStorage.getItem("role"))
     ? children
     : (window.location.href = "/auth");
 }

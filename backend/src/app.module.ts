@@ -9,6 +9,11 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReviewModule } from './reviews/review.module';
+import { MediaModule } from './media/media.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { BillingModule } from './billing/billing.module';
+import { AdminModule } from './admin/admin.module';
+import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
   imports: [
@@ -32,6 +37,11 @@ import { ReviewModule } from './reviews/review.module';
     AuthModule,
     ReviewModule,
     MailModule,
+    MediaModule,
+    CatalogModule,
+    BillingModule,
+    ReferralsModule,
+    AdminModule,
     NotificationsModule,
     RequestsModule,
     WorkersModule,

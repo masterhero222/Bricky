@@ -5,6 +5,7 @@ import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { ReferralsService } from '../referrals/referrals.service';
 
 @Injectable()
 export class AuthService {
@@ -12,36 +13,51 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly workers: WorkersService,
     private readonly jwt: JwtService,
+    private readonly referrals: ReferralsService,
   ) {}
 
   async register(dto: RegisterUserDto) {
     const exists = await this.users.findByEmail(dto.email);
     if (exists) throw new BadRequestException('Имейлът вече съществува');
 
+    const profile = dto.profile || {};
+    if (dto.referralCode) await this.referrals.validateCode(dto.referralCode, dto.role);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     // CLIENT
     if (dto.role === 'client') {
-      if (!dto.name) throw new BadRequestException('Името е задължително');
+      const displayName = String(profile.displayName || dto.name || '').trim();
+      if (!displayName) throw new BadRequestException('Името е задължително');
 
       const user = await this.users.create({
-        name: dto.name,
+        name: displayName,
         email: dto.email,
         password: passwordHash,
         role: 'client',
       });
+
+      await this.users.createClientProfile({
+        userId: user.id,
+        displayName,
+        phonePrivate: profile.phonePrivate || dto.phone || null,
+        defaultAddress: profile.defaultAddress || null,
+      });
+      await this.referrals.attachRegistration(dto.referralCode, user.id, 'client');
 
       return { message: 'Клиентът е регистриран успешно', user };
     }
 
     // WORKER
     if (dto.role === 'worker') {
-      if (!dto.fullName) throw new BadRequestException('Трите имена са задължителни');
-      if (!dto.phone) throw new BadRequestException('Телефонът е задължителен');
-      if (!dto.city) throw new BadRequestException('Градът е задължителен');
+      const publicName = String(profile.publicName || dto.fullName || '').trim();
+      const city = String(profile.city || dto.city || '').trim();
+      const skills = Array.isArray(profile.skills) ? profile.skills : dto.skills ?? [];
+
+      if (!publicName) throw new BadRequestException('Трите имена са задължителни');
+      if (!city) throw new BadRequestException('Градът е задължителен');
 
       const user = await this.users.create({
-        name: dto.fullName,
+        name: publicName,
         email: dto.email,
         password: passwordHash,
         role: 'worker',
@@ -49,10 +65,14 @@ export class AuthService {
 
       await this.workers.createWorkerProfile({
         userId: user.id,
-        phone: dto.phone,
-        city: dto.city,
-        skills: dto.skills ?? [],
+        publicName,
+        city,
+        skills,
+        bio: profile.bio || profile.description || null,
+        experience: profile.experience || null,
+        equipment: profile.equipment || null,
       });
+      await this.referrals.attachRegistration(dto.referralCode, user.id, 'worker');
 
       return { message: 'Майсторът е регистриран успешно', user };
     }
@@ -85,7 +105,7 @@ export class AuthService {
     const user = await this.users.findByEmail(dto.email);
     if (!user) throw new BadRequestException('Грешен имейл или парола');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
+    const valid = await bcrypt.compare(dto.password, user.passwordHash || user.password);
     if (!valid) throw new BadRequestException('Грешни данни');
 
     const token = await this.jwt.signAsync({
