@@ -181,6 +181,7 @@ request.closed_by_worker
 
 | Проверка                          | Резултат                    |
 | --------------------------------- | --------------------------- |
+| GitHub Sprint 3 CI                | Passed on `b848559`         |
 | Backend tests                     | 19 suites, 132 tests passed |
 | Billing/admin transaction tests   | Passed                      |
 | Request privacy regression        | Passed                      |
