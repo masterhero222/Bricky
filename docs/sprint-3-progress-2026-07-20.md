@@ -167,10 +167,21 @@ draft
 
 ### P0 - release и privacy
 
+- [ ] Критичен pre-deploy blocker: текущият live `/api/workers` все още връща
+      `email`, `phone` и password hash полета от legacy API.
 - [ ] Интегрираният release candidate да бъде deploy-нат.
 - [ ] След deploy публичният `/api/workers` да бъде проверен за липса на
       `email`, `phone` и други private полета.
 - [ ] Suspended user да бъде проверен срещу production API със стар token.
+
+Pre-deploy baseline от 23.07.2026 г.:
+
+- `GET https://bricky.bg/api/health/ready` връща `200`;
+- `/`, `/workers` и `/api/workers` са достъпни;
+- `npm run release:smoke-public:sprint3` правилно спира с:
+  `Private contact field workers[0].email is public`;
+- до успешен Sprint 3 deploy текущият public workers endpoint не трябва да се
+  счита за безопасен.
 
 ### P1 - production release gates
 
