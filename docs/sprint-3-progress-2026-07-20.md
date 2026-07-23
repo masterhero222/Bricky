@@ -25,7 +25,7 @@ Sprint 3 изгражда професионалното data ядро на Bric
 | Admin backoffice | 95% | Users, workers, requests, media, referrals и audit са налични |
 | Frontend интеграция | 95% | Основните роли и маршрути работят през реалния API |
 | Privacy и security | 98% | Release candidate-ът защитава контакти, адреси, роли и suspended users |
-| Production readiness | 80% | Backup/rollback и post-deploy acceptance gates са готови; live deploy не е изпълнен |
+| Production readiness | 85% | Data/app rollback и post-deploy acceptance gates са готови; live deploy не е изпълнен |
 
 ## Завършено
 
@@ -118,6 +118,10 @@ draft
 - [x] Restore rehearsal доказва DB/uploads rollback чрез fingerprint.
 - [x] Production migration изисква същия commit, backup и rehearsal evidence.
 - [x] Deployment preflight проверява PM2, nginx и build artifacts.
+- [x] Backend и frontend се пакетират в един immutable deployment bundle.
+- [x] Bundle manifest-ът пази SHA-256, размер и file-level build fingerprint.
+- [x] Deployment preflight отказва active `dist`, различен от bundle-а.
+- [x] CI доказва, че tampered deployment archive се отхвърля.
 - [x] Public smoke проверява readiness, SPA routes, assets, worker privacy и
       реални `/uploads` изображения.
 - [x] Production acceptance изисква точния deployed commit и стар token на
@@ -150,6 +154,9 @@ Release candidate privacy fix: `087cad2` (`fix: remove private fields from publi
 Latest locally validated release tooling: `55ba5c0`
 (`ci: certify sprint 3 production acceptance`)
 
+Immutable application bundle tooling: `eb5bdc2`
+(`ci: package immutable sprint 3 deployment builds`)
+
 | Проверка | Резултат |
 | --- | --- |
 | Sprint 1/2/3 cross-sprint verification | Passed |
@@ -168,6 +175,7 @@ Latest locally validated release tooling: `55ba5c0`
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
 | Public worker list/profile/batch privacy smoke | Passed |
 | Public post-deploy contract test | Passed |
+| Deployment bundle package/verify/tamper test | Passed |
 | GitHub verification workflows | Passed on current pushed head |
 
 ## Текущо състояние на интеграцията
@@ -221,6 +229,7 @@ Pre-deploy baseline от 23.07.2026 г.:
 - [ ] Production deployment.
 - [ ] Post-deploy API и browser smoke test.
 - [ ] Архивиране на успешния `post-deploy-report.json`.
+- [x] Immutable backend/frontend deployment bundle и checksum manifest.
 
 ### P2 - след release
 

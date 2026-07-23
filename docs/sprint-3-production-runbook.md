@@ -189,19 +189,36 @@ restart не се прави.
 1. Checkout на точния rehearsal commit.
 2. `npm ci` и backend build.
 3. `npm ci` и frontend build.
-4. Read-only deployment preflight:
+4. Създаване и проверка на immutable deployment bundle извън Git worktree:
+
+```bash
+export SPRINT3_DEPLOYMENT_BUNDLE_ROOT=/var/www/Bricky-releases/sprint3
+export SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE=PACKAGE_BRICKY_DEPLOYMENT
+npm run release:package-deployment:sprint3
+
+export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST=/absolute/path/to/deployment-manifest.json
+npm run release:verify-deployment-bundle:sprint3
+```
+
+Bundle-ът съдържа отделни `backend-build.tar.gz` и
+`frontend-build.tar.gz`. Manifest-ът пази точния Git SHA, SHA-256 и размер на
+архивите, както и fingerprint на всеки файл в двете активни `dist`
+директории.
+
+5. Read-only deployment preflight:
 
 ```bash
 export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
+export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST=/absolute/path/to/deployment-manifest.json
 npm run release:deployment-preflight:sprint3
 ```
 
 Preflight проверява release SHA, migration evidence chain, backend/frontend
-build artifacts, PM2 process path/status, `nginx -t`, активния `frontend/dist`
-и backend proxy port.
+build fingerprints, deployment archive checksums, PM2 process path/status,
+`nginx -t`, активния `frontend/dist` и backend proxy port.
 
-5. Проверка, че nginx сочи към активния `frontend/dist`.
-6. Задаване на точния release SHA и restart на `bricky-backend` чрез PM2:
+6. Проверка, че nginx сочи към активния `frontend/dist`.
+7. Задаване на точния release SHA и restart на `bricky-backend` чрез PM2:
 
 ```bash
 export APP_COMMIT_SHA="$(git rev-parse HEAD)"
@@ -210,8 +227,8 @@ pm2 restart bricky-backend --update-env
 
 `GET /api/health/ready` трябва да върне същия SHA в полето `commit`.
 
-7. Проверка на PM2 status и error log.
-8. Read-only public/API smoke върху `https://bricky.bg`:
+8. Проверка на PM2 status и error log.
+9. Read-only public/API smoke върху `https://bricky.bg`:
 
 ```bash
 export SPRINT3_PUBLIC_URL=https://bricky.bg
@@ -268,8 +285,14 @@ commit, deployment preflight-а и public smoke резултата.
 ### Application rollback
 
 Използва се предходният доказано работещ Git commit и неговите build artifacts.
-Backend и frontend се връщат заедно, след което PM2 и public smoke се
-проверяват отново.
+Преди извличане задължително се изпълнява
+`release:verify-deployment-bundle:sprint3` върху предходния manifest. Backend
+и frontend архивите от един и същ manifest се връщат заедно в отделна
+директория, сравняват се със записаните fingerprints и едва тогава заменят
+активните `dist` директории. След това се обновява `APP_COMMIT_SHA`, PM2 се
+рестартира и public smoke се изпълнява отново.
+
+Не се смесва backend archive от един manifest с frontend archive от друг.
 
 Sprint 3 schema миграциите са additive и idempotent. При application rollback
 новите таблици и колони не се изтриват автоматично.
@@ -302,6 +325,8 @@ DB dump и uploads archive от един manifest са една recovery точ�
 - `restore-report.json`;
 - `rehearsal-certificate.json`;
 - `production-migration-report.json`;
+- `deployment-manifest.json`;
+- `backend-build.tar.gz` и `frontend-build.tar.gz`;
 - `post-deploy-report.json`;
 - schema verification output;
 - test/build output;
@@ -320,5 +345,6 @@ Release-ът спира при:
 - rollback restore fingerprint, различен от първоначалния backup restore;
 - schema drift;
 - failing tests, build или smoke;
+- build fingerprint или deployment archive checksum mismatch;
 - липсващ uploads archive;
 - липса на доказан rollback commit.
