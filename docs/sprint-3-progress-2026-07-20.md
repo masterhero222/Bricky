@@ -24,7 +24,7 @@ Sprint 3 изгражда професионалното data ядро на Bric
 | Media moderation | 97% | Pending/approved/rejected и запазване на стария avatar работят |
 | Admin backoffice | 95% | Users, workers, requests, media, referrals и audit са налични |
 | Frontend интеграция | 95% | Основните роли и маршрути работят през реалния API |
-| Privacy и security | 97% | Контакти, адреси, роли и suspended users са защитени |
+| Privacy и security | 98% | Release candidate-ът защитава контакти, адреси, роли и suspended users |
 | Production readiness | 75% | Инструментите са готови; live rehearsal/deploy не са изпълнени |
 
 ## Завършено
@@ -130,6 +130,8 @@ draft
 Проверено на 23.07.2026 г. локално и в GitHub Actions върху текущия merge с
 `origin/main`:
 
+Release candidate commit: `087cad2` (`fix: remove private fields from public worker responses`)
+
 | Проверка | Резултат |
 | --- | --- |
 | Sprint 1/2/3 cross-sprint verification | Passed |
@@ -146,8 +148,8 @@ draft
 | Migration contract verification | Passed |
 | Sprint 2 migration and rollback rehearsal | Passed |
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
-| Bricky verification GitHub workflow | Passed |
-| Sprint 3 CI GitHub workflow | Passed |
+| Bricky verification GitHub workflow #86 | Passed |
+| Sprint 3 CI GitHub workflow #22 | Passed |
 
 ## Текущо състояние на интеграцията
 
@@ -167,8 +169,11 @@ draft
 
 ### P0 - release и privacy
 
-- [ ] Критичен pre-deploy blocker: текущият live `/api/workers` все още връща
-      `email`, `phone` и password hash полета от legacy API.
+- [x] Release candidate-ът премахва `email`, `phone`, password и token полета
+      от всички публични worker response варианти.
+- [x] Public smoke тестът прекъсва release-а при открито private поле.
+- [ ] Критичен deployment blocker: текущият live `/api/workers` все още е
+      старата версия и връща private полета от legacy API.
 - [ ] Интегрираният release candidate да бъде deploy-нат.
 - [ ] След deploy публичният `/api/workers` да бъде проверен за липса на
       `email`, `phone` и други private полета.
