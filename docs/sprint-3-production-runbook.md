@@ -88,7 +88,16 @@ npm run release:restore-rehearsal:sprint3
 4. Възстановява uploads в отделната rehearsal директория.
 5. Изпълнява Sprint 3 миграциите два пъти.
 6. Проверява таблици, foreign keys, индекси, статуси и 15-те категории.
-7. Записва `restore-report.json`, свързан с SHA-256 на manifest-а, Git commit-а и точния списък миграции.
+7. Възстановява повторно оригиналния DB dump и uploads archive като rollback
+   rehearsal.
+8. Сравнява pre-migration DB fingerprint преди и след rollback restore.
+9. Прилага миграциите още два пъти и повтаря schema проверката.
+10. Записва `restore-report.json`, свързан с SHA-256 на manifest-а, Git
+    commit-а, точния списък миграции и rollback fingerprint-а.
+
+Rollback rehearsal-ът е разрешен единствено върху disposable база с prefix
+`bricky_sprint3_` и върху директория под зададения rehearsal root. Той не
+изпълнява production restore.
 
 ## 4. Rehearsal application verification
 
@@ -139,9 +148,9 @@ npm run release:certify-rehearsal:sprint3
 ```
 
 Командата издава `rehearsal-certificate.json` само ако schema, integrity,
-backend/frontend audit, tests, builds и API smoke са зелени. Сертификатът е
-свързан чрез SHA-256 с manifest-а, restore report-а, Git commit-а и точния
-списък миграции.
+rollback restore, backend/frontend audit, tests, builds и API smoke са зелени.
+Сертификатът е свързан чрез SHA-256 с manifest-а, restore report-а, Git
+commit-а и точния списък миграции.
 
 ## 5. Production migration
 
@@ -269,6 +278,7 @@ Release-ът спира при:
 - липсващ или слаб JWT secret;
 - `TYPEORM_SYNCHRONIZE` различно от `false`;
 - неуспешен backup verify или restore rehearsal;
+- rollback restore fingerprint, различен от първоначалния backup restore;
 - schema drift;
 - failing tests, build или smoke;
 - липсващ uploads archive;

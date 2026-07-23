@@ -144,3 +144,47 @@ jobs:
 
           curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null
           npm run smoke:api:sprint3
+
+      - name: Rehearse Sprint 3 backup, migration and rollback restore
+        working-directory: backend
+        env:
+          NODE_ENV: production
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: root
+          DB_NAME: bricky_sprint3_e2e
+          TYPEORM_SYNCHRONIZE: "false"
+          JWT_SECRET: sprint3-ci-release-secret-with-more-than-32-characters
+          SPRINT3_UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          SPRINT3_BACKUP_ROOT: ${{ runner.temp }}/sprint3-backups
+          SPRINT3_REHEARSAL_DATABASE: bricky_sprint3_ci_rehearsal
+          SPRINT3_REHEARSAL_ROOT: ${{ runner.temp }}/bricky-sprint3-rehearsal-ci
+          SPRINT3_CONFIRM_BACKUP: BACKUP_BRICKY_PRODUCTION
+          SPRINT3_CONFIRM_REHEARSAL_RESTORE: RESTORE_BRICKY_REHEARSAL
+        run: |
+          npm run release:backup:sprint3
+          export SPRINT3_BACKUP_MANIFEST
+          SPRINT3_BACKUP_MANIFEST="$(find "$SPRINT3_BACKUP_ROOT" -name manifest.json -type f -print -quit)"
+          test -n "$SPRINT3_BACKUP_MANIFEST"
+
+          npm run release:verify-backup:sprint3
+          npm run release:restore-rehearsal:sprint3
+
+          node -e "
+            const fs = require('node:fs');
+            const report = JSON.parse(
+              fs.readFileSync(
+                process.env.SPRINT3_REHEARSAL_ROOT + '/restore-report.json',
+                'utf8',
+              ),
+            );
+            if (
+              report.rollbackRestoreVerified !== true ||
+              report.preMigrationFingerprint !== report.rollbackFingerprint ||
+              report.forwardMigrationCycles !== 2 ||
+              report.migrationPasses !== 4
+            ) {
+              throw new Error('Sprint 3 rollback restore evidence is incomplete');
+            }
+          "

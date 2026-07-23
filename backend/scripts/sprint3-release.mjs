@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -447,6 +448,68 @@ async function restoreDatabase(databaseArchive, rehearsalDatabase) {
   if (exitCode !== 0) fail(`mysql restore failed: ${stderr}`);
 }
 
+async function databaseFingerprint(database) {
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database,
+  });
+  try {
+    const [tableRows] = await connection.query(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_type = 'BASE TABLE'
+        ORDER BY table_name`,
+    );
+    const [columnRows] = await connection.query(
+      `SELECT table_name, column_name, ordinal_position, column_type,
+              is_nullable, column_default, column_key, extra
+         FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+        ORDER BY table_name, ordinal_position`,
+    );
+    const tables = [];
+    for (const row of tableRows) {
+      const tableName = String(row.TABLE_NAME || row.table_name);
+      const escapedTableName = tableName.replaceAll('`', '``');
+      const [[countRow]] = await connection.query(
+        `SELECT COUNT(*) AS rowCount FROM \`${escapedTableName}\``,
+      );
+      const [[checksumRow]] = await connection.query(
+        `CHECKSUM TABLE \`${escapedTableName}\``,
+      );
+      tables.push({
+        tableName,
+        rowCount: Number(countRow.rowCount),
+        checksum: checksumRow.Checksum ?? checksumRow.checksum ?? null,
+      });
+    }
+    const snapshot = {
+      tables,
+      columns: columnRows.map((row) => ({
+        tableName: row.TABLE_NAME || row.table_name,
+        columnName: row.COLUMN_NAME || row.column_name,
+        ordinalPosition: Number(
+          row.ORDINAL_POSITION || row.ordinal_position,
+        ),
+        columnType: row.COLUMN_TYPE || row.column_type,
+        isNullable: row.IS_NULLABLE || row.is_nullable,
+        columnDefault: row.COLUMN_DEFAULT ?? row.column_default ?? null,
+        columnKey: row.COLUMN_KEY || row.column_key,
+        extra: row.EXTRA || row.extra,
+      })),
+    };
+    return createHash('sha256')
+      .update(JSON.stringify(snapshot))
+      .digest('hex');
+  } finally {
+    await connection.end();
+  }
+}
+
 async function restoreRehearsal() {
   if (
     process.env.SPRINT3_CONFIRM_REHEARSAL_RESTORE !== 'RESTORE_BRICKY_REHEARSAL'
@@ -486,12 +549,52 @@ async function restoreRehearsal() {
     resolve(backupDir, manifest.artifacts.database.file),
     rehearsalDatabase,
   );
+  const preMigrationFingerprint = await databaseFingerprint(rehearsalDatabase);
   command('tar', [
     '-xzf',
     resolve(backupDir, manifest.artifacts.uploads.file),
     '-C',
     rehearsalRoot,
   ]);
+
+  command('node', ['scripts/rehearse-sprint3-migrations.mjs'], {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      SPRINT3_REHEARSAL_DATABASE: rehearsalDatabase,
+      SPRINT3_REHEARSAL_RESET: '0',
+    },
+    stdio: 'inherit',
+  });
+
+  const restoredUploadsDir = resolve(
+    rehearsalRoot,
+    manifest.source.uploadsDir.split(/[\\/]/).at(-1),
+  );
+  if (
+    restoredUploadsDir === rehearsalRoot ||
+    !isPathWithin(rehearsalRoot, restoredUploadsDir)
+  ) {
+    fail('Restored uploads path is outside the rehearsal root.');
+  }
+
+  await restoreDatabase(
+    resolve(backupDir, manifest.artifacts.database.file),
+    rehearsalDatabase,
+  );
+  rmSync(restoredUploadsDir, { recursive: true, force: true });
+  command('tar', [
+    '-xzf',
+    resolve(backupDir, manifest.artifacts.uploads.file),
+    '-C',
+    rehearsalRoot,
+  ]);
+  const rollbackFingerprint = await databaseFingerprint(rehearsalDatabase);
+  if (rollbackFingerprint !== preMigrationFingerprint) {
+    fail(
+      'Rollback restore fingerprint does not match the original restored backup.',
+    );
+  }
 
   command('node', ['scripts/rehearse-sprint3-migrations.mjs'], {
     cwd: backendRoot,
@@ -512,13 +615,14 @@ async function restoreRehearsal() {
     sourceGitCommit: manifest.source.git.commit,
     rehearsalDatabase,
     rehearsalRoot,
-    restoredUploadsDir: resolve(
-      rehearsalRoot,
-      manifest.source.uploadsDir.split(/[\\/]/).at(-1),
-    ),
+    restoredUploadsDir,
     migrationNames,
-    migrationPasses: 2,
+    migrationPasses: 4,
+    forwardMigrationCycles: 2,
     schemaVerified: true,
+    rollbackRestoreVerified: true,
+    preMigrationFingerprint,
+    rollbackFingerprint,
   };
   writeFileSync(
     resolve(rehearsalRoot, 'restore-report.json'),
@@ -549,8 +653,19 @@ async function readRehearsalEvidence(reportPath, manifestPath, manifest) {
   if (report.sourceGitCommit !== manifest.source.git.commit) {
     fail('Rehearsal restore report references a different Git commit.');
   }
-  if (report.schemaVerified !== true || report.migrationPasses !== 2) {
-    fail('Rehearsal report does not prove idempotent schema verification.');
+  if (
+    report.schemaVerified !== true ||
+    report.migrationPasses !== 4 ||
+    report.forwardMigrationCycles !== 2
+  ) {
+    fail('Rehearsal report does not prove repeatable schema verification.');
+  }
+  if (
+    report.rollbackRestoreVerified !== true ||
+    !report.preMigrationFingerprint ||
+    report.preMigrationFingerprint !== report.rollbackFingerprint
+  ) {
+    fail('Rehearsal report does not prove a matching rollback restore.');
   }
   if (
     JSON.stringify(report.migrationNames) !== JSON.stringify(migrationNames)
@@ -669,6 +784,7 @@ async function certifyRehearsal() {
     gates: [
       'schema',
       'integrity',
+      'rollback-restore',
       'backend-audit',
       'backend-tests',
       'backend-build',
@@ -727,6 +843,7 @@ async function readRehearsalCertificate(
   const requiredGates = [
     'schema',
     'integrity',
+    'rollback-restore',
     'backend-audit',
     'backend-tests',
     'backend-build',
@@ -831,6 +948,8 @@ async function migrateProduction() {
     migrationPasses: 2,
     schemaVerified: true,
     integrityVerified: true,
+    rollbackRestoreVerified: restoreReport.rollbackRestoreVerified,
+    rollbackFingerprint: restoreReport.rollbackFingerprint,
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
     encoding: 'utf8',
@@ -850,7 +969,9 @@ async function readProductionMigrationEvidence(reportPath, git) {
     report.formatVersion !== 1 ||
     report.ok !== true ||
     report.schemaVerified !== true ||
-    report.integrityVerified !== true
+    report.integrityVerified !== true ||
+    report.rollbackRestoreVerified !== true ||
+    !report.rollbackFingerprint
   ) {
     fail('Production migration report is invalid or unsuccessful.');
   }
