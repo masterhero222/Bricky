@@ -26,6 +26,8 @@
     "release:restore-rehearsal:sprint3": "node scripts/sprint3-release.mjs restore-rehearsal",
     "release:certify-rehearsal:sprint3": "node scripts/sprint3-release.mjs certify-rehearsal",
     "release:migrate-production:sprint3": "node scripts/sprint3-release.mjs migrate-production",
+    "release:deployment-preflight:sprint3": "node scripts/sprint3-release.mjs deployment-preflight",
+    "release:smoke-public:sprint3": "node scripts/smoke-sprint3-public.mjs",
     "release:verify-schema:sprint3": "node scripts/verify-sprint3-schema.mjs",
     "release:verify-integrity:sprint3": "node scripts/verify-sprint3-integrity.mjs",
     "release:self-test:sprint3": "node scripts/sprint3-release.mjs self-test"

@@ -64,7 +64,12 @@ function command(commandName, args, options = {}) {
     );
   }
 
-  return result.stdout?.trim() || '';
+  return (
+    (options.combineOutput
+      ? `${result.stdout || ''}\n${result.stderr || ''}`
+      : result.stdout
+    )?.trim() || ''
+  );
 }
 
 function commandAvailable(commandName, versionArgs = ['--version']) {
@@ -834,6 +839,140 @@ async function migrateProduction() {
   console.log(JSON.stringify({ ...report, reportPath }, null, 2));
 }
 
+async function readProductionMigrationEvidence(reportPath, git) {
+  if (!isAbsolute(reportPath) || !existsSync(reportPath)) {
+    fail(
+      'SPRINT3_PRODUCTION_MIGRATION_REPORT must be an absolute path to an existing report.',
+    );
+  }
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+  if (
+    report.formatVersion !== 1 ||
+    report.ok !== true ||
+    report.schemaVerified !== true ||
+    report.integrityVerified !== true
+  ) {
+    fail('Production migration report is invalid or unsuccessful.');
+  }
+  if (report.git?.commit !== git.commit) {
+    fail('Production migration report references a different Git commit.');
+  }
+  if (
+    report.database !== process.env.DB_NAME ||
+    report.databaseHost !== process.env.DB_HOST
+  ) {
+    fail('Production migration report targets a different database.');
+  }
+  if (
+    JSON.stringify(report.migrationNames) !== JSON.stringify(migrationNames)
+  ) {
+    fail('Production migration report used a different migration set.');
+  }
+  for (const evidence of [
+    ['manifest', report.manifestPath, report.manifestSha256],
+    [
+      'restore report',
+      report.rehearsalReportPath,
+      report.rehearsalReportSha256,
+    ],
+    [
+      'rehearsal certificate',
+      report.rehearsalCertificatePath,
+      report.rehearsalCertificateSha256,
+    ],
+  ]) {
+    const [label, evidencePath, checksum] = evidence;
+    if (
+      !evidencePath ||
+      !isAbsolute(evidencePath) ||
+      !existsSync(evidencePath) ||
+      checksum !== (await sha256(evidencePath))
+    ) {
+      fail(`Production migration report has invalid ${label} evidence.`);
+    }
+  }
+  return report;
+}
+
+async function deploymentPreflight() {
+  validateProductionEnvironment({ requireTools: false });
+  const git = gitMetadata();
+  if (git.dirty) {
+    fail('The deployment worktree is dirty.');
+  }
+  const migrationReportPath = requireEnv('SPRINT3_PRODUCTION_MIGRATION_REPORT');
+  const migrationReport = await readProductionMigrationEvidence(
+    migrationReportPath,
+    git,
+  );
+
+  const backendEntry = resolve(backendRoot, 'dist/main.js');
+  const frontendEntry = resolve(repositoryRoot, 'frontend/dist/index.html');
+  for (const artifact of [backendEntry, frontendEntry]) {
+    if (!existsSync(artifact) || !statSync(artifact).isFile()) {
+      fail(`Required deployment artifact is missing: ${artifact}`);
+    }
+  }
+  for (const tool of ['pm2', 'nginx']) {
+    if (!commandAvailable(tool)) {
+      fail(`${tool} is required for deployment preflight.`);
+    }
+  }
+
+  const processName =
+    process.env.SPRINT3_PM2_PROCESS_NAME?.trim() || 'bricky-backend';
+  const processes = JSON.parse(command('pm2', ['jlist']));
+  const process = processes.find((entry) => entry.name === processName);
+  if (!process) {
+    fail(`PM2 process does not exist: ${processName}`);
+  }
+  if (process.pm2_env?.status !== 'online') {
+    fail(`PM2 process ${processName} is not online.`);
+  }
+  if (resolve(process.pm2_env?.pm_exec_path || '') !== backendEntry) {
+    fail(`PM2 process ${processName} points to a different backend entry.`);
+  }
+
+  command('nginx', ['-t'], { combineOutput: true });
+  const nginxConfig = command('nginx', ['-T'], { combineOutput: true });
+  const normalizedFrontendDist = resolve(
+    repositoryRoot,
+    'frontend/dist',
+  ).replaceAll('\\', '/');
+  if (!nginxConfig.replaceAll('\\', '/').includes(normalizedFrontendDist)) {
+    fail('nginx does not reference the current frontend/dist directory.');
+  }
+  const backendPort = Number(process.env.PORT || 3000);
+  if (!nginxConfig.includes(`127.0.0.1:${backendPort}`)) {
+    fail(`nginx does not proxy to the configured backend port ${backendPort}.`);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        git,
+        migrationReportPath: resolve(migrationReportPath),
+        migrationCompletedAt: migrationReport.completedAt,
+        backendEntry,
+        frontendEntry,
+        pm2: {
+          name: processName,
+          status: process.pm2_env.status,
+          pid: process.pid,
+        },
+        nginx: {
+          frontendDist: normalizedFrontendDist,
+          backendPort,
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function selfTest() {
   assertSafeDatabaseName('bricky_sprint3_rehearsal');
   assertReleaseGitMatchesManifest(
@@ -882,6 +1021,7 @@ const actions = {
   'restore-rehearsal': restoreRehearsal,
   'certify-rehearsal': certifyRehearsal,
   'migrate-production': migrateProduction,
+  'deployment-preflight': deploymentPreflight,
   'self-test': selfTest,
   help() {
     console.log(
@@ -893,6 +1033,7 @@ const actions = {
         '  restore-rehearsal   Restore only to a disposable rehearsal DB and directory',
         '  certify-rehearsal   Run all rehearsal gates and write a release certificate',
         '  migrate-production  Apply migrations only after matching backup/rehearsal evidence',
+        '  deployment-preflight Verify build, migration evidence, PM2 and nginx without restart',
         '  self-test           Verify local safety guards without external services',
       ].join('\n'),
     );

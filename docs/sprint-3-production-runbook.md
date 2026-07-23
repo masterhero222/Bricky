@@ -180,10 +180,30 @@ restart не се прави.
 1. Checkout на точния rehearsal commit.
 2. `npm ci` и backend build.
 3. `npm ci` и frontend build.
-4. Проверка, че nginx сочи към активния `frontend/dist`.
-5. Restart на `bricky-backend` чрез PM2.
-6. Проверка на PM2 status и error log.
-7. Public/API smoke върху `https://bricky.bg`.
+4. Read-only deployment preflight:
+
+```bash
+export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
+npm run release:deployment-preflight:sprint3
+```
+
+Preflight проверява release SHA, migration evidence chain, backend/frontend
+build artifacts, PM2 process path/status, `nginx -t`, активния `frontend/dist`
+и backend proxy port.
+
+5. Проверка, че nginx сочи към активния `frontend/dist`.
+6. Restart на `bricky-backend` чрез PM2.
+7. Проверка на PM2 status и error log.
+8. Read-only public/API smoke върху `https://bricky.bg`:
+
+```bash
+export SPRINT3_PUBLIC_URL=https://bricky.bg
+npm run release:smoke-public:sprint3
+```
+
+Smoke командата не създава данни. Тя проверява SPA маршрутите, production
+assets, public workers API, worker profile API и липсата на публични
+`email`/`phone` полета.
 
 Задължителни post-deploy проверки:
 

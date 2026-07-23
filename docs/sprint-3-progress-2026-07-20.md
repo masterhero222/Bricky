@@ -203,6 +203,7 @@ request.closed_by_worker
 | Timeline и completed archive      | Passed                      |
 | Production-backup migration       | Not run                     |
 | Production smoke test             | Not run                     |
+| Current live public privacy smoke | Failed: legacy `/api/workers` exposes `email` |
 
 Последният автоматизиран API smoke резултат:
 
@@ -221,6 +222,7 @@ request.closed_by_worker
 
 ### P0 - privacy и contact bypass
 
+- [ ] Release candidate-ът да бъде deploy-нат; текущият live backend още връща `email` в public workers API.
 - [x] Worker feed да не връща или показва клиентски email.
 - [x] Worker feed да не връща или показва телефон.
 - [x] Точният адрес да е скрит преди клиентът да избере майстор.
