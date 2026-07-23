@@ -4,7 +4,7 @@ import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { WorkerProfileEntity } from './worker-profile.entity';
 import { WorkerSkillEntity } from './worker-skill.entity';
-import { RequestEntity } from '../requests/entities/request.entity';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
 import { ReferralRewardEntity } from '../referrals/referral-reward.entity';
 import { WorkersService } from './workers.service';
 import { WorkersController } from './workers.controller';
@@ -19,7 +19,7 @@ import { MediaModule } from '../media/media.module';
       WorkerGalleryImage,
       WorkerProfileEntity,
       WorkerSkillEntity,
-      RequestEntity,
+      RepairRequestEntity,
       ReferralRewardEntity,
     ]),
     UsersModule,

@@ -9,7 +9,7 @@ export class RequestPricingSnapshotEntity {
   @Column({ name: 'request_id', type: 'int', nullable: true })
   requestId: number | null;
 
-  @Column({ name: 'pricing_version', length: 80, nullable: true })
+  @Column({ name: 'pricing_version', type: 'varchar', length: 80, nullable: true })
   pricingVersion: string | null;
 
   @Column({ length: 10, default: 'EUR' })

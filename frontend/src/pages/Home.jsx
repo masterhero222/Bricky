@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Wrench, CheckCircle, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -26,16 +26,16 @@ export default function Home() {
 
       {/* 🧱 HERO SECTION */}
       <section className="relative z-10 flex flex-col items-center justify-center flex-1 text-center px-6 py-16">
-        <motion.h1
+        <Motion.h1
           className="text-4xl md:text-6xl font-bold mb-4"
           initial={{ opacity: 0, y: -40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
           Добре дошъл в <span className="text-blue-500">Bricky</span>
-        </motion.h1>
+        </Motion.h1>
 
-        <motion.p
+        <Motion.p
           className="text-lg md:text-xl text-gray-300 max-w-2xl mb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -43,9 +43,9 @@ export default function Home() {
         >
           Свързваме клиенти и майстори — бързо, лесно и надеждно.
           Без излишни обаждания и хаос.
-        </motion.p>
+        </Motion.p>
 
-        <motion.div
+        <Motion.div
           className="flex flex-col md:flex-row gap-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -63,7 +63,7 @@ export default function Home() {
           >
             Стани майстор 🔧
           </button>
-        </motion.div>
+        </Motion.div>
       </section>
 
       {/* ⚙️ HOW IT WORKS */}
@@ -89,7 +89,7 @@ export default function Home() {
                 desc: "Получаваш обратна връзка и сигурност до завършването.",
               },
             ].map((step, i) => (
-              <motion.div
+              <Motion.div
                 key={i}
                 className="bg-gray-800/80 p-8 rounded-2xl shadow-lg hover:shadow-blue-500/20 transition"
                 initial={{ opacity: 0, y: 20 }}
@@ -101,7 +101,7 @@ export default function Home() {
                   <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
                   <p className="text-gray-400">{step.desc}</p>
                 </div>
-              </motion.div>
+              </Motion.div>
             ))}
           </div>
         </div>

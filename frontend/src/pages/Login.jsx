@@ -13,7 +13,13 @@ export default function Login() {
     localStorage.setItem("role", data.user.role);
     localStorage.setItem("userName", data.user.name || "");
 
-    window.location.href = data.user.role === "client" ? "/client/profile" : "/worker/profile";
+    const destination =
+      data.user.role === "client"
+        ? "/client/profile"
+        : ["admin", "super_admin"].includes(data.user.role)
+          ? "/admin"
+          : "/worker/profile";
+    window.location.href = destination;
   };
 
 

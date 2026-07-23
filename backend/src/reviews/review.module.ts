@@ -4,14 +4,20 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReviewEntity } from './entities/review.entity';
 import { ReviewsController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
-import { RequestEntity } from '../requests/entities/request.entity';
 import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
-import { ReferralsModule } from '../referrals/referrals.module';
+import { RequestEventEntity } from '../requests/entities/request-event.entity';
+import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ReviewEntity, RequestEntity, RepairRequestEntity]), ReferralsModule],
+  imports: [
+    TypeOrmModule.forFeature([
+      ReviewEntity,
+      RepairRequestEntity,
+      RequestEventEntity,
+    ]),
+  ],
   controllers: [ReviewsController],
-  providers: [ReviewsService],
+  providers: [ReviewsService, RequestLifecycleService],
   exports: [ReviewsService],
 })
 export class ReviewModule {}

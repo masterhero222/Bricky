@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { RequestEntity } from './entities/request.entity';
 import { RepairRequestEntity } from './entities/repair-request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestImageEntity } from './entities/request-image.entity';
@@ -17,11 +16,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { UserEntity } from '../users/user.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
+import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      RequestEntity,
       RepairRequestEntity,
       RequestApplicationEntity,
       RequestImageEntity,
@@ -35,6 +34,7 @@ import { WorkerProfileEntity } from '../workers/worker-profile.entity';
     WorkersModule,
     NotificationsModule,
     MediaModule,
+    ReferralsModule,
   ],
   controllers: [RequestsController],
   providers: [RequestsService, RequestLifecycleService],

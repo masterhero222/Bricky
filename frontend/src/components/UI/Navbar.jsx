@@ -11,7 +11,9 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
-  const profilePath = role === "client" ? "/client/profile" : "/worker/profile";
+  const isAdmin = ["admin", "super_admin"].includes(role);
+  const profilePath = role === "client" ? "/client/profile" : isAdmin ? "/admin" : "/worker/profile";
+  const profileLabel = isAdmin ? "Админ панел" : "Моят профил";
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 h-[78px] border-b border-slate-400/15 bg-[#08111f]/85 backdrop-blur-xl">
@@ -39,7 +41,7 @@ export default function Navbar() {
             </>
           ) : (
             <Link className="bricky-button-primary !min-h-11" to={profilePath}>
-              <UserRound size={19} /> Моят профил
+              <UserRound size={19} /> {profileLabel}
             </Link>
           )}
         </div>
@@ -63,7 +65,7 @@ export default function Navbar() {
                 <button onClick={() => { setOpen(false); navigate("/auth/register"); }} className="bricky-button-secondary">Регистрация</button>
               </div>
             ) : (
-              <Link onClick={() => setOpen(false)} to={profilePath} className="bricky-button-primary mt-3"><UserRound size={19} /> Моят профил</Link>
+              <Link onClick={() => setOpen(false)} to={profilePath} className="bricky-button-primary mt-3"><UserRound size={19} /> {profileLabel}</Link>
             )}
           </nav>
         </div>

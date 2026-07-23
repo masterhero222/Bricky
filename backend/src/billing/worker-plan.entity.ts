@@ -1,11 +1,18 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('worker_plans')
 export class WorkerPlanEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index()
+  @Index('uq_worker_plan_worker', { unique: true })
   @Column({ name: 'worker_user_id', type: 'int' })
   workerUserId: number;
 

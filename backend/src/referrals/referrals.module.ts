@@ -8,6 +8,8 @@ import { ReferralsService } from './referrals.service';
 import { UserEntity } from '../users/user.entity';
 import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
 import { AdminAuditLogEntity } from '../admin/admin-audit-log.entity';
+import { MediaAssetEntity } from '../media/media-asset.entity';
+import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { AdminAuditLogEntity } from '../admin/admin-audit-log.entity';
       UserEntity,
       RepairRequestEntity,
       AdminAuditLogEntity,
+      MediaAssetEntity,
+      WorkerProfileEntity,
     ]),
   ],
   controllers: [ReferralsController],

@@ -9,16 +9,16 @@ import { Repository } from 'typeorm';
 import { ReviewEntity } from './entities/review.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
-import { ReferralsService } from '../referrals/referrals.service';
+import { RequestEventEntity } from '../requests/entities/request-event.entity';
+import { REQUEST_LIFECYCLE_ACTIONS } from '../requests/request-lifecycle';
+import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 
 @Injectable()
 export class ReviewsService {
   constructor(
     @InjectRepository(ReviewEntity)
     private readonly reviewsRepo: Repository<ReviewEntity>,
-    @InjectRepository(RepairRequestEntity)
-    private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
-    private readonly referrals: ReferralsService,
+    private readonly lifecycle: RequestLifecycleService,
   ) {}
 
   async createReview(dto: CreateReviewDto, clientUserId: number) {
@@ -31,29 +31,59 @@ export class ReviewsService {
       throw new BadRequestException('Rating must be between 1 and 5');
     }
 
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
-    if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (req.status !== 'completed' || !req.archivedAt) {
-      throw new BadRequestException('Request must be completed before review');
-    }
+    const saved = await this.reviewsRepo.manager.transaction(async (manager) => {
+      const req = await manager.findOne(RepairRequestEntity, {
+        where: { id: requestId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!req) throw new NotFoundException('Request not found');
+      if (Number(req.clientUserId) !== Number(clientUserId)) {
+        throw new ForbiddenException('Not your request');
+      }
+      if (req.status === 'completed' && req.archiveReason === 'closed_by_worker') {
+        throw new BadRequestException('Request is already closed');
+      }
+      if (!['client_confirmed', 'completed'].includes(req.status) || !req.archivedAt) {
+        throw new BadRequestException('Request must be completed before review');
+      }
+      if (req.status === 'client_confirmed') {
+        this.lifecycle.assertTransition(
+          req.status,
+          REQUEST_LIFECYCLE_ACTIONS.LEAVE_REVIEW,
+        );
+      }
 
-    const workerUserId = Number(req.assignedWorkerUserId || 0);
-    if (!workerUserId) throw new BadRequestException('No assigned worker');
+      const workerUserId = Number(req.assignedWorkerUserId || 0);
+      if (!workerUserId) throw new BadRequestException('No assigned worker');
 
-    const existing = await this.reviewsRepo.findOne({ where: { requestId, clientUserId } });
-    if (existing) throw new BadRequestException('Review already exists');
+      const existing = await manager.findOne(ReviewEntity, {
+        where: { requestId, clientUserId },
+      });
+      if (existing) throw new BadRequestException('Review already exists');
 
-    const review = this.reviewsRepo.create({
-      requestId,
-      workerUserId,
-      clientUserId,
-      rating,
-      comment: dto.comment?.trim() ? dto.comment.trim() : null,
+      const review = manager.create(ReviewEntity, {
+        requestId,
+        workerUserId,
+        clientUserId,
+        rating,
+        comment: dto.comment?.trim() ? dto.comment.trim() : null,
+      });
+      const savedReview = await manager.save(review);
+
+      req.status = 'reviewed';
+      await manager.save(req);
+
+      const event = manager.create(RequestEventEntity, {
+        requestId,
+        actorUserId: clientUserId,
+        eventType: 'request.reviewed',
+        metadataJson: { reviewId: savedReview.id, rating },
+      });
+      await manager.save(event);
+
+      return savedReview;
     });
 
-    const saved = await this.reviewsRepo.save(review);
-    await this.referrals.processCompletedRequest(requestId, workerUserId).catch(() => null);
     return saved;
   }
 

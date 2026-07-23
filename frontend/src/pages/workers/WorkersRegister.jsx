@@ -72,7 +72,7 @@ export default function WorkersRegister() {
         city: "",
         skills: [],
       });
-    } catch (err) {
+    } catch {
       setError("Грешка при регистрацията");
       setSuccess("");
     }

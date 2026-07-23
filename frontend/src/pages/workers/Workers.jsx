@@ -39,7 +39,6 @@ export default function Workers() {
       const id = w.userId || w.id;
       const name = w.fullName || w.name || `Майстор #${id || "?"}`;
       const city = w.city || "—";
-      const phone = w.phone || "—";
       const skill =
         Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
       const description = w.description || "Няма описание.";
@@ -52,7 +51,6 @@ export default function Workers() {
         _id: id,
         _name: name,
         _city: city,
-        _phone: phone,
         _skill: skill,
         _description: description,
         _avatar: avatar,

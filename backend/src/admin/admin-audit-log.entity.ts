@@ -13,10 +13,10 @@ export class AdminAuditLogEntity {
   @Column({ length: 80 })
   action: string;
 
-  @Column({ name: 'target_type', length: 80, nullable: true })
+  @Column({ name: 'target_type', type: 'varchar', length: 80, nullable: true })
   targetType: string | null;
 
-  @Column({ name: 'target_id', length: 80, nullable: true })
+  @Column({ name: 'target_id', type: 'varchar', length: 80, nullable: true })
   targetId: string | null;
 
   @Column({ type: 'text', nullable: true })

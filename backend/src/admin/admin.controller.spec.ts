@@ -1,0 +1,66 @@
+import { ForbiddenException } from '@nestjs/common';
+import { AdminController } from './admin.controller';
+
+describe('AdminController catalog and timeline authorization', () => {
+  function setup() {
+    const admin = {
+      listCategories: jest.fn().mockResolvedValue([]),
+      upsertCategory: jest.fn().mockResolvedValue({ categoryKey: 'vik' }),
+      upsertActivity: jest.fn().mockResolvedValue({ activityKey: 'general' }),
+      listPricingRules: jest.fn().mockResolvedValue([]),
+      createPricingRule: jest.fn().mockResolvedValue({ id: 1 }),
+      setPricingRuleActive: jest.fn().mockResolvedValue({ id: 1, isActive: true }),
+      getRequestTimeline: jest.fn().mockResolvedValue({ request: { id: 7 }, events: [] }),
+    };
+    return { controller: new AdminController(admin as any), admin };
+  }
+
+  it('allows admin roles to read catalog, pricing and request timeline', async () => {
+    const { controller, admin } = setup();
+    const req = { user: { id: 10, role: 'admin' } };
+
+    await controller.categories(req);
+    await controller.pricing(req);
+    await controller.requestTimeline(req, '7');
+
+    expect(admin.listCategories).toHaveBeenCalled();
+    expect(admin.listPricingRules).toHaveBeenCalled();
+    expect(admin.getRequestTimeline).toHaveBeenCalledWith(7);
+  });
+
+  it('blocks regular admins from catalog and pricing mutations', () => {
+    const { controller } = setup();
+    const req = { user: { id: 10, role: 'admin' } };
+
+    expect(() => controller.upsertCategory(req, 'vik', { isActive: false })).toThrow(ForbiddenException);
+    expect(() => controller.upsertActivity(req, 'vik', 'general', { isActive: false })).toThrow(ForbiddenException);
+    expect(() => controller.createPricing(req, { version: '2026-q3' })).toThrow(ForbiddenException);
+    expect(() => controller.setPricingStatus(req, '1', { isActive: true })).toThrow(ForbiddenException);
+  });
+
+  it('allows super admins to mutate catalog and pricing', async () => {
+    const { controller, admin } = setup();
+    const req = { user: { id: 1, role: 'super_admin' } };
+
+    await controller.upsertCategory(req, 'vik', { isActive: false, reason: 'maintenance' });
+    await controller.upsertActivity(req, 'vik', 'general', { isActive: false });
+    await controller.createPricing(req, { version: '2026-q3', categoryKey: 'vik' });
+    await controller.setPricingStatus(req, '1', { isActive: true });
+
+    expect(admin.upsertCategory).toHaveBeenCalledWith(
+      1,
+      'vik',
+      expect.objectContaining({ isActive: false }),
+      'maintenance',
+    );
+    expect(admin.upsertActivity).toHaveBeenCalledWith(
+      1,
+      'vik',
+      'general',
+      expect.objectContaining({ isActive: false }),
+      undefined,
+    );
+    expect(admin.createPricingRule).toHaveBeenCalled();
+    expect(admin.setPricingRuleActive).toHaveBeenCalledWith(1, 1, true, undefined);
+  });
+});

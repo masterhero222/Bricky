@@ -10,20 +10,25 @@ export default function WorkerPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadWorker();
-  }, [id]);
+    let active = true;
 
-  async function loadWorker() {
-    try {
-      const res = await apiGet(`/workers/${id}`);
-      setWorker(res.data);
-    } catch (e) {
-      console.error("Cannot load worker", e);
-      setWorker(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+    setLoading(true);
+    apiGet(`/workers/${id}`)
+      .then((res) => {
+        if (active) setWorker(res.data);
+      })
+      .catch((error) => {
+        console.error("Cannot load worker", error);
+        if (active) setWorker(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
 
   if (loading) {
     return <div className="text-white text-center pt-40">Зареждане...</div>;

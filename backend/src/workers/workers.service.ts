@@ -1,11 +1,11 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThan, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
 import { WorkerProfileEntity } from './worker-profile.entity';
 import { WorkerSkillEntity } from './worker-skill.entity';
-import { RequestEntity } from '../requests/entities/request.entity';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
 import { MediaService } from '../media/media.service';
 import { ReferralRewardEntity } from '../referrals/referral-reward.entity';
 import { REPAIR_CATEGORY_BY_KEY, REPAIR_CATEGORY_KEYS, RepairCategoryKey } from '../requests/repair-catalog';
@@ -49,6 +49,7 @@ const SKILL_CATEGORY_ALIASES: Record<string, RepairCategoryKey> = {
 @Injectable()
 export class WorkersService {
   private readonly logger = new Logger(WorkersService.name);
+  private readonly missingLegacyTableWarnings = new Set<string>();
 
   constructor(
     @InjectRepository(Worker)
@@ -63,8 +64,8 @@ export class WorkersService {
     @InjectRepository(WorkerSkillEntity)
     private readonly workerSkillsRepo: Repository<WorkerSkillEntity>,
 
-    @InjectRepository(RequestEntity)
-    private readonly requestRepo: Repository<RequestEntity>,
+    @InjectRepository(RepairRequestEntity)
+    private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
 
     @InjectRepository(ReferralRewardEntity)
     private readonly referralRewardsRepo: Repository<ReferralRewardEntity>,
@@ -107,18 +108,30 @@ export class WorkersService {
   }
 
   async findByEmail(email: string) {
-    return this.workerRepository.findOne({ where: { email } });
+    return this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { email } }),
+      null,
+    );
   }
 
   async findById(id: number) {
-    return this.workerRepository.findOne({ where: { id } });
+    return this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { id } }),
+      null,
+    );
   }
 
   async findByUserId(userId: number, options: WorkerMediaVisibilityOptions = {}) {
     const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
     if (profile) return this.withV2WorkerSummary(profile, options);
 
-    const worker = await this.workerRepository.findOne({ where: { userId } });
+    const worker = await this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { userId } }),
+      null,
+    );
     return worker ? this.withGallerySummary(worker, options) : worker;
   }
 
@@ -135,10 +148,14 @@ export class WorkersService {
     if (profile) return this.withV2WorkerSummary(profile);
 
     // 2) legacy fallback: try as userId
-    let worker = await this.workerRepository.findOne({ where: { userId: n } });
-
-    // 3) fallback: try as legacy primary key id
-    if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
+    const worker = await this.optionalLegacyRead(
+      'worker',
+      async () => {
+        const byUserId = await this.workerRepository.findOne({ where: { userId: n } });
+        return byUserId || this.workerRepository.findOne({ where: { id: n } });
+      },
+      null,
+    );
 
     if (!worker) throw new NotFoundException('Worker not found');
     return this.withGallerySummary(worker);
@@ -147,14 +164,15 @@ export class WorkersService {
   /**
    * NEW: Create worker profile linked to users.id (userId)
    */
-  async createWorkerProfile(data: CreateWorkerProfileInput) {
+  async createWorkerProfile(data: CreateWorkerProfileInput, manager?: EntityManager) {
     const uid = Number(data?.userId);
     if (!uid) throw new BadRequestException('Missing userId');
 
-    const existing = await this.workerProfilesRepo.findOne({ where: { userId: uid } });
-    if (existing) return this.withV2WorkerSummary(existing);
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const existing = await profilesRepo.findOne({ where: { userId: uid } });
+    if (existing) return manager ? existing : this.withV2WorkerSummary(existing);
 
-    const worker = this.workerProfilesRepo.create({
+    const worker = profilesRepo.create({
       userId: uid,
       publicName: data.publicName || `Майстор #${uid}`,
       city: data.city ?? null,
@@ -166,11 +184,11 @@ export class WorkersService {
       profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
     });
 
-    const saved = await this.workerProfilesRepo.save(worker);
-    await this.replaceWorkerSkills(uid, data.skills ?? []);
+    const saved = await profilesRepo.save(worker);
+    await this.replaceWorkerSkills(uid, data.skills ?? [], manager);
 
     this.logger.log(`Worker v2 profile created for userId=${saved.userId}`);
-    return this.withV2WorkerSummary(saved);
+    return manager ? saved : this.withV2WorkerSummary(saved);
   }
 
   async findByUserIds(userIds: number[]) {
@@ -186,7 +204,11 @@ export class WorkersService {
     const found = new Set(profiles.map((profile) => Number(profile.userId)));
     const legacyIds = clean.filter((id) => !found.has(id));
     const legacy = legacyIds.length
-      ? await this.workerRepository.find({ where: { userId: In(legacyIds) } })
+      ? await this.optionalLegacyRead(
+          'worker',
+          () => this.workerRepository.find({ where: { userId: In(legacyIds) } }),
+          [] as Worker[],
+        )
       : [];
 
     return [
@@ -204,9 +226,14 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    const workers = await this.workerRepository.find({
-      where: [{ id: In(clean) }, { userId: In(clean) }],
-    });
+    const workers = await this.optionalLegacyRead(
+      'worker',
+      () =>
+        this.workerRepository.find({
+          where: [{ id: In(clean) }, { userId: In(clean) }],
+        }),
+      [] as Worker[],
+    );
     return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
@@ -255,7 +282,11 @@ export class WorkersService {
   async getAll(options: WorkerMediaVisibilityOptions = {}) {
     const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
     const profileUserIds = new Set(profiles.map((profile) => Number(profile.userId)));
-    const legacyWorkers = await this.workerRepository.find();
+    const legacyWorkers = await this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.find(),
+      [] as Worker[],
+    );
     const legacyOnly = legacyWorkers.filter((worker) => !profileUserIds.has(Number(worker.userId)));
 
     return [
@@ -274,10 +305,15 @@ export class WorkersService {
 
     const [mediaRows, legacyRows] = await Promise.all([
       this.media.findByWorker(uid).catch(() => [] as any[]),
-      this.galleryRepo.find({
-      where: { userId: uid },
-      order: { created_at: 'DESC' },
-      }),
+      this.optionalLegacyRead(
+        'worker_gallery_images',
+        () =>
+          this.galleryRepo.find({
+            where: { userId: uid },
+            order: { created_at: 'DESC' },
+          }),
+        [] as WorkerGalleryImage[],
+      ),
     ]);
 
     const galleryMedia = mediaRows
@@ -374,13 +410,48 @@ export class WorkersService {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
-    const rows = await this.requestRepo.find({
-      where: [{ assignedWorkerId: uid }, { completedByWorkerId: uid }],
+    const rows = await this.repairRequestsRepo.find({
+      where: {
+        assignedWorkerUserId: uid,
+        status: 'completed',
+        archivedAt: Not(IsNull()),
+      },
       relations: ['client'],
-      order: { completedAt: 'DESC', created_at: 'DESC' },
+      order: { completedAt: 'DESC', createdAt: 'DESC' },
     });
 
-    return rows.filter((request) => this.isCompletedRequest(request, uid));
+    return Promise.all(
+      rows.map(async (request) => {
+        const mediaRows = await this.media.findByRequest(request.id).catch(() => [] as any[]);
+        const approved = mediaRows.filter((row) => row.moderationStatus === 'approved');
+        const toPhotos = (kind: string) =>
+          approved
+            .filter((row) => row.kind === kind)
+            .map((row) => ({
+              id: row.id,
+              name: `media-${row.id}`,
+              url: this.normalizeUploadUrl(row.publicUrl),
+              storageKey: row.storageKey,
+              moderationStatus: row.moderationStatus,
+              created_at: row.createdAt,
+            }));
+
+        return {
+          id: request.id,
+          requestId: request.id,
+          category: REPAIR_CATEGORY_BY_KEY[request.categoryKey as RepairCategoryKey] || request.categoryKey,
+          categoryKey: request.categoryKey,
+          address: request.addressVisibility === 'rough_area' ? request.addressText : null,
+          description: request.description,
+          startedAt: request.createdAt,
+          completedAt: request.completedAt,
+          durationDays: this.completionDurationDays(request.createdAt, request.completedAt),
+          beforePhotos: toPhotos('request_before'),
+          afterPhotos: toPhotos('request_after'),
+          created_at: request.createdAt,
+        };
+      }),
+    );
   }
 
   private async withGallerySummary(worker: Worker, options: WorkerMediaVisibilityOptions = {}) {
@@ -396,6 +467,8 @@ export class WorkersService {
 
     return {
       ...worker,
+      email: null,
+      phone: null,
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
       profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
       gallery,
@@ -456,14 +529,15 @@ export class WorkersService {
     };
   }
 
-  private async replaceWorkerSkills(workerUserId: number, skills: string[]) {
-    await this.workerSkillsRepo.delete({ workerUserId });
+  private async replaceWorkerSkills(workerUserId: number, skills: string[], manager?: EntityManager) {
+    const skillsRepo = manager?.getRepository(WorkerSkillEntity) ?? this.workerSkillsRepo;
+    await skillsRepo.delete({ workerUserId });
     const clean = (Array.isArray(skills) ? skills : [])
       .map((skill) => String(skill || '').trim())
       .filter(Boolean);
 
     if (!clean.length) {
-      await this.resetIneligibleWorkerBanner(workerUserId);
+      await this.resetIneligibleWorkerBanner(workerUserId, manager);
       return [];
     }
 
@@ -476,7 +550,7 @@ export class WorkersService {
           normalizedInput === String(categoryLabel || '').toLowerCase() ||
           SKILL_CATEGORY_ALIASES[normalizedInput] === categoryKey;
 
-        return this.workerSkillsRepo.create({
+        return skillsRepo.create({
           workerUserId,
           categoryKey,
           activityKey: isCategoryOnly ? null : skill,
@@ -484,19 +558,20 @@ export class WorkersService {
       });
     const uniqueRows = Array.from(new Map(rows.map((row) => [`${row.categoryKey}:${row.activityKey || ''}`, row])).values());
 
-    const saved = await this.workerSkillsRepo.save(uniqueRows);
-    await this.resetIneligibleWorkerBanner(workerUserId);
+    const saved = await skillsRepo.save(uniqueRows);
+    await this.resetIneligibleWorkerBanner(workerUserId, manager);
     return saved;
   }
 
-  private async resetIneligibleWorkerBanner(workerUserId: number) {
-    const profile = await this.workerProfilesRepo.findOne({ where: { userId: workerUserId } });
+  private async resetIneligibleWorkerBanner(workerUserId: number, manager?: EntityManager) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
     if (!profile) return;
 
     const currentKey = resolveWorkerBannerKey(profile.profileBannerKey);
     if (isWorkerBannerAllowed(currentKey)) return;
 
-    await this.workerProfilesRepo.update({ userId: workerUserId }, { profileBannerKey: DEFAULT_WORKER_BANNER_KEY });
+    await profilesRepo.update({ userId: workerUserId }, { profileBannerKey: DEFAULT_WORKER_BANNER_KEY });
   }
 
   private skillToKey(skill: string): RepairCategoryKey {
@@ -523,14 +598,43 @@ export class WorkersService {
     return raw;
   }
 
-  private isCompletedRequest(request: RequestEntity, userId: number): boolean {
-    const status = String(request?.status || '').toLowerCase();
+  private async optionalLegacyRead<T>(
+    tableName: string,
+    operation: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!this.isMissingLegacyTableError(error)) throw error;
+
+      if (!this.missingLegacyTableWarnings.has(tableName)) {
+        this.missingLegacyTableWarnings.add(tableName);
+        this.logger.warn(`Legacy table "${tableName}" is unavailable; continuing with the v2 data model`);
+      }
+      return fallback;
+    }
+  }
+
+  private isMissingLegacyTableError(error: unknown): boolean {
+    const candidate = error as {
+      code?: string;
+      errno?: number;
+      driverError?: { code?: string; errno?: number };
+    };
     return (
-      Number(request?.completedByWorkerId) === Number(userId) ||
-      !!request?.completedAt ||
-      status.includes('зав') ||
-      status.includes('СЉСЂ') ||
-      status.includes('completed')
+      candidate?.code === 'ER_NO_SUCH_TABLE' ||
+      candidate?.errno === 1146 ||
+      candidate?.driverError?.code === 'ER_NO_SUCH_TABLE' ||
+      candidate?.driverError?.errno === 1146
     );
   }
+
+  private completionDurationDays(startedAt: Date, completedAt: Date | null): number {
+    const start = new Date(startedAt).getTime();
+    const end = new Date(completedAt || startedAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 1;
+    return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
+  }
+
 }

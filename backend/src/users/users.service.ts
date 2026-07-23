@@ -1,7 +1,7 @@
 // src/users/users.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { ClientProfileEntity } from './client-profile.entity';
 
@@ -22,8 +22,12 @@ export class UsersService {
     return this.repo.findOne({ where: { id } });
   }
 
-  async create(data: { name: string; email: string; password: string; role: string }) {
-    const user = this.repo.create({
+  async create(
+    data: { name: string; email: string; password: string; role: string },
+    manager?: EntityManager,
+  ) {
+    const repo = manager?.getRepository(UserEntity) ?? this.repo;
+    const user = repo.create({
       name: data.name,
       email: data.email,
       password: data.password,
@@ -32,23 +36,27 @@ export class UsersService {
       status: 'active',
     });
 
-    return this.repo.save(user);
+    return repo.save(user);
   }
 
-  async createClientProfile(data: {
-    userId: number;
-    displayName: string;
-    phonePrivate?: string | null;
-    defaultAddress?: string | null;
-  }) {
-    const profile = this.clientProfilesRepo.create({
+  async createClientProfile(
+    data: {
+      userId: number;
+      displayName: string;
+      phonePrivate?: string | null;
+      defaultAddress?: string | null;
+    },
+    manager?: EntityManager,
+  ) {
+    const repo = manager?.getRepository(ClientProfileEntity) ?? this.clientProfilesRepo;
+    const profile = repo.create({
       userId: data.userId,
       displayName: data.displayName,
       phonePrivate: data.phonePrivate ?? null,
       defaultAddress: data.defaultAddress ?? null,
     });
 
-    return this.clientProfilesRepo.save(profile);
+    return repo.save(profile);
   }
 
   async updateStatus(userId: number, status: string) {

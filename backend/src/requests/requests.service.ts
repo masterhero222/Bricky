@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
-import { RequestEntity } from './entities/request.entity';
 import { RepairRequestEntity, RepairRequestStatus } from './entities/repair-request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestEventEntity } from './entities/request-event.entity';
@@ -26,6 +25,20 @@ import { MediaService } from '../media/media.service';
 import { MediaAssetEntity } from '../media/media-asset.entity';
 import { UserEntity } from '../users/user.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
+import {
+  REQUEST_LIFECYCLE_ACTIONS,
+  REQUEST_LIFECYCLE_STATES,
+  RequestLifecycleAction,
+  RequestLifecycleState,
+} from './request-lifecycle';
+import { RequestLifecycleService } from './request-lifecycle.service';
+import { ReferralsService } from '../referrals/referrals.service';
+
+type RequestDtoOptions = {
+  includeUnapprovedMedia?: boolean;
+  viewerRole?: 'client' | 'worker' | 'admin' | 'super_admin';
+  viewerUserId?: number;
+};
 
 function extractResponseText(data: any): string {
   if (typeof data?.output_text === 'string') return data.output_text;
@@ -66,8 +79,6 @@ function normalizePhotos(arr: any): any[] {
 @Injectable()
 export class RequestsService {
   constructor(
-    @InjectRepository(RequestEntity)
-    private readonly legacyRepo: Repository<RequestEntity>,
     @InjectRepository(RepairRequestEntity)
     private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
     @InjectRepository(RequestApplicationEntity)
@@ -83,6 +94,8 @@ export class RequestsService {
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
     private readonly media: MediaService,
+    private readonly lifecycle: RequestLifecycleService,
+    private readonly referrals: ReferralsService,
   ) {}
 
   async draftRequest(prompt: string, address?: string) {
@@ -216,7 +229,93 @@ export class RequestsService {
     await this.saveMedia(request.id, clientUserId, 'request_before', dto.photos || [], 'pending');
     await this.addEvent(request.id, clientUserId, 'request.created', { categoryKey });
 
-    return this.toDto(request);
+    return this.toDto(request, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'client',
+      viewerUserId: clientUserId,
+    });
+  }
+
+  async addBeforeMedia(
+    requestId: number,
+    clientUserId: number,
+    photos: any[],
+  ) {
+    const request = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    if (Number(request.clientUserId) !== Number(clientUserId)) {
+      throw new ForbiddenException('Not your request');
+    }
+    if (!['draft', 'pending_admin'].includes(request.status)) {
+      throw new BadRequestException(
+        'Request photos can only be added before admin moderation',
+      );
+    }
+
+    const normalized = normalizePhotos(photos);
+    if (!normalized.length) throw new BadRequestException('No valid images');
+
+    await this.saveMedia(
+      requestId,
+      clientUserId,
+      'request_before',
+      normalized,
+      'pending',
+    );
+    await this.addEvent(requestId, clientUserId, 'request.media_uploaded', {
+      kind: 'request_before',
+      count: normalized.length,
+    });
+
+    return this.toDto(request, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'client',
+      viewerUserId: clientUserId,
+    });
+  }
+
+  async addAfterMedia(
+    requestId: number,
+    workerUserId: number,
+    photos: any[],
+  ) {
+    const request = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    if (Number(request.assignedWorkerUserId) !== Number(workerUserId)) {
+      throw new ForbiddenException('Not your job');
+    }
+    if (!['in_progress', 'work_finished'].includes(request.status)) {
+      throw new BadRequestException(
+        'After photos can only be added while finishing the work',
+      );
+    }
+
+    const normalized = normalizePhotos(photos);
+    if (!normalized.length) throw new BadRequestException('No valid images');
+
+    await this.saveMedia(
+      requestId,
+      workerUserId,
+      'request_after',
+      normalized,
+      'pending',
+    );
+    await this.addEvent(requestId, workerUserId, 'request.media_uploaded', {
+      kind: 'request_after',
+      count: normalized.length,
+    });
+
+    return this.toDto(request, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async getByClientUserId(clientUserId: number) {
@@ -226,7 +325,15 @@ export class RequestsService {
       relations: ['client'],
       order: { createdAt: 'DESC' },
     });
-    return Promise.all(requests.map((request) => this.toDto(request)));
+    return Promise.all(
+      requests.map((request) =>
+        this.toDto(request, {
+          includeUnapprovedMedia: true,
+          viewerRole: 'client',
+          viewerUserId: clientUserId,
+        }),
+      ),
+    );
   }
 
   async getHistoryByClientUserId(clientUserId: number) {
@@ -236,7 +343,15 @@ export class RequestsService {
       relations: ['client'],
       order: { completedAt: 'DESC', id: 'DESC' },
     });
-    return Promise.all(requests.map((request) => this.toDto(request)));
+    return Promise.all(
+      requests.map((request) =>
+        this.toDto(request, {
+          includeUnapprovedMedia: true,
+          viewerRole: 'client',
+          viewerUserId: clientUserId,
+        }),
+      ),
+    );
   }
 
   async getMapRequests(user: any) {
@@ -257,6 +372,7 @@ export class RequestsService {
       where: [
         { assignedWorkerUserId: IsNull(), status: Not('pending_admin'), archivedAt: IsNull() },
         { assignedWorkerUserId: workerUserId, status: Not('completed'), archivedAt: IsNull() },
+        { assignedWorkerUserId: workerUserId, status: 'reviewed' },
       ],
       relations: ['client'],
       order: { createdAt: 'DESC' },
@@ -265,12 +381,19 @@ export class RequestsService {
     return Promise.all(
       requests
         .filter((request) => {
-          if (request.archivedAt) return false;
+          if (request.archivedAt && request.status !== 'reviewed') return false;
           if (['canceled', 'archived', 'draft', 'pending_admin'].includes(request.status)) return false;
           if (!request.assignedWorkerUserId) return ['published', 'applied'].includes(request.status);
           return Number(request.assignedWorkerUserId) === Number(workerUserId);
         })
-        .map((request) => this.toDto(request)),
+        .map((request) =>
+          this.toDto(request, {
+            includeUnapprovedMedia:
+              Number(request.assignedWorkerUserId) === Number(workerUserId),
+            viewerRole: 'worker',
+            viewerUserId: workerUserId,
+          }),
+        ),
     );
   }
 
@@ -281,7 +404,15 @@ export class RequestsService {
       relations: ['client'],
       order: { completedAt: 'DESC', id: 'DESC' },
     });
-    return Promise.all(requests.map((request) => this.toDto(request)));
+    return Promise.all(
+      requests.map((request) =>
+        this.toDto(request, {
+          includeUnapprovedMedia: true,
+          viewerRole: 'worker',
+          viewerUserId: workerUserId,
+        }),
+      ),
+    );
   }
 
   async applyToRequest(requestId: number, workerUserId: number) {
@@ -290,34 +421,49 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (req.assignedWorkerUserId) throw new BadRequestException('Request already has assigned worker');
-    if (!['published', 'applied'].includes(req.status)) throw new BadRequestException('Request is not open for applications');
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.APPLY);
 
-    const existing = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
-    if (existing) {
-      if (['withdrawn', 'rejected'].includes(existing.status)) {
-        existing.status = 'applied';
-        await this.applicationsRepo.save(existing);
-      }
+    let application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
+    if (application && !['withdrawn', 'rejected'].includes(application.status)) {
+      return this.toDto(req, {
+        viewerRole: 'worker',
+        viewerUserId: workerUserId,
+      });
+    }
+
+    if (application) {
+      application.status = 'applied';
     } else {
-      await this.applicationsRepo.save(
-        this.applicationsRepo.create({
-          requestId,
-          workerUserId,
-          status: 'applied',
-          offerMin: null,
-          offerMax: null,
-          message: null,
-        }),
-      );
+      application = this.applicationsRepo.create({
+        requestId,
+        workerUserId,
+        status: 'applied',
+        offerMin: null,
+        offerMax: null,
+        message: null,
+      });
     }
 
     if (req.status === 'published') {
       req.status = 'applied';
-      await this.repairRequestsRepo.save(req);
     }
 
-    await this.addEvent(requestId, workerUserId, 'application.created', {});
-    return this.toDto(req);
+    const applicationEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId: workerUserId,
+      eventType: 'application.created',
+      metadataJson: {},
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(application);
+      await manager.save(req);
+      await manager.save(applicationEvent);
+    });
+
+    return this.toDto(req, {
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async withdrawApplication(requestId: number, workerUserId: number) {
@@ -331,13 +477,19 @@ export class RequestsService {
     if (Number(req.assignedWorkerUserId) === Number(workerUserId)) {
       throw new BadRequestException('Cannot withdraw after the client selected you');
     }
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.WITHDRAW_APPLICATION);
 
     const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
     if (!application) throw new NotFoundException('Application not found');
     if (application.status === 'assigned') {
       throw new BadRequestException('Cannot withdraw after the client selected you');
     }
-    if (['withdrawn', 'rejected'].includes(application.status)) return this.toDto(req);
+    if (['withdrawn', 'rejected'].includes(application.status)) {
+      return this.toDto(req, {
+        viewerRole: 'worker',
+        viewerUserId: workerUserId,
+      });
+    }
 
     application.status = 'withdrawn';
     await this.applicationsRepo.save(application);
@@ -349,7 +501,10 @@ export class RequestsService {
     }
 
     await this.addEvent(requestId, workerUserId, 'application.withdrawn', {});
-    return this.toDto(req);
+    return this.toDto(req, {
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async assignWorker(requestId: number, clientUserId: number, workerUserId: number) {
@@ -358,6 +513,7 @@ export class RequestsService {
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
     if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
     await this.assertWorkerCanTakeJobs(workerUserId);
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.ASSIGN);
 
     const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
     if (!application || ['withdrawn', 'rejected'].includes(application.status)) {
@@ -367,38 +523,95 @@ export class RequestsService {
     req.assignedWorkerUserId = workerUserId;
     req.status = 'worker_selected';
     req.completedAt = null;
-    await this.repairRequestsRepo.save(req);
 
-    application.status = 'assigned';
-    await this.applicationsRepo.save(application);
-    await this.addEvent(requestId, clientUserId, 'request.assigned', { workerUserId });
+    const allApplications = await this.applicationsRepo.find({ where: { requestId } });
+    allApplications.forEach((candidate) => {
+      candidate.status =
+        Number(candidate.workerUserId) === Number(workerUserId) ? 'assigned' : 'rejected';
+    });
+    const assignmentEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId: clientUserId,
+      eventType: 'request.assigned',
+      metadataJson: { workerUserId },
+    });
 
-    return this.toDto(req);
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(req);
+      await manager.save(allApplications);
+      await manager.save(assignmentEvent);
+    });
+
+    return this.toDto(req, {
+      viewerRole: 'client',
+      viewerUserId: clientUserId,
+    });
   }
 
   async workerConfirm(requestId: number, workerUserId: number) {
-    return this.workerTransition(requestId, workerUserId, ['worker_selected', 'assigned'], 'worker_confirmed', 'worker.confirmed');
+    return this.workerTransition(
+      requestId,
+      workerUserId,
+      ['worker_selected', 'assigned'],
+      'worker_confirmed',
+      'worker.confirmed',
+      null,
+      REQUEST_LIFECYCLE_STATES.ASSIGNED,
+    );
   }
 
   async markWorkerOnSite(requestId: number, workerUserId: number) {
-    return this.workerTransition(requestId, workerUserId, ['worker_confirmed'], 'worker_on_site', 'worker.on_site');
+    return this.workerTransition(
+      requestId,
+      workerUserId,
+      ['worker_confirmed'],
+      'worker_on_site',
+      'worker.on_site',
+      REQUEST_LIFECYCLE_ACTIONS.MARK_ARRIVED,
+    );
   }
 
   async markInspected(requestId: number, workerUserId: number) {
-    return this.workerTransition(requestId, workerUserId, ['worker_on_site'], 'inspected', 'worker.inspected');
+    return this.workerTransition(
+      requestId,
+      workerUserId,
+      ['worker_on_site'],
+      'inspected',
+      'worker.inspected',
+      null,
+      REQUEST_LIFECYCLE_STATES.WORKER_ARRIVED,
+    );
   }
 
   async startWork(requestId: number, workerUserId: number) {
-    return this.workerTransition(requestId, workerUserId, ['inspected'], 'in_progress', 'worker.started_work');
+    return this.workerTransition(
+      requestId,
+      workerUserId,
+      ['inspected'],
+      'in_progress',
+      'worker.started_work',
+      REQUEST_LIFECYCLE_ACTIONS.START_WORK,
+    );
   }
 
   async finishWork(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
-    await this.workerTransition(requestId, workerUserId, ['in_progress'], 'work_finished', 'worker.finished_work');
-    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
+    await this.workerTransition(
+      requestId,
+      workerUserId,
+      ['in_progress'],
+      'work_finished',
+      'worker.finished_work',
+      REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
+    );
+    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos, 'pending');
 
     const updated = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!updated) throw new NotFoundException('Request not found');
-    return this.toDto(updated);
+    return this.toDto(updated, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async readyForClientConfirmation(requestId: number, workerUserId: number) {
@@ -408,6 +621,8 @@ export class RequestsService {
       ['work_finished'],
       'ready_for_client_confirmation',
       'worker.ready_for_client_confirmation',
+      null,
+      REQUEST_LIFECYCLE_STATES.WAITING_CLIENT_CONFIRMATION,
     );
   }
 
@@ -415,22 +630,38 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (req.status === 'completed' && req.archivedAt) return this.toDto(req);
-    if (req.status !== 'ready_for_client_confirmation') {
-      throw new BadRequestException('Request is not ready for client confirmation');
+    if (['client_confirmed', 'reviewed', 'completed'].includes(req.status) && req.archivedAt) {
+      return this.toDto(req, {
+        includeUnapprovedMedia: true,
+        viewerRole: 'client',
+        viewerUserId: clientUserId,
+      });
     }
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION);
 
     const completedAt = new Date();
-    req.status = 'completed';
+    req.status = 'client_confirmed';
     req.clientConfirmedAt = req.clientConfirmedAt || completedAt;
     req.completedAt = req.completedAt || completedAt;
     req.archivedAt = req.archivedAt || completedAt;
     req.archiveReason = req.archiveReason || 'completed';
     req.archiveSource = req.archiveSource || 'system';
     req.archivedByUserId = req.archivedByUserId || clientUserId;
-    await this.repairRequestsRepo.save(req);
-    await this.addEvent(requestId, clientUserId, 'client.confirmed_work', { archivedAt: req.archivedAt });
-    return this.toDto(req);
+    const completionEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId: clientUserId,
+      eventType: 'client.confirmed_work',
+      metadataJson: { archivedAt: req.archivedAt },
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(req);
+      await manager.save(completionEvent);
+    });
+    return this.toDto(req, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'client',
+      viewerUserId: clientUserId,
+    });
   }
 
   async unassignWorker(requestId: number, clientUserId: number) {
@@ -439,20 +670,18 @@ export class RequestsService {
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
     if (req.status === 'completed') throw new BadRequestException('Already completed');
     if (!req.assignedWorkerUserId) throw new BadRequestException('No assigned worker');
-    if (['in_progress', 'work_finished', 'ready_for_client_confirmation'].includes(req.status)) {
-      throw new BadRequestException('Cannot unassign after the worker started work');
-    }
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.UNASSIGN);
 
-    const assignedWorkerId = Number(req.assignedWorkerUserId);
+    const assignedWorkerUserId = Number(req.assignedWorkerUserId);
     req.assignedWorkerUserId = null;
 
     const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
     req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
     await this.repairRequestsRepo.save(req);
 
-    if (assignedWorkerId) {
+    if (assignedWorkerUserId) {
       const application = await this.applicationsRepo.findOne({
-        where: { requestId, workerUserId: assignedWorkerId },
+        where: { requestId, workerUserId: assignedWorkerUserId },
       });
       if (application && application.status === 'assigned') {
         application.status = 'applied';
@@ -460,8 +689,11 @@ export class RequestsService {
       }
     }
 
-    await this.addEvent(requestId, clientUserId, 'request.unassigned', { assignedWorkerId });
-    return this.toDto(req);
+    await this.addEvent(requestId, clientUserId, 'request.unassigned', { assignedWorkerUserId });
+    return this.toDto(req, {
+      viewerRole: 'client',
+      viewerUserId: clientUserId,
+    });
   }
 
   async completeRequest(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
@@ -469,32 +701,34 @@ export class RequestsService {
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
     if (req.status === 'completed') {
-      if (!req.archivedAt) {
-        req.archivedAt = req.completedAt || new Date();
-        req.archiveReason = req.archiveReason || 'completed';
-        req.archiveSource = req.archiveSource || 'legacy_worker_close';
-        req.archivedByUserId = req.archivedByUserId || workerUserId;
-        await this.repairRequestsRepo.save(req);
-      }
-      return this.toDto(req);
+      await this.referrals.processCompletedRequest(requestId);
+      return this.toDto(req, {
+        viewerRole: 'worker',
+        viewerUserId: workerUserId,
+      });
     }
-    if (req.status !== 'reviewed') throw new BadRequestException('Request must be reviewed before closing');
+    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.CLOSE);
 
     const completedAt = new Date();
     req.status = 'completed';
-    req.completedAt = completedAt;
+    req.completedAt = req.completedAt || completedAt;
     req.archivedAt = req.archivedAt || completedAt;
-    req.archiveReason = req.archiveReason || 'completed';
-    req.archiveSource = req.archiveSource || 'legacy_worker_close';
-    req.archivedByUserId = req.archivedByUserId || workerUserId;
+    req.archiveReason = 'closed_by_worker';
+    req.archiveSource = 'worker';
+    req.archivedByUserId = workerUserId;
     await this.repairRequestsRepo.save(req);
 
     if (Array.isArray(afterPhotos) && afterPhotos.length) {
-      await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos);
+      await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos, 'pending');
     }
     await this.addEvent(requestId, workerUserId, 'request.closed_by_worker', {});
+    await this.referrals.processCompletedRequest(requestId);
 
-    return this.toDto(req);
+    return this.toDto(req, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async adminListRequests(queue?: string) {
@@ -510,7 +744,33 @@ export class RequestsService {
     const filtered = queue === 'active'
       ? requests.filter((request) => !['draft', 'pending_admin', 'completed', 'canceled', 'archived'].includes(request.status))
       : requests;
-    return Promise.all(filtered.map((request) => this.toDto(request)));
+    return Promise.all(
+      filtered.map((request) =>
+        this.toDto(request, {
+          includeUnapprovedMedia: true,
+          viewerRole: 'admin',
+        }),
+      ),
+    );
+  }
+
+  async adminGetTimeline(requestId: number) {
+    const request = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    const events = await this.eventsRepo.find({
+      where: { requestId },
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
+    return {
+      request: await this.toDto(request, {
+        includeUnapprovedMedia: true,
+        viewerRole: 'admin',
+      }),
+      events,
+    };
   }
 
   async adminSetStatus(requestId: number, status: RepairRequestStatus, actorUserId: number, reason?: string) {
@@ -541,7 +801,10 @@ export class RequestsService {
       await this.media.setRequestMediaModeration(requestId, 'request_before', 'rejected');
     }
     await this.addEvent(requestId, actorUserId, 'admin.status_changed', { status, reason: reason || null });
-    return this.toDto(request);
+    return this.toDto(request, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'admin',
+    });
   }
 
   private async saveMedia(requestId: number, ownerUserId: number, kind: string, photos: any[], moderationStatus = 'approved') {
@@ -579,6 +842,8 @@ export class RequestsService {
     allowedStatuses: RepairRequestStatus[],
     nextStatus: RepairRequestStatus,
     eventType: string,
+    action: RequestLifecycleAction | null,
+    expectedState?: RequestLifecycleState,
   ) {
     await this.assertWorkerCanTakeJobs(workerUserId);
 
@@ -589,11 +854,27 @@ export class RequestsService {
       throw new BadRequestException(`Invalid request status transition from ${req.status} to ${nextStatus}`);
     }
 
+    const currentLifecycleStatus = this.lifecycle.normalize(req.status);
+    if (action) {
+      const nextLifecycleStatus = this.lifecycle.assertTransition(currentLifecycleStatus, action);
+      const persistedLifecycleStatus = this.lifecycle.normalize(nextStatus);
+      if (nextLifecycleStatus !== persistedLifecycleStatus) {
+        throw new BadRequestException(
+          `Lifecycle mismatch: ${currentLifecycleStatus} -> ${nextLifecycleStatus}, cannot persist ${nextStatus}`,
+        );
+      }
+    } else if (expectedState && currentLifecycleStatus !== expectedState) {
+      throw new BadRequestException(`Invalid lifecycle state ${currentLifecycleStatus}; expected ${expectedState}`);
+    }
+
     const from = req.status;
     req.status = nextStatus;
     await this.repairRequestsRepo.save(req);
     await this.addEvent(requestId, workerUserId, eventType, { from, to: nextStatus });
-    return this.toDto(req);
+    return this.toDto(req, {
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   private async assertWorkerCanTakeJobs(workerUserId: number) {
@@ -614,29 +895,61 @@ export class RequestsService {
     }
   }
 
-  private async toDto(request: RepairRequestEntity) {
+  private async toDto(
+    request: RepairRequestEntity,
+    options: RequestDtoOptions = {},
+  ) {
     const [mediaRows, applications] = await Promise.all([
       this.media.findByRequest(request.id).catch(() => [] as MediaAssetEntity[]),
       this.applicationsRepo.find({ where: { requestId: request.id } }).catch(() => [] as RequestApplicationEntity[]),
     ]);
 
-    const beforePhotos = this.mediaToPhotos(mediaRows.filter((row) => row.kind === 'request_before'));
-    const afterPhotos = this.mediaToPhotos(mediaRows.filter((row) => row.kind === 'request_after'));
+    const visibleMediaRows = options.includeUnapprovedMedia
+      ? mediaRows
+      : mediaRows.filter((row) => row.moderationStatus === 'approved');
+    const beforePhotos = this.mediaToPhotos(
+      visibleMediaRows.filter((row) => row.kind === 'request_before'),
+    );
+    const afterPhotos = this.mediaToPhotos(
+      visibleMediaRows.filter((row) => row.kind === 'request_after'),
+    );
+    const lifecycleStatusKey = this.lifecycle.normalize(request.status);
+    const viewerUserId = Number(options.viewerUserId);
+    const viewerRole = options.viewerRole;
+    const isAdmin = viewerRole === 'admin' || viewerRole === 'super_admin';
+    const isClientOwner =
+      viewerRole === 'client' &&
+      viewerUserId > 0 &&
+      Number(request.clientUserId) === viewerUserId;
+    const isAssignedWorker =
+      viewerRole === 'worker' &&
+      viewerUserId > 0 &&
+      Number(request.assignedWorkerUserId) === viewerUserId;
+    const canViewExactAddress = isAdmin || isClientOwner || isAssignedWorker;
+    const canViewClientName = isAdmin || isClientOwner || isAssignedWorker;
+    const address = canViewExactAddress
+      ? request.addressText
+      : this.toRoughArea(request.addressText);
 
     return {
       id: request.id,
-      clientName: request.client?.name || '',
-      email: request.client?.email || '',
+      clientName: canViewClientName ? request.client?.name || '' : 'Клиент',
+      email: isAdmin ? request.client?.email || null : null,
       phone: null,
-      address: request.addressText,
-      addressText: request.addressText,
+      address,
+      addressText: address,
       addressVisibility: request.addressVisibility,
+      addressPrecision: canViewExactAddress ? 'exact' : 'rough',
       category: REPAIR_CATEGORY_BY_KEY[this.normalizeCategoryKey(request.categoryKey)],
       categoryKey: request.categoryKey,
       title: request.title,
       description: request.description,
-      latitude: request.latitude,
-      longitude: request.longitude,
+      latitude: canViewExactAddress
+        ? request.latitude
+        : this.toRoughCoordinate(request.latitude),
+      longitude: canViewExactAddress
+        ? request.longitude
+        : this.toRoughCoordinate(request.longitude),
       locationSource: request.locationSource,
       estimateMin: request.estimateMin,
       estimateMax: request.estimateMax,
@@ -644,12 +957,21 @@ export class RequestsService {
       photos: beforePhotos,
       beforePhotos,
       afterPhotos,
-      status: this.legacyStatus(request.status),
       statusKey: request.status,
-      appliedWorkers: applications
-        .filter((application) => !['withdrawn', 'rejected'].includes(application.status))
-        .map((application) => application.workerUserId),
-      assignedWorkerId: request.assignedWorkerUserId,
+      lifecycleStatusKey,
+      statusLabel: this.lifecycle.label(lifecycleStatusKey),
+      nextActor: this.lifecycle.nextActor(lifecycleStatusKey),
+      allowedActions: this.lifecycle.allowedActions(lifecycleStatusKey),
+      applications: applications.map((application) => ({
+        id: application.id,
+        workerUserId: application.workerUserId,
+        status: application.status,
+        offerMin: application.offerMin,
+        offerMax: application.offerMax,
+        message: application.message,
+        createdAt: application.created_at,
+        updatedAt: application.updated_at,
+      })),
       assignedWorkerUserId: request.assignedWorkerUserId,
       completedAt: request.completedAt,
       clientConfirmedAt: request.clientConfirmedAt,
@@ -658,11 +980,24 @@ export class RequestsService {
       archiveSource: request.archiveSource,
       archivedByUserId: request.archivedByUserId,
       isArchived: Boolean(request.archivedAt),
-      completedByWorkerId: request.status === 'completed' ? request.assignedWorkerUserId : null,
       durationDays: request.completedAt ? completionDurationDays(request.createdAt, request.completedAt) : null,
       created_at: request.createdAt,
       updated_at: request.updatedAt,
     };
+  }
+
+  private toRoughArea(address: string | null) {
+    const value = String(address || '').trim();
+    if (!value) return null;
+
+    const [area] = value.split(',');
+    return area?.trim() || null;
+  }
+
+  private toRoughCoordinate(value: string | number | null) {
+    const coordinate = Number(value);
+    if (!Number.isFinite(coordinate)) return null;
+    return Number(coordinate.toFixed(2));
   }
 
   private mediaToPhotos(rows: MediaAssetEntity[]) {
@@ -677,29 +1012,6 @@ export class RequestsService {
       kind: row.kind,
       created_at: row.createdAt,
     }));
-  }
-
-  private legacyStatus(status: RepairRequestStatus) {
-    const map: Record<RepairRequestStatus, string> = {
-      draft: 'чернова',
-      pending_admin: 'чака одобрение',
-      published: 'нова',
-      applied: 'кандидатствана',
-      assigned: 'избран майстор',
-      worker_selected: 'избран майстор',
-      worker_confirmed: 'майсторът потвърди',
-      worker_on_site: 'майсторът е на адреса',
-      inspected: 'огледана',
-      in_progress: 'в процес',
-      work_finished: 'работата е свършена',
-      ready_for_client_confirmation: 'чака потвърждение от клиента',
-      client_confirmed: 'клиентът потвърди',
-      reviewed: 'оставен отзив',
-      completed: 'завършена',
-      canceled: 'отказана',
-      archived: 'архивирана',
-    };
-    return map[status] || status;
   }
 
   private buildLocalDraft(prompt: string, address?: string) {

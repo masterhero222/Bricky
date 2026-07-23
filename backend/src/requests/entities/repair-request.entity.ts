@@ -52,7 +52,7 @@ export class RepairRequestEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ name: 'address_text', length: 255, nullable: true })
+  @Column({ name: 'address_text', type: 'varchar', length: 255, nullable: true })
   addressText: string | null;
 
   @Index()
@@ -63,7 +63,7 @@ export class RepairRequestEntity {
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
   longitude: string | null;
 
-  @Column({ name: 'location_source', length: 50, nullable: true })
+  @Column({ name: 'location_source', type: 'varchar', length: 50, nullable: true })
   locationSource: string | null;
 
   @Column({ name: 'address_visibility', default: 'exact_after_assignment' })
@@ -121,10 +121,10 @@ export class RepairRequestEntity {
   @Column({ name: 'archived_at', type: 'datetime', nullable: true })
   archivedAt: Date | null;
 
-  @Column({ name: 'archive_reason', length: 40, nullable: true })
+  @Column({ name: 'archive_reason', type: 'varchar', length: 40, nullable: true })
   archiveReason: string | null;
 
-  @Column({ name: 'archive_source', length: 40, nullable: true })
+  @Column({ name: 'archive_source', type: 'varchar', length: 40, nullable: true })
   archiveSource: string | null;
 
   @Column({ name: 'archived_by_user_id', type: 'int', nullable: true })

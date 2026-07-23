@@ -4,6 +4,8 @@ import { isDevMockToken, mockRequest } from "./devMockApi";
 import { getApiBase } from "../utils/mediaUrls";
 
 const API_URL = getApiBase();
+const DEV_MOCK_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_USE_DEV_MOCK !== "false";
 
 export function getToken() {
   return (
@@ -25,7 +27,7 @@ api.interceptors.request.use((config) => {
 function shouldUseMock(url) {
   const path = String(url || "");
   return (
-    import.meta.env.DEV &&
+    DEV_MOCK_ENABLED &&
     (isDevMockToken() ||
       path.includes("/auth/dev-login") ||
       path === "/auth/register" ||

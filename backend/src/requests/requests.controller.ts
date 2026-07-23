@@ -8,11 +8,89 @@ import {
   Req,
   UseGuards,
   BadRequestException,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { join } from 'path';
 import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestDraftDto } from './dto/request-draft.dto';
+
+const REQUEST_MEDIA_MIME_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+
+function requestMediaStorage(kind: 'before' | 'after') {
+  return diskStorage({
+    destination: (req, file, callback) => {
+      const requestId = Number((req as any)?.params?.id);
+      const directory = join(
+        process.cwd(),
+        'uploads',
+        'requests',
+        requestId > 0 ? String(requestId) : 'invalid',
+        kind,
+      );
+      if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
+      callback(null, directory);
+    },
+    filename: (req: any, file, callback) => {
+      const requestId = Number(req?.params?.id) || 'invalid';
+      const extension =
+        REQUEST_MEDIA_MIME_EXTENSIONS[String(file.mimetype || '').toLowerCase()] ||
+        '.jpg';
+      callback(
+        null,
+        `request_${requestId}_${kind}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}${extension}`,
+      );
+    },
+  });
+}
+
+function requestMediaUploadOptions(kind: 'before' | 'after') {
+  return {
+    storage: requestMediaStorage(kind),
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (req: any, file: any, callback: any) => {
+      const allowed = Boolean(
+        REQUEST_MEDIA_MIME_EXTENSIONS[String(file.mimetype || '').toLowerCase()],
+      );
+      callback(allowed ? null : new Error('Invalid image type'), allowed);
+    },
+  };
+}
+
+function uploadedRequestPhotos(
+  requestId: number,
+  kind: 'before' | 'after',
+  files: any[],
+) {
+  return (Array.isArray(files) ? files : [])
+    .filter((file) => file?.filename)
+    .map((file) => ({
+      url: `/uploads/requests/${requestId}/${kind}/${file.filename}`,
+      storageKey: `requests/${requestId}/${kind}/${file.filename}`,
+      mimeType: file.mimetype || null,
+      sizeBytes: Number(file.size) || null,
+    }));
+}
+
+function removeUploadedFiles(files: any[]) {
+  for (const file of Array.isArray(files) ? files : []) {
+    if (!file?.path || !existsSync(file.path)) continue;
+    try {
+      unlinkSync(file.path);
+    } catch {
+      // A failed cleanup must not hide the original request error.
+    }
+  }
+}
 
 @Controller('requests')
 export class RequestsController {
@@ -30,6 +108,74 @@ export class RequestsController {
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
     return this.requests.create(dto, Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/media/before')
+  @UseInterceptors(
+    FilesInterceptor('images', 20, requestMediaUploadOptions('before')),
+  )
+  async uploadBeforeMedia(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFiles() files: any[],
+  ) {
+    if (req.user?.role !== 'client') {
+      removeUploadedFiles(files);
+      throw new BadRequestException('Client only');
+    }
+
+    const requestId = Number(id);
+    const photos = uploadedRequestPhotos(requestId, 'before', files);
+    if (!requestId || !photos.length) {
+      removeUploadedFiles(files);
+      throw new BadRequestException('No images');
+    }
+
+    try {
+      return await this.requests.addBeforeMedia(
+        requestId,
+        Number(req.user.id),
+        photos,
+      );
+    } catch (error) {
+      removeUploadedFiles(files);
+      throw error;
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/media/after')
+  @UseInterceptors(
+    FilesInterceptor('images', 20, requestMediaUploadOptions('after')),
+  )
+  async uploadAfterMedia(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFiles() files: any[],
+  ) {
+    if (req.user?.role !== 'worker') {
+      removeUploadedFiles(files);
+      throw new BadRequestException('Worker only');
+    }
+
+    const requestId = Number(id);
+    const photos = uploadedRequestPhotos(requestId, 'after', files);
+    if (!requestId || !photos.length) {
+      removeUploadedFiles(files);
+      throw new BadRequestException('No images');
+    }
+
+    try {
+      return await this.requests.addAfterMedia(
+        requestId,
+        Number(req.user.id),
+        photos,
+      );
+    } catch (error) {
+      removeUploadedFiles(files);
+      throw error;
+    }
   }
 
   @UseGuards(JwtAuthGuard)
@@ -52,14 +198,6 @@ export class RequestsController {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     if (scope === 'history') return this.requests.getCompletedForWorker(Number(req.user.id));
     return this.requests.getForWorkersFeed(Number(req.user.id));
-  }
-
-  // ? worker ������� (���������)
-  @UseGuards(JwtAuthGuard)
-  @Get('worker/completed')
-  async workerCompleted(@Req() req: any) {
-    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.getCompletedForWorker(Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)

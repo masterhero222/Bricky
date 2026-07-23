@@ -1,0 +1,903 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { Writable } from 'node:stream';
+import { createGunzip, createGzip } from 'node:zlib';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import mysql from 'mysql2/promise';
+import { migrationNames } from './sprint3-schema-contract.mjs';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const backendRoot = resolve(scriptDir, '..');
+const repositoryRoot = resolve(backendRoot, '..');
+const action = process.argv[2] || 'help';
+
+function fail(message) {
+  throw new Error(message);
+}
+
+function requireEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) fail(`${name} is required.`);
+  return value;
+}
+
+function assertSafeDatabaseName(database, label = 'database') {
+  if (!/^[a-zA-Z0-9_]+$/.test(database)) {
+    fail(`${label} must contain only letters, digits and underscores.`);
+  }
+}
+
+function isPathWithin(parent, candidate) {
+  const pathFromParent = relative(resolve(parent), resolve(candidate));
+  return (
+    pathFromParent === '' ||
+    (!pathFromParent.startsWith('..') && !isAbsolute(pathFromParent))
+  );
+}
+
+function command(commandName, args, options = {}) {
+  const result = spawnSync(commandName, args, {
+    cwd: options.cwd || backendRoot,
+    env: options.env || process.env,
+    encoding: 'utf8',
+    stdio: options.stdio || 'pipe',
+  });
+
+  if (result.error) {
+    fail(`${commandName} is unavailable: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    fail(
+      `${commandName} ${args.join(' ')} failed:\n${result.stderr || result.stdout}`,
+    );
+  }
+
+  return result.stdout?.trim() || '';
+}
+
+function commandAvailable(commandName, versionArgs = ['--version']) {
+  const result = spawnSync(commandName, versionArgs, {
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  return !result.error && result.status === 0;
+}
+
+async function sha256(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+function timestamp() {
+  return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z');
+}
+
+function gitMetadata() {
+  return {
+    commit: command('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot }),
+    branch: command('git', ['branch', '--show-current'], {
+      cwd: repositoryRoot,
+    }),
+    dirty:
+      command('git', ['status', '--porcelain'], { cwd: repositoryRoot })
+        .length > 0,
+  };
+}
+
+function assertReleaseGitMatchesManifest(git, manifest) {
+  if (git.dirty) {
+    fail(
+      'The release worktree is dirty. Commit the exact release state first.',
+    );
+  }
+  if (!manifest.source?.git?.commit) {
+    fail('Backup manifest does not contain a source Git commit.');
+  }
+  if (git.commit !== manifest.source.git.commit) {
+    fail(
+      `Release commit ${git.commit} does not match backup commit ${manifest.source.git.commit}.`,
+    );
+  }
+}
+
+function validateProductionEnvironment({ requireTools = true } = {}) {
+  const required = [
+    'DB_HOST',
+    'DB_PORT',
+    'DB_USER',
+    'DB_PASS',
+    'DB_NAME',
+    'JWT_SECRET',
+  ];
+  const missing = required.filter((name) => !process.env[name]?.trim());
+  if (missing.length) {
+    fail(`Missing production environment variables: ${missing.join(', ')}`);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    fail('NODE_ENV must be production.');
+  }
+  if (process.env.TYPEORM_SYNCHRONIZE !== 'false') {
+    fail('TYPEORM_SYNCHRONIZE must be explicitly set to false.');
+  }
+  if (process.env.JWT_SECRET.trim().length < 32) {
+    fail('JWT_SECRET must contain at least 32 characters.');
+  }
+  if (
+    [
+      'supersecretkey',
+      'changeme',
+      'bricky-development-only-secret-change-before-production',
+    ].includes(process.env.JWT_SECRET.trim().toLowerCase())
+  ) {
+    fail('JWT_SECRET uses a forbidden default value.');
+  }
+
+  assertSafeDatabaseName(process.env.DB_NAME, 'DB_NAME');
+
+  const productionFrontendEnv = resolve(
+    repositoryRoot,
+    'frontend/.env.production',
+  );
+  if (!existsSync(productionFrontendEnv)) {
+    fail('frontend/.env.production is missing.');
+  }
+  const frontendEnv = readFileSync(productionFrontendEnv, 'utf8');
+  if (!/^VITE_API_URL=\/api\s*$/m.test(frontendEnv)) {
+    fail('frontend/.env.production must use VITE_API_URL=/api.');
+  }
+
+  if (requireTools) {
+    for (const tool of ['git', 'mysql', 'mysqldump', 'tar']) {
+      if (!commandAvailable(tool)) {
+        fail(`${tool} is required for Sprint 3 release operations.`);
+      }
+    }
+  }
+}
+
+async function preflight() {
+  validateProductionEnvironment();
+  const git = gitMetadata();
+  if (git.dirty) {
+    fail(
+      'The release worktree is dirty. Commit the exact release state first.',
+    );
+  }
+
+  const uploadsDir = resolve(
+    process.env.SPRINT3_UPLOADS_DIR || resolve(backendRoot, 'uploads'),
+  );
+  if (!existsSync(uploadsDir) || !statSync(uploadsDir).isDirectory()) {
+    fail(`Uploads directory does not exist: ${uploadsDir}`);
+  }
+
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+  });
+  let databaseVersion;
+  try {
+    const [[row]] = await connection.query(
+      'SELECT VERSION() AS version, DATABASE() AS databaseName',
+    );
+    databaseVersion = row;
+  } finally {
+    await connection.end();
+  }
+
+  const result = {
+    ok: true,
+    checkedAt: new Date().toISOString(),
+    git,
+    database: databaseVersion,
+    uploadsDir,
+    uploadsEntries: readdirSync(uploadsDir).length,
+  };
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function runDump(outputPath) {
+  const args = [
+    `--host=${process.env.DB_HOST}`,
+    `--port=${process.env.DB_PORT}`,
+    `--user=${process.env.DB_USER}`,
+    '--single-transaction',
+    '--routines',
+    '--triggers',
+    '--events',
+    '--hex-blob',
+    '--set-gtid-purged=OFF',
+    '--default-character-set=utf8mb4',
+    process.env.DB_NAME,
+  ];
+  const dump = spawn('mysqldump', args, {
+    cwd: backendRoot,
+    env: { ...process.env, MYSQL_PWD: process.env.DB_PASS },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  dump.stderr.setEncoding('utf8');
+  dump.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  const exitPromise = new Promise((resolveExit, rejectExit) => {
+    dump.once('error', rejectExit);
+    dump.once('close', resolveExit);
+  });
+  await pipeline(
+    dump.stdout,
+    createGzip({ level: 9 }),
+    createWriteStream(outputPath),
+  );
+  const exitCode = await exitPromise;
+  if (exitCode !== 0) fail(`mysqldump failed: ${stderr}`);
+}
+
+async function backup() {
+  if (process.env.SPRINT3_CONFIRM_BACKUP !== 'BACKUP_BRICKY_PRODUCTION') {
+    fail(
+      'Set SPRINT3_CONFIRM_BACKUP=BACKUP_BRICKY_PRODUCTION to create a production backup.',
+    );
+  }
+  validateProductionEnvironment();
+
+  const uploadsDir = resolve(
+    process.env.SPRINT3_UPLOADS_DIR || resolve(backendRoot, 'uploads'),
+  );
+  if (!existsSync(uploadsDir) || !statSync(uploadsDir).isDirectory()) {
+    fail(`Uploads directory does not exist: ${uploadsDir}`);
+  }
+
+  const backupRoot = resolve(
+    process.env.SPRINT3_BACKUP_ROOT ||
+      resolve(repositoryRoot, 'backups/sprint3'),
+  );
+  const git = gitMetadata();
+  if (git.dirty) {
+    fail(
+      'The release worktree is dirty. Commit the exact release state first.',
+    );
+  }
+  if (isPathWithin(uploadsDir, backupRoot)) {
+    fail('SPRINT3_BACKUP_ROOT must not be inside the uploads directory.');
+  }
+  mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
+  const releaseDir = resolve(backupRoot, timestamp());
+  mkdirSync(releaseDir, { recursive: false });
+
+  const databaseArchive = resolve(releaseDir, 'database.sql.gz');
+  const uploadsArchive = resolve(releaseDir, 'uploads.tar.gz');
+  await runDump(databaseArchive);
+  command('tar', [
+    '-czf',
+    uploadsArchive,
+    '-C',
+    dirname(uploadsDir),
+    uploadsDir.split(/[\\/]/).at(-1),
+  ]);
+
+  const manifest = {
+    formatVersion: 1,
+    createdAt: new Date().toISOString(),
+    source: {
+      database: process.env.DB_NAME,
+      databaseHost: process.env.DB_HOST,
+      uploadsDir,
+      git,
+    },
+    artifacts: {
+      database: {
+        file: 'database.sql.gz',
+        bytes: statSync(databaseArchive).size,
+        sha256: await sha256(databaseArchive),
+      },
+      uploads: {
+        file: 'uploads.tar.gz',
+        bytes: statSync(uploadsArchive).size,
+        sha256: await sha256(uploadsArchive),
+      },
+    },
+  };
+  const manifestPath = resolve(releaseDir, 'manifest.json');
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+
+  await verifyManifest(manifestPath);
+  console.log(
+    JSON.stringify({ ok: true, releaseDir, manifestPath, manifest }, null, 2),
+  );
+}
+
+async function verifyGzip(filePath) {
+  await pipeline(
+    createReadStream(filePath),
+    createGunzip(),
+    new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    }),
+  );
+}
+
+async function verifyManifest(manifestPath) {
+  if (!isAbsolute(manifestPath)) {
+    fail('SPRINT3_BACKUP_MANIFEST must be an absolute path.');
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (manifest.formatVersion !== 1)
+    fail('Unsupported backup manifest version.');
+
+  const directory = dirname(manifestPath);
+  for (const key of ['database', 'uploads']) {
+    const artifact = manifest.artifacts?.[key];
+    if (!artifact?.file || !artifact?.sha256) {
+      fail(`Backup manifest is missing the ${key} artifact.`);
+    }
+    const filePath = resolve(directory, artifact.file);
+    if (dirname(filePath) !== directory || !existsSync(filePath)) {
+      fail(`Invalid or missing ${key} artifact.`);
+    }
+    if ((await sha256(filePath)) !== artifact.sha256) {
+      fail(`${key} backup checksum does not match the manifest.`);
+    }
+  }
+
+  await verifyGzip(resolve(directory, manifest.artifacts.database.file));
+  command(
+    'tar',
+    ['-tzf', resolve(directory, manifest.artifacts.uploads.file)],
+    { stdio: ['ignore', 'ignore', 'pipe'] },
+  );
+  return manifest;
+}
+
+async function verifyBackup() {
+  const manifestPath = requireEnv('SPRINT3_BACKUP_MANIFEST');
+  const manifest = await verifyManifest(manifestPath);
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        verifiedAt: new Date().toISOString(),
+        manifestPath,
+        source: manifest.source,
+        artifacts: manifest.artifacts,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function restoreDatabase(databaseArchive, rehearsalDatabase) {
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    multipleStatements: true,
+  });
+  try {
+    await connection.query(`DROP DATABASE IF EXISTS \`${rehearsalDatabase}\``);
+    await connection.query(
+      `CREATE DATABASE \`${rehearsalDatabase}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    );
+  } finally {
+    await connection.end();
+  }
+
+  const restore = spawn(
+    'mysql',
+    [
+      `--host=${process.env.DB_HOST}`,
+      `--port=${process.env.DB_PORT}`,
+      `--user=${process.env.DB_USER}`,
+      '--default-character-set=utf8mb4',
+      rehearsalDatabase,
+    ],
+    {
+      cwd: backendRoot,
+      env: { ...process.env, MYSQL_PWD: process.env.DB_PASS },
+      stdio: ['pipe', 'inherit', 'pipe'],
+    },
+  );
+  let stderr = '';
+  restore.stderr.setEncoding('utf8');
+  restore.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+  const exitPromise = new Promise((resolveExit, rejectExit) => {
+    restore.once('error', rejectExit);
+    restore.once('close', resolveExit);
+  });
+  await pipeline(
+    createReadStream(databaseArchive),
+    createGunzip(),
+    restore.stdin,
+  );
+  const exitCode = await exitPromise;
+  if (exitCode !== 0) fail(`mysql restore failed: ${stderr}`);
+}
+
+async function restoreRehearsal() {
+  if (
+    process.env.SPRINT3_CONFIRM_REHEARSAL_RESTORE !== 'RESTORE_BRICKY_REHEARSAL'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_REHEARSAL_RESTORE=RESTORE_BRICKY_REHEARSAL to replace a rehearsal database.',
+    );
+  }
+  const manifestPath = requireEnv('SPRINT3_BACKUP_MANIFEST');
+  const rehearsalDatabase = requireEnv('SPRINT3_REHEARSAL_DATABASE');
+  assertSafeDatabaseName(rehearsalDatabase, 'SPRINT3_REHEARSAL_DATABASE');
+  if (!rehearsalDatabase.startsWith('bricky_sprint3_')) {
+    fail('Rehearsal database must start with bricky_sprint3_.');
+  }
+
+  const manifest = await verifyManifest(manifestPath);
+  const git = gitMetadata();
+  assertReleaseGitMatchesManifest(git, manifest);
+  if (rehearsalDatabase === manifest.source.database) {
+    fail('Rehearsal database must not be the production database.');
+  }
+
+  const rehearsalRoot = resolve(requireEnv('SPRINT3_REHEARSAL_ROOT'));
+  if (!/rehears/i.test(rehearsalRoot)) {
+    fail('SPRINT3_REHEARSAL_ROOT must contain the word rehearsal.');
+  }
+  if (isPathWithin(manifest.source.uploadsDir, rehearsalRoot)) {
+    fail('SPRINT3_REHEARSAL_ROOT must not be inside production uploads.');
+  }
+  if (existsSync(rehearsalRoot) && readdirSync(rehearsalRoot).length > 0) {
+    fail('SPRINT3_REHEARSAL_ROOT must be empty before restore.');
+  }
+  mkdirSync(rehearsalRoot, { recursive: true });
+
+  const backupDir = dirname(manifestPath);
+  await restoreDatabase(
+    resolve(backupDir, manifest.artifacts.database.file),
+    rehearsalDatabase,
+  );
+  command('tar', [
+    '-xzf',
+    resolve(backupDir, manifest.artifacts.uploads.file),
+    '-C',
+    rehearsalRoot,
+  ]);
+
+  command('node', ['scripts/rehearse-sprint3-migrations.mjs'], {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      SPRINT3_REHEARSAL_DATABASE: rehearsalDatabase,
+      SPRINT3_REHEARSAL_RESET: '0',
+    },
+    stdio: 'inherit',
+  });
+
+  const report = {
+    formatVersion: 1,
+    ok: true,
+    restoredAt: new Date().toISOString(),
+    manifestPath: resolve(manifestPath),
+    manifestSha256: await sha256(manifestPath),
+    sourceGitCommit: manifest.source.git.commit,
+    rehearsalDatabase,
+    rehearsalRoot,
+    restoredUploadsDir: resolve(
+      rehearsalRoot,
+      manifest.source.uploadsDir.split(/[\\/]/).at(-1),
+    ),
+    migrationNames,
+    migrationPasses: 2,
+    schemaVerified: true,
+  };
+  writeFileSync(
+    resolve(rehearsalRoot, 'restore-report.json'),
+    `${JSON.stringify(report, null, 2)}\n`,
+    'utf8',
+  );
+  console.log(JSON.stringify(report, null, 2));
+}
+
+async function readRehearsalEvidence(reportPath, manifestPath, manifest) {
+  if (!isAbsolute(reportPath)) {
+    fail('SPRINT3_RESTORE_REPORT must be an absolute path.');
+  }
+  if (!existsSync(reportPath)) {
+    fail(`Rehearsal restore report does not exist: ${reportPath}`);
+  }
+
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+  if (report.formatVersion !== 1 || report.ok !== true) {
+    fail('Rehearsal restore report is invalid or unsuccessful.');
+  }
+  if (resolve(report.manifestPath || '') !== resolve(manifestPath)) {
+    fail('Rehearsal restore report references a different backup manifest.');
+  }
+  if (report.manifestSha256 !== (await sha256(manifestPath))) {
+    fail('Rehearsal restore report manifest checksum does not match.');
+  }
+  if (report.sourceGitCommit !== manifest.source.git.commit) {
+    fail('Rehearsal restore report references a different Git commit.');
+  }
+  if (report.schemaVerified !== true || report.migrationPasses !== 2) {
+    fail('Rehearsal report does not prove idempotent schema verification.');
+  }
+  if (
+    JSON.stringify(report.migrationNames) !== JSON.stringify(migrationNames)
+  ) {
+    fail('Rehearsal report was produced with a different migration set.');
+  }
+
+  return report;
+}
+
+async function certifyRehearsal() {
+  if (
+    process.env.SPRINT3_CONFIRM_REHEARSAL_CERTIFICATION !==
+    'CERTIFY_BRICKY_REHEARSAL'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_REHEARSAL_CERTIFICATION=CERTIFY_BRICKY_REHEARSAL to run the rehearsal certification gate.',
+    );
+  }
+
+  validateProductionEnvironment({ requireTools: false });
+  const manifestPath = requireEnv('SPRINT3_BACKUP_MANIFEST');
+  const restoreReportPath = requireEnv('SPRINT3_RESTORE_REPORT');
+  const apiUrl = requireEnv('SPRINT3_API_URL').replace(/\/+$/, '');
+  const manifest = await verifyManifest(manifestPath);
+  const git = gitMetadata();
+  assertReleaseGitMatchesManifest(git, manifest);
+  const restoreReport = await readRehearsalEvidence(
+    restoreReportPath,
+    manifestPath,
+    manifest,
+  );
+
+  if (process.env.DB_NAME !== restoreReport.rehearsalDatabase) {
+    fail('DB_NAME must point to the restored rehearsal database.');
+  }
+  const uploadsDir = resolve(
+    process.env.SPRINT3_UPLOADS_DIR || resolve(backendRoot, 'uploads'),
+  );
+  if (uploadsDir !== resolve(restoreReport.restoredUploadsDir)) {
+    fail(
+      'SPRINT3_UPLOADS_DIR must point to the uploads restored by the rehearsal.',
+    );
+  }
+  if (!existsSync(uploadsDir) || !statSync(uploadsDir).isDirectory()) {
+    fail(`Restored rehearsal uploads directory does not exist: ${uploadsDir}`);
+  }
+
+  const gateEnvironment = {
+    ...process.env,
+    SPRINT3_UPLOADS_DIR: uploadsDir,
+    SPRINT3_API_URL: apiUrl,
+  };
+  const startedAt = new Date().toISOString();
+  command('node', ['scripts/verify-sprint3-schema.mjs'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('node', ['scripts/verify-sprint3-integrity.mjs'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['audit', '--omit=dev', '--audit-level=high'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['test', '--', '--runInBand'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['run', 'build'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['audit', '--omit=dev', '--audit-level=high'], {
+    cwd: resolve(repositoryRoot, 'frontend'),
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['run', 'lint'], {
+    cwd: resolve(repositoryRoot, 'frontend'),
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('npm', ['run', 'build'], {
+    cwd: resolve(repositoryRoot, 'frontend'),
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+  command('node', ['scripts/smoke-sprint3-api.mjs'], {
+    env: gateEnvironment,
+    stdio: 'inherit',
+  });
+
+  const certificatePath = resolve(
+    dirname(restoreReportPath),
+    'rehearsal-certificate.json',
+  );
+  if (existsSync(certificatePath)) {
+    fail(`Rehearsal certificate already exists: ${certificatePath}`);
+  }
+  const certificate = {
+    formatVersion: 1,
+    ok: true,
+    startedAt,
+    certifiedAt: new Date().toISOString(),
+    sourceGitCommit: manifest.source.git.commit,
+    manifestPath: resolve(manifestPath),
+    manifestSha256: await sha256(manifestPath),
+    restoreReportPath: resolve(restoreReportPath),
+    restoreReportSha256: await sha256(restoreReportPath),
+    rehearsalDatabase: restoreReport.rehearsalDatabase,
+    restoredUploadsDir: uploadsDir,
+    apiUrl,
+    migrationNames,
+    gates: [
+      'schema',
+      'integrity',
+      'backend-audit',
+      'backend-tests',
+      'backend-build',
+      'frontend-audit',
+      'frontend-lint',
+      'frontend-build',
+      'api-smoke',
+    ],
+  };
+  writeFileSync(certificatePath, `${JSON.stringify(certificate, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  console.log(JSON.stringify({ ...certificate, certificatePath }, null, 2));
+}
+
+async function readRehearsalCertificate(
+  certificatePath,
+  restoreReportPath,
+  manifestPath,
+  manifest,
+) {
+  if (!isAbsolute(certificatePath) || !existsSync(certificatePath)) {
+    fail(
+      'SPRINT3_REHEARSAL_CERTIFICATE must be an absolute path to an existing certificate.',
+    );
+  }
+  const certificate = JSON.parse(readFileSync(certificatePath, 'utf8'));
+  if (certificate.formatVersion !== 1 || certificate.ok !== true) {
+    fail('Rehearsal certificate is invalid or unsuccessful.');
+  }
+  if (certificate.sourceGitCommit !== manifest.source.git.commit) {
+    fail('Rehearsal certificate references a different Git commit.');
+  }
+  if (
+    resolve(certificate.manifestPath || '') !== resolve(manifestPath) ||
+    certificate.manifestSha256 !== (await sha256(manifestPath))
+  ) {
+    fail('Rehearsal certificate does not match the backup manifest.');
+  }
+  if (
+    resolve(certificate.restoreReportPath || '') !==
+      resolve(restoreReportPath) ||
+    certificate.restoreReportSha256 !== (await sha256(restoreReportPath))
+  ) {
+    fail('Rehearsal certificate does not match the restore report.');
+  }
+  const restoreReport = JSON.parse(readFileSync(restoreReportPath, 'utf8'));
+  if (
+    certificate.rehearsalDatabase !== restoreReport.rehearsalDatabase ||
+    resolve(certificate.restoredUploadsDir || '') !==
+      resolve(restoreReport.restoredUploadsDir || '')
+  ) {
+    fail('Rehearsal certificate targets different restored data.');
+  }
+  const requiredGates = [
+    'schema',
+    'integrity',
+    'backend-audit',
+    'backend-tests',
+    'backend-build',
+    'frontend-audit',
+    'frontend-lint',
+    'frontend-build',
+    'api-smoke',
+  ];
+  if (!requiredGates.every((gate) => certificate.gates?.includes(gate))) {
+    fail('Rehearsal certificate is missing required release gates.');
+  }
+  if (
+    JSON.stringify(certificate.migrationNames) !==
+    JSON.stringify(migrationNames)
+  ) {
+    fail('Rehearsal certificate was produced with a different migration set.');
+  }
+  return certificate;
+}
+
+async function migrateProduction() {
+  if (
+    process.env.SPRINT3_CONFIRM_PRODUCTION_MIGRATION !==
+    'MIGRATE_BRICKY_PRODUCTION'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_PRODUCTION_MIGRATION=MIGRATE_BRICKY_PRODUCTION to apply production migrations.',
+    );
+  }
+
+  validateProductionEnvironment();
+  const manifestPath = requireEnv('SPRINT3_BACKUP_MANIFEST');
+  const restoreReportPath = requireEnv('SPRINT3_RESTORE_REPORT');
+  const certificatePath = requireEnv('SPRINT3_REHEARSAL_CERTIFICATE');
+  const manifest = await verifyManifest(manifestPath);
+  const git = gitMetadata();
+  assertReleaseGitMatchesManifest(git, manifest);
+
+  if (manifest.source.database !== process.env.DB_NAME) {
+    fail('Backup manifest source database does not match DB_NAME.');
+  }
+  if (manifest.source.databaseHost !== process.env.DB_HOST) {
+    fail('Backup manifest source host does not match DB_HOST.');
+  }
+
+  const restoreReport = await readRehearsalEvidence(
+    restoreReportPath,
+    manifestPath,
+    manifest,
+  );
+  const certificate = await readRehearsalCertificate(
+    certificatePath,
+    restoreReportPath,
+    manifestPath,
+    manifest,
+  );
+  const startedAt = new Date().toISOString();
+
+  command('node', ['scripts/rehearse-sprint3-migrations.mjs'], {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      SPRINT3_REHEARSAL_DATABASE: process.env.DB_NAME,
+      SPRINT3_REHEARSAL_RESET: '0',
+    },
+    stdio: 'inherit',
+  });
+  command('node', ['scripts/verify-sprint3-integrity.mjs'], {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      SPRINT3_UPLOADS_DIR:
+        process.env.SPRINT3_UPLOADS_DIR || resolve(backendRoot, 'uploads'),
+    },
+    stdio: 'inherit',
+  });
+
+  const reportPath = resolve(
+    dirname(manifestPath),
+    'production-migration-report.json',
+  );
+  if (existsSync(reportPath)) {
+    fail(`Production migration report already exists: ${reportPath}`);
+  }
+  const report = {
+    formatVersion: 1,
+    ok: true,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    database: process.env.DB_NAME,
+    databaseHost: process.env.DB_HOST,
+    git,
+    manifestPath: resolve(manifestPath),
+    manifestSha256: await sha256(manifestPath),
+    rehearsalReportPath: resolve(restoreReportPath),
+    rehearsalReportSha256: await sha256(restoreReportPath),
+    rehearsalCertificatePath: resolve(certificatePath),
+    rehearsalCertificateSha256: await sha256(certificatePath),
+    rehearsalDatabase: restoreReport.rehearsalDatabase,
+    rehearsalCertifiedAt: certificate.certifiedAt,
+    migrationNames,
+    migrationPasses: 2,
+    schemaVerified: true,
+    integrityVerified: true,
+  };
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  console.log(JSON.stringify({ ...report, reportPath }, null, 2));
+}
+
+function selfTest() {
+  assertSafeDatabaseName('bricky_sprint3_rehearsal');
+  assertReleaseGitMatchesManifest(
+    { commit: 'release-commit', dirty: false },
+    { source: { git: { commit: 'release-commit' } } },
+  );
+  if (!isPathWithin('/srv/bricky/uploads', '/srv/bricky/uploads/rehearsal')) {
+    fail('Path containment guard failed.');
+  }
+  if (isPathWithin('/srv/bricky/uploads', '/srv/bricky/rehearsal')) {
+    fail('Path containment guard produced a false positive.');
+  }
+  for (const unsafe of ['bricky-prod', 'bricky prod', 'bricky;DROP']) {
+    try {
+      assertSafeDatabaseName(unsafe);
+      fail(`Unsafe database name was accepted: ${unsafe}`);
+    } catch (error) {
+      if (String(error.message).startsWith('Unsafe database')) throw error;
+    }
+  }
+  for (const unsafeGit of [
+    { commit: 'release-commit', dirty: true },
+    { commit: 'different-commit', dirty: false },
+  ]) {
+    let rejected = false;
+    try {
+      assertReleaseGitMatchesManifest(unsafeGit, {
+        source: { git: { commit: 'release-commit' } },
+      });
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      fail(
+        `Unsafe release Git state was accepted: ${JSON.stringify(unsafeGit)}`,
+      );
+    }
+  }
+  console.log(JSON.stringify({ ok: true, action: 'self-test' }, null, 2));
+}
+
+const actions = {
+  preflight,
+  backup,
+  verify: verifyBackup,
+  'restore-rehearsal': restoreRehearsal,
+  'certify-rehearsal': certifyRehearsal,
+  'migrate-production': migrateProduction,
+  'self-test': selfTest,
+  help() {
+    console.log(
+      [
+        'Sprint 3 release operations:',
+        '  preflight           Read-only production configuration and connectivity checks',
+        '  backup              Create DB/uploads archives and a checksum manifest',
+        '  verify              Verify an existing backup manifest and its artifacts',
+        '  restore-rehearsal   Restore only to a disposable rehearsal DB and directory',
+        '  certify-rehearsal   Run all rehearsal gates and write a release certificate',
+        '  migrate-production  Apply migrations only after matching backup/rehearsal evidence',
+        '  self-test           Verify local safety guards without external services',
+      ].join('\n'),
+    );
+  },
+};
+
+if (!actions[action]) fail(`Unknown action: ${action}`);
+await actions[action]();

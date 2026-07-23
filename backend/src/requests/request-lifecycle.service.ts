@@ -73,7 +73,7 @@ export class RequestLifecycleService {
       finish: REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
       ready: REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
       'client-confirm': REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION,
-      complete: REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION,
+      complete: REQUEST_LIFECYCLE_ACTIONS.CLOSE,
     };
     return map[endpoint] || null;
   }

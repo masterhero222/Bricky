@@ -6,6 +6,7 @@ import { WorkersService } from '../workers/workers.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ReferralsService } from '../referrals/referrals.service';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AuthService {
@@ -14,6 +15,7 @@ export class AuthService {
     private readonly workers: WorkersService,
     private readonly jwt: JwtService,
     private readonly referrals: ReferralsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(dto: RegisterUserDto) {
@@ -29,20 +31,29 @@ export class AuthService {
       const displayName = String(profile.displayName || dto.name || '').trim();
       if (!displayName) throw new BadRequestException('Името е задължително');
 
-      const user = await this.users.create({
-        name: displayName,
-        email: dto.email,
-        password: passwordHash,
-        role: 'client',
-      });
+      const user = await this.dataSource.transaction(async (manager) => {
+        const created = await this.users.create(
+          {
+            name: displayName,
+            email: dto.email,
+            password: passwordHash,
+            role: 'client',
+          },
+          manager,
+        );
 
-      await this.users.createClientProfile({
-        userId: user.id,
-        displayName,
-        phonePrivate: profile.phonePrivate || dto.phone || null,
-        defaultAddress: profile.defaultAddress || null,
+        await this.users.createClientProfile(
+          {
+            userId: created.id,
+            displayName,
+            phonePrivate: profile.phonePrivate || dto.phone || null,
+            defaultAddress: profile.defaultAddress || null,
+          },
+          manager,
+        );
+        await this.referrals.attachRegistration(dto.referralCode, created.id, 'client', manager);
+        return created;
       });
-      await this.referrals.attachRegistration(dto.referralCode, user.id, 'client');
 
       return { message: 'Клиентът е регистриран успешно', user };
     }
@@ -56,23 +67,32 @@ export class AuthService {
       if (!publicName) throw new BadRequestException('Трите имена са задължителни');
       if (!city) throw new BadRequestException('Градът е задължителен');
 
-      const user = await this.users.create({
-        name: publicName,
-        email: dto.email,
-        password: passwordHash,
-        role: 'worker',
-      });
+      const user = await this.dataSource.transaction(async (manager) => {
+        const created = await this.users.create(
+          {
+            name: publicName,
+            email: dto.email,
+            password: passwordHash,
+            role: 'worker',
+          },
+          manager,
+        );
 
-      await this.workers.createWorkerProfile({
-        userId: user.id,
-        publicName,
-        city,
-        skills,
-        bio: profile.bio || profile.description || null,
-        experience: profile.experience || null,
-        equipment: profile.equipment || null,
+        await this.workers.createWorkerProfile(
+          {
+            userId: created.id,
+            publicName,
+            city,
+            skills,
+            bio: profile.bio || profile.description || null,
+            experience: profile.experience || null,
+            equipment: profile.equipment || null,
+          },
+          manager,
+        );
+        await this.referrals.attachRegistration(dto.referralCode, created.id, 'worker', manager);
+        return created;
       });
-      await this.referrals.attachRegistration(dto.referralCode, user.id, 'worker');
 
       return { message: 'Майсторът е регистриран успешно', user };
     }

@@ -1,11 +1,18 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('worker_credit_wallets')
 export class WorkerCreditWalletEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index({ unique: true })
+  @Index('uq_worker_credit_wallet', { unique: true })
   @Column({ name: 'worker_user_id', type: 'int' })
   workerUserId: number;
 

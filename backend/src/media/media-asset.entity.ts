@@ -30,7 +30,7 @@ export class MediaAssetEntity {
   @Column({ name: 'public_url', length: 255 })
   publicUrl: string;
 
-  @Column({ name: 'mime_type', length: 120, nullable: true })
+  @Column({ name: 'mime_type', type: 'varchar', length: 120, nullable: true })
   mimeType: string | null;
 
   @Column({ name: 'size_bytes', type: 'int', nullable: true })

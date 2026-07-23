@@ -37,6 +37,12 @@ export class AdminController {
     return this.admin.listRequests(queue);
   }
 
+  @Get('requests/:requestId/timeline')
+  requestTimeline(@Req() req: any, @Param('requestId') requestId: string) {
+    this.assertAdmin(req.user);
+    return this.admin.getRequestTimeline(Number(requestId));
+  }
+
   @Post('requests/:requestId/status')
   setRequestStatus(@Req() req: any, @Param('requestId') requestId: string, @Body() body: any) {
     this.assertAdmin(req.user);
@@ -47,6 +53,47 @@ export class AdminController {
   media(@Req() req: any) {
     this.assertAdmin(req.user);
     return this.admin.listMedia();
+  }
+
+  @Get('categories')
+  categories(@Req() req: any) {
+    this.assertAdmin(req.user);
+    return this.admin.listCategories();
+  }
+
+  @Post('categories/:categoryKey')
+  upsertCategory(@Req() req: any, @Param('categoryKey') categoryKey: string, @Body() body: any) {
+    this.assertSuperAdmin(req.user);
+    return this.admin.upsertCategory(Number(req.user.id), categoryKey, body, body?.reason);
+  }
+
+  @Post('categories/:categoryKey/activities/:activityKey')
+  upsertActivity(
+    @Req() req: any,
+    @Param('categoryKey') categoryKey: string,
+    @Param('activityKey') activityKey: string,
+    @Body() body: any,
+  ) {
+    this.assertSuperAdmin(req.user);
+    return this.admin.upsertActivity(Number(req.user.id), categoryKey, activityKey, body, body?.reason);
+  }
+
+  @Get('pricing')
+  pricing(@Req() req: any) {
+    this.assertAdmin(req.user);
+    return this.admin.listPricingRules();
+  }
+
+  @Post('pricing')
+  createPricing(@Req() req: any, @Body() body: any) {
+    this.assertSuperAdmin(req.user);
+    return this.admin.createPricingRule(Number(req.user.id), body, body?.reason);
+  }
+
+  @Post('pricing/:id/status')
+  setPricingStatus(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    this.assertSuperAdmin(req.user);
+    return this.admin.setPricingRuleActive(Number(req.user.id), Number(id), Boolean(body?.isActive), body?.reason);
   }
 
   @Post('media/:id/moderation')

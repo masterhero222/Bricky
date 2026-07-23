@@ -21,7 +21,7 @@ export class WorkerProfileEntity {
   @Column({ name: 'public_name', length: 140 })
   publicName: string;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   city: string | null;
 
   @Column({ type: 'text', nullable: true })

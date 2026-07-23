@@ -1,7 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
-import { REPAIR_CATEGORIES } from "../constants/repairCatalog";
 import LogoutButton from "../components/LogoutButton";
 import { photoMediaUrl } from "../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
@@ -26,8 +25,6 @@ function formatBG(dateStr) {
   }
 }
 
-const CATEGORIES = REPAIR_CATEGORIES;
-
 function uniqNums(arr) {
   const out = [];
   const set = new Set();
@@ -41,41 +38,12 @@ function uniqNums(arr) {
   return out;
 }
 
-function imageFileToDataUrl(file, maxSize = 520, quality = 0.58) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-
-      const scale = Math.min(1, maxSize / Math.max(img.width || 1, img.height || 1));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round((img.width || 1) * scale));
-      canvas.height = Math.max(1, Math.round((img.height || 1) * scale));
-
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Cannot read image"));
-    };
-
-    img.src = objectUrl;
-  });
-}
-
-function filesToPhotos(files) {
-  const images = Array.from(files || []).filter((file) => String(file.type || "").startsWith("image/"));
-  return Promise.all(
-    images.map(async (file) => ({
-      id: `${Date.now()}-${file.name}`,
-      name: file.name,
-      url: await imageFileToDataUrl(file),
-    }))
+function requestApplicantIds(request) {
+  if (!Array.isArray(request?.applications)) return [];
+  return uniqNums(
+    request.applications
+      .filter((application) => !["withdrawn", "rejected"].includes(application?.status))
+      .map((application) => application?.workerUserId),
   );
 }
 
@@ -109,23 +77,6 @@ export default function ClientProfile() {
   // keyed by worker.userId (users.id)
   const [workersMap, setWorkersMap] = useState({});
 
-  const [newReq, setNewReq] = useState({
-    clientName: "",
-    phone: "",
-    email: "",
-    address: "",
-    category: "ВиК ремонти",
-    description: "",
-    photos: [],
-    latitude: null,
-    longitude: null,
-    locationSource: "manual",
-  });
-
-  const [createError, setCreateError] = useState("");
-  const [createOk, setCreateOk] = useState("");
-  const [locationStatus, setLocationStatus] = useState("manual");
-  const [locationMessage, setLocationMessage] = useState("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
   const [actionMsg, setActionMsg] = useState("");
   const [assigningKey, setAssigningKey] = useState("");
   const [unassigningId, setUnassigningId] = useState(null);
@@ -134,30 +85,20 @@ export default function ClientProfile() {
   const [reviewDraft, setReviewDraft] = useState({}); // { [requestId]: { rating, comment } }
   const [reviewMsg, setReviewMsg] = useState({}); // { [requestId]: string }
   const [reviewSaving, setReviewSaving] = useState({}); // { [requestId]: boolean }
-  const [myReviews, setMyReviews] = useState([]); // array
   const [reviewMap, setReviewMap] = useState({}); // { [requestId]: review }
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData() {
     setLoading(true);
-    setCreateError("");
-    setCreateOk("");
     setActionMsg("");
     try {
       // optional client profile endpoint
       try {
         const clientRes = await apiGet("/client/me");
         setClient(clientRes.data || {});
-        setNewReq((p) => ({
-          ...p,
-          clientName: clientRes.data?.name || p.clientName,
-          email: clientRes.data?.email || p.email,
-          phone: clientRes.data?.phone || p.phone,
-          address: clientRes.data?.address || p.address,
-        }));
       } catch {
         // ok - no endpoint
       }
@@ -177,7 +118,6 @@ export default function ClientProfile() {
       try {
         const revRes = await apiGet("/reviews/client");
         const items = Array.isArray(revRes.data) ? revRes.data : [];
-        setMyReviews(items);
 
         const map = {};
         items.forEach((x) => {
@@ -186,7 +126,6 @@ export default function ClientProfile() {
         setReviewMap(map);
       } catch (e) {
         console.log("GET /reviews/client not available (ok for MVP):", e);
-        setMyReviews([]);
         setReviewMap({});
       }
 
@@ -196,8 +135,10 @@ export default function ClientProfile() {
       setReviewDraft((prev) => {
         const next = { ...prev };
         allReqs.forEach((r) => {
-          const isCompleted = (r.statusKey || "") === "completed" && Boolean(r.archivedAt || r.isArchived);
-          const assignedUserId = Number(r.assignedWorkerId || 0) || null;
+          const isCompleted = ["client_confirmed", "reviewed", "completed"].includes(
+            r.statusKey || "",
+          ) && Boolean(r.archivedAt || r.isArchived);
+          const assignedUserId = Number(r.assignedWorkerUserId || 0) || null;
           if (!isCompleted || !assignedUserId) return;
 
           if (!next[r.id]) {
@@ -224,8 +165,8 @@ export default function ClientProfile() {
     const needed = new Set();
 
     reqs.forEach((r) => {
-      uniqNums(r.appliedWorkers || []).forEach((n) => needed.add(n));
-      const assigned = Number(r.assignedWorkerId);
+      requestApplicantIds(r).forEach((n) => needed.add(n));
+      const assigned = Number(r.assignedWorkerUserId);
       if (Number.isFinite(assigned) && assigned > 0) needed.add(assigned);
     });
 
@@ -263,101 +204,6 @@ export default function ClientProfile() {
     }
   }
 
-  async function handleRequestPhotos(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-
-    try {
-      const photos = await filesToPhotos(files);
-      setNewReq((p) => ({ ...p, photos: [...(p.photos || []), ...photos] }));
-    } catch (err) {
-      console.error(err);
-      setCreateError("Не успях да прочета избраните снимки.");
-    } finally {
-      e.target.value = "";
-    }
-  }
-
-  function removeRequestPhoto(photoId) {
-    setNewReq((p) => ({
-      ...p,
-      photos: (p.photos || []).filter((photo) => String(photo.id) !== String(photoId)),
-    }));
-  }
-
-  function requestCurrentLocation() {
-    setCreateError("");
-
-    if (!navigator.geolocation) {
-      setLocationStatus("denied");
-      setLocationMessage("Браузърът не поддържа автоматична локация. Въведи точния адрес ръчно.");
-      setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
-      return;
-    }
-
-    setLocationStatus("loading");
-    setLocationMessage("Питам браузъра за достъп до локацията...");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = Number(position.coords.latitude.toFixed(6));
-        const longitude = Number(position.coords.longitude.toFixed(6));
-        setNewReq((p) => ({
-          ...p,
-          latitude,
-          longitude,
-          locationSource: "gps",
-        }));
-        setLocationStatus("granted");
-        setLocationMessage(`Локацията е добавена към заявката: ${latitude}, ${longitude}.`);
-      },
-      (err) => {
-        console.warn("Geolocation denied/unavailable:", err);
-        setLocationStatus("denied");
-        setLocationMessage("Локацията е отказана или недостъпна. Въведи точния адрес ръчно, за да сложим заявката на картата.");
-        setNewReq((p) => ({ ...p, latitude: null, longitude: null, locationSource: "manual" }));
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }
-
-  async function createRequest() {
-    setCreateError("");
-    setCreateOk("");
-    try {
-      if (!String(newReq.address || "").trim() && !newReq.latitude && !newReq.longitude) {
-        setCreateError("Добави текуща локация или въведи точен адрес за заявката.");
-        return;
-      }
-
-      const res = await apiPost("/requests", {
-        clientName: newReq.clientName,
-        email: newReq.email,
-        phone: newReq.phone,
-        address: newReq.address,
-        category: newReq.category,
-        description: newReq.description,
-        photos: newReq.photos || [],
-        latitude: newReq.latitude,
-        longitude: newReq.longitude,
-        locationSource: newReq.locationSource || "manual",
-      });
-
-      setCreateOk(`Заявката е създадена! (#${res.data?.id ?? "?"})`);
-      setNewReq((p) => ({ ...p, description: "", photos: [], latitude: null, longitude: null, locationSource: "manual" }));
-      setLocationStatus("manual");
-      setLocationMessage("Можеш да позволиш локация или да въведеш точния адрес ръчно.");
-      setActiveTab("requests");
-      await loadData();
-    } catch (err) {
-      console.error(err);
-      const status = err?.response?.status;
-      if (status === 401) setCreateError("401: Нямаш валиден токен.");
-      else if (status === 403) setCreateError("403: Нямаш права (role).");
-      else setCreateError(err?.response?.data?.message || "Не успях да създам заявка.");
-    }
-  }
-
   async function chooseWorker(requestId, workerUserId) {
     const key = `${requestId}:${workerUserId}`;
     try {
@@ -379,8 +225,12 @@ export default function ClientProfile() {
     }
   }
 
-  function canUnassignWorker(statusKey) {
-    return ["worker_selected", "assigned", "worker_confirmed", "worker_on_site", "inspected"].includes(statusKey);
+  function requestAllows(request, action) {
+    return Array.isArray(request?.allowedActions) && request.allowedActions.includes(action);
+  }
+
+  function canUnassignWorker(request) {
+    return requestAllows(request, "unassign");
   }
 
   async function unassignWorker(requestId) {
@@ -528,13 +378,17 @@ export default function ClientProfile() {
             ) : (
               <div className="space-y-6">
                 {visibleRequests.map((r) => {
-                  const appliedList = uniqNums(r.appliedWorkers || []);
-                  const assignedUserId = Number(r.assignedWorkerId || 0) || null;
+                  const appliedList = requestApplicantIds(r);
+                  const assignedUserId = Number(r.assignedWorkerUserId || 0) || null;
 
                   const statusKey = r.statusKey || "";
-                  const canConfirmWork = statusKey === "ready_for_client_confirmation";
-                  const isCompleted = statusKey === "completed" && Boolean(r.archivedAt || r.isArchived);
-                  const canUnassign = assignedUserId && canUnassignWorker(statusKey);
+                  const canConfirmWork = requestAllows(r, "confirm_completion");
+                  const isCompleted =
+                    ["client_confirmed", "reviewed", "completed"].includes(
+                      r.lifecycleStatusKey || statusKey,
+                    ) && Boolean(r.archivedAt || r.isArchived);
+                  const canUnassign = assignedUserId && canUnassignWorker(r);
+                  const canChooseCandidate = !assignedUserId && requestAllows(r, "assign");
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem || statusKey === "reviewed";
                   const showReviewForm = isCompleted && assignedUserId && !alreadyReviewed;
@@ -558,7 +412,7 @@ export default function ClientProfile() {
                         <div className="md:text-right">
                           <div className="flex items-center gap-3 md:justify-end">
                             <span className="text-sm text-slate-400">Статус:</span>
-                            <span className={`inline-flex min-h-9 items-center rounded-xl border px-4 text-sm font-extrabold ${isCompleted ? "border-green-400/20 bg-green-400/10 text-green-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300"}`}>{r.status}</span>
+                            <span className={`inline-flex min-h-9 items-center rounded-xl border px-4 text-sm font-extrabold ${isCompleted ? "border-green-400/20 bg-green-400/10 text-green-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300"}`}>{r.statusLabel || statusKey}</span>
                           </div>
                           <div className="mt-3 text-sm text-slate-400">
                             {assignedUserId ? <><span>Избран майстор: </span><span className="font-bold text-green-300">{workersMap[assignedUserId]?.fullName || `userId ${assignedUserId}`}</span></> : "Няма избран майстор"}
@@ -705,25 +559,22 @@ export default function ClientProfile() {
                                         <strong>Град:</strong> {w.city || "—"}
                                       </div>
                                       <div>
-                                        <strong>Телефон:</strong> {w.phone || "—"}
-                                      </div>
-                                      <div>
                                         <strong>Описание:</strong> {w.description || "—"}
-                                      </div>
-
-                                      <div className="text-xs text-gray-400 mt-2">
-                                        (worker.userId={w.userId ?? "?"})
                                       </div>
 
                                       <div className="flex gap-2 mt-3">
                                         <a
-                                          href={`/worker-preview?requestId=${r.id}&userId=${workerUserId}`}
+                                          href={
+                                            canChooseCandidate
+                                              ? `/worker-preview?requestId=${r.id}&userId=${workerUserId}`
+                                              : `/worker-preview?userId=${workerUserId}`
+                                          }
                                           className="inline-block bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded font-bold"
                                         >
                                           Виж профил
                                         </a>
 
-                                        {!assignedUserId && (
+                                        {canChooseCandidate && (
                                           <button
                                             onClick={() => chooseWorker(r.id, workerUserId)}
                                             disabled={assigningKey === key}
@@ -774,10 +625,10 @@ export default function ClientProfile() {
           <div className="mx-auto max-w-4xl">
             <h1 className="mb-8 text-3xl font-extrabold">Моят профил</h1>
             <div className="bricky-card grid gap-5 rounded-[20px] p-6 md:grid-cols-2 md:p-8">
-              <ProfileField label="Име" value={client.name || newReq.clientName || "Не е добавено"} />
-              <ProfileField label="Телефон" value={client.phone || newReq.phone || "Не е добавен"} />
-              <ProfileField label="Имейл" value={client.email || newReq.email || "Не е добавен"} />
-              <ProfileField label="Основен адрес" value={client.address || newReq.address || "Не е добавен"} />
+              <ProfileField label="Име" value={client.name || "Не е добавено"} />
+              <ProfileField label="Телефон" value={client.phone || "Не е добавен"} />
+              <ProfileField label="Имейл" value={client.email || "Не е добавен"} />
+              <ProfileField label="Основен адрес" value={client.address || "Не е добавен"} />
             </div>
           </div>
         )}

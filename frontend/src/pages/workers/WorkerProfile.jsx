@@ -1,22 +1,18 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
-import LogoutButton from "../../components/LogoutButton";
 import WorkerBannerSettings from "../../components/workers/WorkerBannerSettings";
+import WorkerCalculatorPanel from "../../components/workers/WorkerCalculatorPanel";
+import WorkerDashboardSummary from "../../components/workers/WorkerDashboardSummary";
+import WorkerGalleryPanel from "../../components/workers/WorkerGalleryPanel";
+import WorkerProfileSidebar from "../../components/workers/WorkerProfileSidebar";
+import WorkerReferralPanel from "../../components/workers/WorkerReferralPanel";
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { DEFAULT_WORKER_BANNER_KEY } from "../../constants/workerBannerCatalog";
-
-const PRICE_TABLE = {
-  Баня: { material: 140 },
-  "Шпакловка и боя": { material: 18 },
-  Плочки: { material: 40 },
-  ВиК: { material: 55 },
-  Електро: { material: 35 },
-};
 
 function formatBG(dateStr) {
   try {
@@ -46,22 +42,6 @@ function requestPhotos(req) {
     : [];
 
   return photos.filter((photo) => photoUrl(photo));
-}
-
-function normalizeArr(x) {
-  if (!x) return [];
-  if (Array.isArray(x)) return x;
-  if (typeof x === "string") {
-    try {
-      const parsed = JSON.parse(x);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {}
-    return x
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
@@ -98,6 +78,7 @@ function filesToPhotos(files) {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: file.name,
       url: await imageFileToDataUrl(file),
+      file,
     }))
   );
 }
@@ -182,15 +163,6 @@ export default function WorkerProfile() {
   const [ratingLoading, setRatingLoading] = useState(false);
   const [ratingError, setRatingError] = useState("");
 
-  const [calc, setCalc] = useState({
-    type: "",
-    area: "",
-    laborPerM2: "",
-    materials: 0,
-    labor: 0,
-    total: 0,
-  });
-
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -219,10 +191,6 @@ export default function WorkerProfile() {
     loadReferrals();
   }, []);
 
-  useEffect(() => {
-    if (myUserId) loadMyReviews();
-  }, [myUserId]);
-
   async function loadRequests() {
     try {
       setReqError("");
@@ -233,8 +201,20 @@ export default function WorkerProfile() {
       const data = Array.isArray(res.data) ? res.data : [];
       setRequests(data);
     } catch (err) {
-      console.error("Error loading requests:", err);
-      setReqError("Грешка при зареждане на заявки.");
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || "";
+      const accessRestricted =
+        status === 403 &&
+        /worker (profile|account) (is not approved|is not visible|is not active)/i.test(message);
+
+      if (accessRestricted) {
+        setReqError(
+          "Заявките ще бъдат достъпни, когато профилът ти е одобрен, активен и публичен.",
+        );
+      } else {
+        console.error("Error loading requests:", err);
+        setReqError("Грешка при зареждане на заявки.");
+      }
       setRequests([]);
     } finally {
       setLoadingRequests(false);
@@ -243,20 +223,24 @@ export default function WorkerProfile() {
 
   async function loadCompletedRequests() {
     try {
-      const [completedRes, historyRes] = await Promise.all([
-        apiGet("/requests/worker?scope=history").catch(() => apiGet("/requests/worker/completed").catch(() => ({ data: [] }))),
-        apiGet("/workers/me/history").catch(() => ({ data: [] })),
-      ]);
+      const completedRes = await apiGet("/requests/worker?scope=history");
       const completed = Array.isArray(completedRes.data) ? completedRes.data : [];
-      const history = Array.isArray(historyRes.data) ? historyRes.data : [];
-      setCompletedRequests(history.length ? history : completed);
+      setCompletedRequests(completed);
     } catch (err) {
-      console.error("Error loading completed requests:", err);
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || "";
+      const accessRestricted =
+        status === 403 &&
+        /worker (profile|account) (is not approved|is not visible|is not active)/i.test(message);
+
+      if (!accessRestricted) {
+        console.error("Error loading completed requests:", err);
+      }
       setCompletedRequests([]);
     }
   }
 
-  async function loadMyReviews() {
+  const loadMyReviews = useCallback(async () => {
     try {
       setRatingError("");
       setRatingLoading(true);
@@ -270,7 +254,11 @@ export default function WorkerProfile() {
     } finally {
       setRatingLoading(false);
     }
-  }
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (myUserId) loadMyReviews();
+  }, [loadMyReviews, myUserId]);
 
   async function loadMeProfile() {
     try {
@@ -308,9 +296,13 @@ export default function WorkerProfile() {
   }
 
   function hasApplied(req) {
-    const list = normalizeArr(req.appliedWorkers).map((x) => Number(x)).filter(Boolean);
     if (!myUserId) return false;
-    return list.includes(Number(myUserId));
+    if (!Array.isArray(req?.applications)) return false;
+    return req.applications.some(
+      (application) =>
+        Number(application?.workerUserId) === Number(myUserId) &&
+        !["withdrawn", "rejected"].includes(application?.status),
+    );
   }
 
   function isClosed(req) {
@@ -319,33 +311,42 @@ export default function WorkerProfile() {
 
   function isAssignedToMe(req) {
     if (!myUserId) return false;
-    return Number(req?.assignedWorkerId) === Number(myUserId);
+    return Number(req?.assignedWorkerUserId) === Number(myUserId);
   }
 
   function requestStatusKey(req) {
     return req?.statusKey || "";
   }
 
-  function canComplete(req) {
-    return false;
+  function requestAllows(req, action) {
+    return Array.isArray(req?.allowedActions) && req.allowedActions.includes(action);
   }
 
   function canWithdrawApplication(req) {
-    return hasApplied(req) && !isAssignedToMe(req) && !toNum(req.assignedWorkerId) && !isClosed(req);
+    return (
+      hasApplied(req) &&
+      !isAssignedToMe(req) &&
+      !toNum(req.assignedWorkerUserId) &&
+      !isClosed(req) &&
+      requestAllows(req, "withdraw_application")
+    );
   }
 
   function workerStepAction(req) {
     if (!isAssignedToMe(req)) return null;
     const actions = {
-      worker_selected: { endpoint: "worker-confirm", label: "Потвърждавам заявката" },
-      assigned: { endpoint: "worker-confirm", label: "Потвърждавам заявката" },
-      worker_confirmed: { endpoint: "on-site", label: "На адрес съм" },
-      worker_on_site: { endpoint: "inspect", label: "Огледах обекта" },
-      inspected: { endpoint: "start", label: "Започнах работа" },
-      in_progress: { endpoint: "finish", label: "Свърших работа", needsPhotos: true },
+      worker_selected: { endpoint: "worker-confirm", label: "Потвърждавам заявката", action: "mark_arrived" },
+      assigned: { endpoint: "worker-confirm", label: "Потвърждавам заявката", action: "mark_arrived" },
+      worker_confirmed: { endpoint: "on-site", label: "На адрес съм", action: "mark_arrived" },
+      worker_on_site: { endpoint: "inspect", label: "Огледах обекта", action: "start_work" },
+      inspected: { endpoint: "start", label: "Започнах работа", action: "start_work" },
+      in_progress: { endpoint: "finish", label: "Свърших работа", needsPhotos: true, action: "mark_ready" },
       work_finished: { endpoint: "ready", label: "Готово за клиента" },
+      reviewed: { endpoint: "complete", label: "Затвори поръчката", action: "close" },
     };
-    return actions[requestStatusKey(req)] || null;
+    const step = actions[requestStatusKey(req)] || null;
+    if (!step || !step.action) return step;
+    return requestAllows(req, step.action) ? step : null;
   }
 
   async function handleCompletionPhotos(requestId, files) {
@@ -370,7 +371,7 @@ export default function WorkerProfile() {
       setApplyMsg("");
       setCompletingId(requestId);
 
-      await apiPost(`/requests/${requestId}/complete`, { afterPhotos: completionPhotos[requestId] || [] });
+      await apiPost(`/requests/${requestId}/complete`, {});
 
       setApplyMsg(`Поръчка #${requestId} е затворена ✅`);
       await loadRequests();
@@ -514,25 +515,6 @@ export default function WorkerProfile() {
     }
   };
 
-  const updateCalc = (field, value) => {
-    const next = { ...calc, [field]: value };
-    const areaNum = parseFloat(next.area) || 0;
-    const laborNum = parseFloat(next.laborPerM2) || 0;
-    const conf = PRICE_TABLE[next.type];
-
-    if (!conf || !areaNum) {
-      next.materials = 0;
-      next.labor = 0;
-      next.total = 0;
-    } else {
-      next.materials = Math.round(areaNum * conf.material);
-      next.labor = Math.round(areaNum * laborNum);
-      next.total = next.materials + next.labor;
-    }
-
-    setCalc(next);
-  };
-
   // =========================
   // ✅ GALLERY FUNCTIONS
   // =========================
@@ -645,7 +627,7 @@ export default function WorkerProfile() {
     const total = requests.length;
 
     const byStatus = requests.reduce((acc, r) => {
-      const s = (r.status || "—").toLowerCase();
+      const s = (r.statusLabel || r.statusKey || "—").toLowerCase();
       acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
@@ -668,13 +650,13 @@ export default function WorkerProfile() {
 
     return requests.filter((r) => {
       const catOk = categoryFilter === "all" ? true : r.category === categoryFilter;
-      const st = (r.status || "").toLowerCase();
+      const st = (r.statusKey || "").toLowerCase();
       const statusOk = statusFilter === "all" ? true : st === statusFilter;
 
       if (!catOk || !statusOk) return false;
       if (!q) return true;
 
-      const hay = [r.clientName, r.phone, r.address, r.description, r.category, r.email, r.status]
+      const hay = [r.clientName, r.address, r.description, r.category, r.statusLabel, r.statusKey]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -689,8 +671,15 @@ export default function WorkerProfile() {
   }, [requests]);
 
   const statuses = useMemo(() => {
-    const set = new Set(requests.map((r) => (r.status || "").toLowerCase()).filter(Boolean));
-    return ["all", ...Array.from(set)];
+    const labelsByKey = new Map();
+    requests.forEach((request) => {
+      const key = String(request.statusKey || "").toLowerCase();
+      if (key) labelsByKey.set(key, request.statusLabel || key);
+    });
+    return [
+      { key: "all", label: "Всички статуси" },
+      ...Array.from(labelsByKey, ([key, label]) => ({ key, label })),
+    ];
   }, [requests]);
 
   const galleryAlbums = useMemo(() => {
@@ -806,7 +795,25 @@ export default function WorkerProfile() {
     try {
       setApplyMsg("");
       setCompletingId(req.id);
-      const payload = action.needsPhotos ? { afterPhotos: completionPhotos[req.id] || [] } : {};
+      let payload = {};
+
+      if (action.needsPhotos) {
+        const photos = completionPhotos[req.id] || [];
+        if (isDevMockToken()) {
+          payload = { afterPhotos: photos };
+        } else {
+          const imageFiles = photos
+            .map((photo) => photo?.file)
+            .filter((file) => file instanceof File);
+
+          if (imageFiles.length) {
+            const mediaPayload = new FormData();
+            imageFiles.forEach((file) => mediaPayload.append("images", file));
+            await apiPost(`/requests/${req.id}/media/after`, mediaPayload);
+          }
+        }
+      }
+
       await apiPost(`/requests/${req.id}/${action.endpoint}`, payload);
       setApplyMsg(`Заявка #${req.id}: ${action.label}.`);
       await loadRequests();
@@ -904,112 +911,24 @@ export default function WorkerProfile() {
 
   return (
     <div className="flex min-h-screen bg-[#07101d] text-white">
-      <aside className="w-64 bg-[#0a1929]/95 border-r border-cyan-400/15 pt-24 fixed h-full shadow-2xl shadow-cyan-950/20">
-        <nav className="flex flex-col gap-2 px-5 text-sm">
-          {[
-            ["dashboard", "Контрол панел"],
-            ["requests", "Заявки"],
-            ["map", "Карта заявки"],
-            ["profile", "Профил"],
-            ["referrals", "Покани майстор"],
-            ["gallery", "Галерия"],
-            ["calculator", "Калкулатор"],
-            ["settings", "Настройки"],
-            ["subscription", "Абонамент"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => selectWorkerTab(key)}
-              className={`rounded-xl px-4 py-3 text-left font-bold transition ${
-                activeTab === key
-                  ? "border border-green-400/20 bg-green-400/10 text-green-300 shadow-lg shadow-green-950/20"
-                  : "text-slate-300 hover:bg-cyan-400/10 hover:text-cyan-100"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-
-          <div className="mt-6">
-            <LogoutButton />
-          </div>
-        </nav>
-      </aside>
+      <WorkerProfileSidebar activeTab={activeTab} onSelect={selectWorkerTab} />
 
       <main className="flex-1 ml-64 pt-24 px-10 pb-20 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)]">
         {activeTab === "dashboard" && (
           <div className="max-w-6xl mx-auto rounded-2xl border border-cyan-400/15 bg-[#081827]/75 p-6 shadow-2xl shadow-cyan-950/20">
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <h1 className="text-3xl font-black">Контрол панел</h1>
-
-              <button
-                onClick={() => {
-                  loadRequests();
-                  loadMyReviews();
-                }}
-                className="rounded-xl bg-green-500 px-5 py-3 font-black text-white shadow-lg shadow-green-950/30 transition hover:bg-green-400"
-              >
-                Обнови
-              </button>
-            </div>
-
-            {loadingRequests && <p className="text-gray-400">Зареждане на заявки...</p>}
-            {reqError && <p className="text-red-400">{reqError}</p>}
-            {applyMsg && <p className="text-yellow-300 mt-2">{applyMsg}</p>}
-
-            <div className="grid md:grid-cols-4 gap-4 mt-4">
-              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
-                <p className="text-cyan-100/70 text-sm">Общо заявки</p>
-                <p className="text-3xl font-black mt-2">{stats.total}</p>
-              </div>
-
-              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
-                <p className="text-cyan-100/70 text-sm">Рейтинг</p>
-                {ratingLoading ? (
-                  <p className="text-gray-400 mt-2">Зареждане...</p>
-                ) : ratingError ? (
-                  <p className="text-red-400 mt-2">{ratingError}</p>
-                ) : (
-                  <div className="mt-2">
-                    <div className="text-2xl font-bold">{ratingInfo.average} ⭐</div>
-                    <div className="text-sm text-gray-400">{ratingInfo.total} отзива</div>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
-                <p className="text-cyan-100/70 text-sm">По статус</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {Object.keys(stats.byStatus).length === 0 ? (
-                    <p className="text-gray-500">—</p>
-                  ) : (
-                    Object.entries(stats.byStatus).map(([k, v]) => (
-                      <div key={k} className="flex justify-between">
-                        <span className="capitalize">{k}</span>
-                        <span className="font-bold">{v}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-5 shadow-inner shadow-cyan-950/20">
-                <p className="text-cyan-100/70 text-sm">По категория</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {Object.keys(stats.byCategory).length === 0 ? (
-                    <p className="text-gray-500">—</p>
-                  ) : (
-                    Object.entries(stats.byCategory).map(([k, v]) => (
-                      <div key={k} className="flex justify-between">
-                        <span>{k}</span>
-                        <span className="font-bold">{v}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
+            <WorkerDashboardSummary
+              stats={stats}
+              loadingRequests={loadingRequests}
+              requestError={reqError}
+              actionMessage={applyMsg}
+              ratingInfo={ratingInfo}
+              ratingLoading={ratingLoading}
+              ratingError={ratingError}
+              onRefresh={() => {
+                loadRequests();
+                loadMyReviews();
+              }}
+            />
 
             <div className="mt-8 rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-6 shadow-inner shadow-cyan-950/20">
               <h2 className="text-xl font-bold mb-4">Последни заявки</h2>
@@ -1021,12 +940,18 @@ export default function WorkerProfile() {
                   {stats.newest.map((r) => {
                     const applied = hasApplied(r);
                     const closed = isClosed(r);
-                    const hasAssigned = !!toNum(r.assignedWorkerId);
+                    const hasAssigned = !!toNum(r.assignedWorkerUserId);
                     const assignedToMe = isAssignedToMe(r);
                     const canWithdraw = canWithdrawApplication(r);
 
                       const profileCannotApply = !canApplyToJobs();
-                      const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === r.id;
+                      const disabledApply =
+                        profileCannotApply ||
+                        applied ||
+                        closed ||
+                        hasAssigned ||
+                        !requestAllows(r, "apply") ||
+                        applyingId === r.id;
                       const showContact = assignedToMe;
                       const stageAction = workerStepAction(r);
                       const showComplete = Boolean(stageAction);
@@ -1039,7 +964,7 @@ export default function WorkerProfile() {
                           <div className="font-bold">
                             #{r.id} • {r.category} • {r.clientName}
                           </div>
-                          <div className="text-sm text-red-400">{r.status}</div>
+                          <div className="text-sm text-red-400">{r.statusLabel || r.statusKey}</div>
                         </div>
 
                         <div className="text-sm text-gray-400 mt-2">
@@ -1068,13 +993,10 @@ export default function WorkerProfile() {
                         {/* ✅ Когато е назначена на този майстор */}
                         {showContact && (
                           <div className="mt-3 bg-gray-800 border border-gray-700 rounded-xl p-3">
-                            <div className="text-green-400 font-bold">Свържете се с клиента</div>
+                            <div className="text-green-400 font-bold">Данни за посещението</div>
                             <div className="text-sm text-gray-200 mt-2">
                               <div>
                                 <b>Име:</b> {r.clientName || "—"}
-                              </div>
-                              <div>
-                                <b>Телефон:</b> {r.phone || "—"}
                               </div>
                               <div>
                                 <b>Адрес:</b> {r.address || "—"}
@@ -1189,7 +1111,7 @@ export default function WorkerProfile() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Търси по име, адрес, телефон..."
+                placeholder="Търси по категория, район или описание..."
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
               />
 
@@ -1210,9 +1132,9 @@ export default function WorkerProfile() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
               >
-                {statuses.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "all" ? "Всички статуси" : s}
+                {statuses.map((status) => (
+                  <option key={status.key} value={status.key}>
+                    {status.label}
                   </option>
                 ))}
               </select>
@@ -1221,7 +1143,9 @@ export default function WorkerProfile() {
             {loadingRequests ? (
               <p className="text-gray-400">Зареждане...</p>
             ) : reqError ? (
-              <p className="text-red-400">{reqError}</p>
+              <p className={reqError.startsWith("Заявките ще бъдат") ? "text-amber-300" : "text-red-400"}>
+                {reqError}
+              </p>
             ) : filteredRequests.length === 0 ? (
               <p className="text-gray-400">Няма налични заявки.</p>
             ) : (
@@ -1229,12 +1153,18 @@ export default function WorkerProfile() {
                 {filteredRequests.map((req) => {
                   const applied = hasApplied(req);
                   const closed = isClosed(req);
-                  const hasAssigned = !!toNum(req.assignedWorkerId);
+                  const hasAssigned = !!toNum(req.assignedWorkerUserId);
                   const assignedToMe = isAssignedToMe(req);
                   const canWithdraw = canWithdrawApplication(req);
 
                   const profileCannotApply = !canApplyToJobs();
-                  const disabledApply = profileCannotApply || applied || closed || hasAssigned || applyingId === req.id;
+                  const disabledApply =
+                    profileCannotApply ||
+                    applied ||
+                    closed ||
+                    hasAssigned ||
+                    !requestAllows(req, "apply") ||
+                    applyingId === req.id;
                   const showContact = assignedToMe;
                   const stageAction = workerStepAction(req);
                   const showComplete = Boolean(stageAction);
@@ -1247,7 +1177,7 @@ export default function WorkerProfile() {
                         <h2 className="text-xl font-bold">
                           #{req.id} • {req.category}
                         </h2>
-                        <span className="text-red-400 font-bold">{req.status}</span>
+                        <span className="text-red-400 font-bold">{req.statusLabel || req.statusKey}</span>
                       </div>
 
                       <div className="mt-3 grid md:grid-cols-2 gap-3 text-sm">
@@ -1255,13 +1185,7 @@ export default function WorkerProfile() {
                           <strong>Клиент:</strong> {req.clientName}
                         </p>
                         <p className="text-gray-300">
-                          <strong>Телефон:</strong> {req.phone}
-                        </p>
-                        <p className="text-gray-300">
-                          <strong>Имейл:</strong> {req.email}
-                        </p>
-                        <p className="text-gray-300">
-                          <strong>Адрес:</strong> {req.address || "—"}
+                          <strong>{req.addressPrecision === "exact" ? "Адрес:" : "Район:"}</strong> {req.address || "—"}
                         </p>
                       </div>
 
@@ -1297,15 +1221,12 @@ export default function WorkerProfile() {
 
                       {showContact && (
                         <div className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4">
-                          <div className="text-green-400 font-bold">Свържете се с клиента</div>
-                          <div className="grid md:grid-cols-3 gap-3 text-sm mt-3">
+                          <div className="text-green-400 font-bold">Данни за посещението</div>
+                          <div className="grid md:grid-cols-2 gap-3 text-sm mt-3">
                             <div className="text-gray-200">
                               <b>Име:</b> {req.clientName || "—"}
                             </div>
                             <div className="text-gray-200">
-                              <b>Телефон:</b> {req.phone || "—"}
-                            </div>
-                            <div className="text-gray-200 md:col-span-3">
                               <b>Адрес:</b> {req.address || "—"}
                             </div>
                           </div>
@@ -1554,290 +1475,47 @@ export default function WorkerProfile() {
         )}
 
         {activeTab === "referrals" && (
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div>
-                <h1 className="text-3xl font-bold">Покани майстор</h1>
-                <p className="mt-2 text-gray-400">
-                  Покани добър майстор в Bricky. След като завърши успешно 2 ремонта от различни клиенти,
-                  получаваш 30 дни подсилена видимост.
-                </p>
-              </div>
-              <button onClick={loadReferrals} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">
-                Обнови
-              </button>
-            </div>
-
-            <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">Твоят referral линк</h2>
-
-                {referralLoading ? <p className="text-gray-400">Зареждане...</p> : null}
-                {referralError ? <p className="text-red-400 mb-3">{referralError}</p> : null}
-                {referralMsg ? <p className="text-green-300 mb-3">{referralMsg}</p> : null}
-
-                {!referralInfo.referralUrl ? (
-                  <button onClick={createReferralCode} className="bg-green-600 hover:bg-green-700 px-5 py-3 rounded-lg font-bold">
-                    Създай линк за покана
-                  </button>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-sm text-gray-400">Код</div>
-                      <div className="mt-1 rounded-lg bg-gray-900 px-4 py-3 text-2xl font-extrabold tracking-wider">
-                        {referralInfo.code}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-gray-400">Линк</div>
-                      <div className="mt-1 break-all rounded-lg bg-gray-900 px-4 py-3 text-sm text-blue-200">
-                        {referralInfo.referralUrl}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                      <button onClick={copyReferralLink} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">
-                        Копирай линк
-                      </button>
-                      <button onClick={shareReferralLink} className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold">
-                        Сподели
-                      </button>
-                    </div>
-
-                    <p className="text-sm text-gray-400">
-                      Наградата не гарантира постоянно първо място. Тя дава подсилена видимост в ротация за релевантни категории.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">Прогрес</h2>
-                {(referralInfo.invites || []).length === 0 ? (
-                  <p className="text-gray-400">Още няма поканени майстори.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {(referralInfo.invites || []).map((invite) => (
-                      <div key={invite.id} className="rounded-xl border border-gray-700 bg-gray-900 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="font-bold">Код {invite.code}</div>
-                            <div className="text-sm text-gray-400">Статус: {invite.status}</div>
-                          </div>
-                          <div className="rounded-full bg-red-600/20 border border-red-500/40 px-4 py-2 font-bold text-red-200">
-                            {Math.min(Number(invite.qualifiedRepairCount || 0), 2)}/2 ремонта
-                          </div>
-                        </div>
-                        {invite.rejectionReason ? <p className="mt-2 text-sm text-red-300">{invite.rejectionReason}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {(referralInfo.rewards || []).length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="font-bold mb-3">Активни/исторически награди</h3>
-                    <div className="space-y-2">
-                      {(referralInfo.rewards || []).map((reward) => (
-                        <div key={reward.id} className="rounded-lg bg-gray-900 px-4 py-3 text-sm">
-                          <div className="font-bold">{reward.rewardType}</div>
-                          <div className="text-gray-400">
-                            {reward.status} до {formatBG(reward.endsAt)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <WorkerReferralPanel
+            referralInfo={referralInfo}
+            loading={referralLoading}
+            error={referralError}
+            message={referralMsg}
+            onRefresh={loadReferrals}
+            onCreateCode={createReferralCode}
+            onCopyLink={copyReferralLink}
+            onShareLink={shareReferralLink}
+            formatDate={formatBG}
+          />
         )}
 
         {activeTab === "gallery" && (
-          <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <h1 className="text-3xl font-bold">Галерия</h1>
-
-              <button
-                onClick={loadGallery}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-              >
-                Обнови
-              </button>
-            </div>
-
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-              <h2 className="text-xl font-bold mb-3">Качи снимки от обекти</h2>
-
-              <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-                <input type="file" accept="image/*" multiple onChange={onPickGalleryFiles} className="block" />
-
-                <button
-                  onClick={uploadGallery}
-                  disabled={uploadingGallery || !galleryFiles.length}
-                  className={
-                    uploadingGallery || !galleryFiles.length
-                      ? "bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold"
-                  }
-                >
-                  {uploadingGallery ? "Качвам..." : "Качи"}
-                </button>
-
-                {galleryFiles.length > 0 && (
-                  <span className="text-gray-300 text-sm">
-                    Избрани: <strong>{galleryFiles.length}</strong>
-                  </span>
-                )}
-              </div>
-
-              {galleryError && <p className="text-red-400 mt-3">{galleryError}</p>}
-              {galleryMsg && <p className="text-yellow-300 mt-3">{galleryMsg}</p>}
-            </div>
-
-            <div className="mt-6">
-              {galleryLoading ? (
-                <p className="text-gray-400">Зареждане...</p>
-              ) : galleryAlbums.length === 0 ? (
-                <p className="text-gray-400">Няма качени снимки.</p>
-              ) : (
-                <div className="space-y-3">
-                  {galleryAlbums.map((album, albumIndex) => (
-                    <button
-                      key={album.id}
-                      type="button"
-                      onClick={() => openAlbum(albumIndex)}
-                      className="w-full text-left bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-blue-500 transition"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-green-600/20 border border-green-500/40 px-3 py-1 text-xs font-bold text-green-300">
-                              Реален обект
-                            </span>
-                            <span className="rounded-full bg-blue-600/20 border border-blue-500/40 px-3 py-1 text-xs font-bold text-blue-200">
-                              {album.photos.length} снимки
-                            </span>
-                          </div>
-
-                          <div className="mt-3 text-xl font-extrabold leading-tight">{album.title.replace(/^Обект #\d+\s•\s/, "")}</div>
-                          <div className="mt-1 text-sm text-gray-300">{album.subtitle}</div>
-
-                          <div className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Статус</div>
-                              <div className="font-bold text-green-400">{album.type === "job" ? "Завършен" : "Портфолио"}</div>
-                            </div>
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Време</div>
-                              <div className="font-bold">{album.meta}</div>
-                            </div>
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Дата</div>
-                              <div className="font-bold">{formatBG(album.date)}</div>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 text-sm font-bold text-blue-300">
-                            Виж всички снимки →
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
-                          <div className="overflow-hidden rounded-lg bg-gray-900">
-                            <img
-                              src={album.cover.url}
-                              alt={album.title}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </div>
-                          <div className="relative overflow-hidden rounded-lg bg-gray-900">
-                            <img
-                              src={(album.photos[1] || album.cover).url}
-                              alt={album.title}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                            {album.photos.length > 2 && (
-                              <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-lg font-extrabold">
-                                +{album.photos.length - 2}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-          </div>
+          <WorkerGalleryPanel
+            albums={galleryAlbums}
+            loading={galleryLoading}
+            error={galleryError}
+            message={galleryMsg}
+            selectedFiles={galleryFiles}
+            uploading={uploadingGallery}
+            deletingId={deletingId}
+            activeAlbum={activeAlbum}
+            activePhoto={activePhoto}
+            activePhotoIndex={albumViewer?.photoIndex || 0}
+            canDeleteActivePhoto={canDeleteActivePhoto}
+            onRefresh={loadGallery}
+            onPickFiles={onPickGalleryFiles}
+            onUpload={uploadGallery}
+            onOpenAlbum={openAlbum}
+            onCloseAlbum={closeAlbum}
+            onStepPhoto={stepAlbumPhoto}
+            onSelectPhoto={(photoIndex) =>
+              setAlbumViewer((viewer) => (viewer ? { ...viewer, photoIndex } : viewer))
+            }
+            onDeleteActivePhoto={deleteActiveGalleryPhoto}
+            formatDate={formatBG}
+          />
         )}
 
-        {activeTab === "calculator" && (
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold mb-6">Калкулатор</h1>
-
-            <div className="bg-gray-800 p-6 rounded-xl space-y-4 border border-gray-700">
-              <h2 className="text-2xl font-bold">Bricky Калкулатор</h2>
-
-              <select
-                value={calc.type}
-                onChange={(e) => updateCalc("type", e.target.value)}
-                className="w-full p-3 rounded bg-gray-700"
-              >
-                <option value="">Тип ремонт</option>
-                {Object.keys(PRICE_TABLE).map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="number"
-                  value={calc.area}
-                  onChange={(e) => updateCalc("area", e.target.value)}
-                  placeholder="Площ (кв.м)"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
-                <input
-                  type="number"
-                  value={calc.laborPerM2}
-                  onChange={(e) => updateCalc("laborPerM2", e.target.value)}
-                  placeholder="Цена за труд / кв.м"
-                  className="w-full p-3 rounded bg-gray-700"
-                />
-              </div>
-
-              <div className="bg-gray-900 p-4 rounded-xl space-y-2">
-                <div className="flex justify-between">
-                  <span>Материали:</span>
-                  <span>{calc.materials} лв</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Труд:</span>
-                  <span>{calc.labor} лв</span>
-                </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span>Общо:</span>
-                  <span className="text-green-400 font-bold text-lg">{calc.total} лв</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeTab === "calculator" && <WorkerCalculatorPanel />}
 
         {activeTab === "settings" && (
           <div className="text-center mt-10">
@@ -1859,95 +1537,6 @@ export default function WorkerProfile() {
         )}
       </main>
 
-      {activeAlbum && activePhoto && (
-        <div className="fixed inset-0 z-[80] bg-black/85 px-4 py-6 flex items-center justify-center">
-          <div className="w-full max-w-5xl">
-            <div className="mb-3 flex items-center justify-between gap-3 text-white">
-              <div>
-                <div className="font-bold">{activeAlbum.title}</div>
-                <div className="text-sm text-gray-300">
-                  {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {canDeleteActivePhoto ? (
-                  <button
-                    type="button"
-                    onClick={deleteActiveGalleryPhoto}
-                    disabled={deletingId === activePhoto.id}
-                    className={
-                      deletingId === activePhoto.id
-                        ? "rounded-lg bg-red-950 px-4 py-2 font-bold text-red-200 cursor-not-allowed"
-                        : "rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 font-bold"
-                    }
-                  >
-                    {deletingId === activePhoto.id ? "Трия..." : "Изтрий снимката"}
-                  </button>
-                ) : null}
-                <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
-                  Затвори
-                </button>
-              </div>
-            </div>
-
-            <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
-              <img
-                src={activePhoto.url}
-                alt={activePhoto.name || activeAlbum.title}
-                className="max-h-[72vh] w-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-
-              {activeAlbum.photos.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => stepAlbumPhoto(-1)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepAlbumPhoto(1)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
-                  >
-                    ›
-                  </button>
-                </>
-              )}
-            </div>
-
-            {activeAlbum.photos.length > 1 && (
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {activeAlbum.photos.map((photo, idx) => (
-                  <button
-                    key={photo.id || photo.url || idx}
-                    type="button"
-                    onClick={() => setAlbumViewer((viewer) => ({ ...viewer, photoIndex: idx }))}
-                    className={
-                      idx === albumViewer.photoIndex
-                        ? "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-blue-500"
-                        : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
-                    }
-                  >
-                    <img
-                      src={photo.url}
-                      alt={photo.name || activeAlbum.title}
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

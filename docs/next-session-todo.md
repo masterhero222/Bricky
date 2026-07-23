@@ -1,5 +1,9 @@
 # Next Session TODO
 
+> Canonical Before Production handoff: `docs/before-production-technical-director-handoff-2026-07-05.md`.
+> Updated on 2026-07-05 with the Sprint 1 release-candidate evidence. This file remains the historical detailed backlog; use the handoff's P0-P3 structure for planning and prioritization.
+> Sprint 1 candidate status: backend 7 suites / 29 tests, frontend pricing verification, frontend/backend builds, combined gate, and GitHub Actions pass. Production deployment and post-deploy acceptance are still pending.
+
 ## Highest Priority
 
 - IN PROGRESS in this session: database/request model stabilization:

@@ -16,7 +16,7 @@ export class RepairActivityEntity {
   @Column({ length: 180 })
   label: string;
 
-  @Column({ name: 'unit_type', length: 40, nullable: true })
+  @Column({ name: 'unit_type', type: 'varchar', length: 40, nullable: true })
   unitType: string | null;
 
   @Column({ name: 'is_active', default: true })

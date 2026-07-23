@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AdminAuditLogEntity } from './admin-audit-log.entity';
 import { UsersService } from '../users/users.service';
 import { WorkersService } from '../workers/workers.service';
@@ -9,6 +9,12 @@ import { MediaService } from '../media/media.service';
 import { BillingService } from '../billing/billing.service';
 import { RepairRequestStatus } from '../requests/entities/repair-request.entity';
 import { ReferralsService } from '../referrals/referrals.service';
+import {
+  CatalogActivityInput,
+  CatalogCategoryInput,
+  CatalogService,
+  PricingRuleInput,
+} from '../catalog/catalog.service';
 
 @Injectable()
 export class AdminService {
@@ -21,6 +27,8 @@ export class AdminService {
     private readonly media: MediaService,
     private readonly billing: BillingService,
     private readonly referrals: ReferralsService,
+    private readonly catalog: CatalogService,
+    private readonly dataSource: DataSource,
   ) {}
 
   listAudit() {
@@ -31,10 +39,21 @@ export class AdminService {
     return this.users.searchUsers(query || '');
   }
 
-  async setUserStatus(actorUserId: number, userId: number, status: string, reason?: string) {
-    this.assertOneOf(status, ['active', 'pending', 'blocked', 'deleted'], 'Invalid user status');
+  async setUserStatus(
+    actorUserId: number,
+    userId: number,
+    status: string,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      status,
+      ['active', 'pending', 'blocked', 'deleted'],
+      'Invalid user status',
+    );
     const user = await this.users.updateStatus(userId, status);
-    await this.log(actorUserId, 'user.status_changed', 'user', userId, reason, { status });
+    await this.log(actorUserId, 'user.status_changed', 'user', userId, reason, {
+      status,
+    });
     return user;
   }
 
@@ -42,10 +61,29 @@ export class AdminService {
     return this.workers.getAll({ includeUnapprovedMedia: true });
   }
 
-  async setWorkerApproval(actorUserId: number, workerUserId: number, approvalStatus: string, reason?: string) {
-    this.assertOneOf(approvalStatus, ['pending', 'approved', 'rejected', 'suspended'], 'Invalid worker approval status');
-    const worker = await this.workers.setApprovalStatus(workerUserId, approvalStatus);
-    await this.log(actorUserId, 'worker.approval_changed', 'worker', workerUserId, reason, { approvalStatus });
+  async setWorkerApproval(
+    actorUserId: number,
+    workerUserId: number,
+    approvalStatus: string,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      approvalStatus,
+      ['pending', 'approved', 'rejected', 'suspended'],
+      'Invalid worker approval status',
+    );
+    const worker = await this.workers.setApprovalStatus(
+      workerUserId,
+      approvalStatus,
+    );
+    await this.log(
+      actorUserId,
+      'worker.approval_changed',
+      'worker',
+      workerUserId,
+      reason,
+      { approvalStatus },
+    );
     return worker;
   }
 
@@ -53,7 +91,16 @@ export class AdminService {
     return this.requests.adminListRequests(queue);
   }
 
-  async setRequestStatus(actorUserId: number, requestId: number, status: RepairRequestStatus, reason?: string) {
+  getRequestTimeline(requestId: number) {
+    return this.requests.adminGetTimeline(requestId);
+  }
+
+  async setRequestStatus(
+    actorUserId: number,
+    requestId: number,
+    status: RepairRequestStatus,
+    reason?: string,
+  ) {
     this.assertOneOf(
       status,
       [
@@ -77,8 +124,20 @@ export class AdminService {
       ],
       'Invalid request status',
     );
-    const request = await this.requests.adminSetStatus(requestId, status, actorUserId, reason);
-    await this.log(actorUserId, 'request.status_changed', 'request', requestId, reason, { status });
+    const request = await this.requests.adminSetStatus(
+      requestId,
+      status,
+      actorUserId,
+      reason,
+    );
+    await this.log(
+      actorUserId,
+      'request.status_changed',
+      'request',
+      requestId,
+      reason,
+      { status },
+    );
     return request;
   }
 
@@ -86,23 +145,186 @@ export class AdminService {
     return this.media.listAll();
   }
 
-  async setMediaModeration(actorUserId: number, id: number, moderationStatus: string, reason?: string) {
-    this.assertOneOf(moderationStatus, ['pending', 'approved', 'rejected'], 'Invalid moderation status');
+  listCategories() {
+    return this.catalog.listCatalog();
+  }
+
+  async upsertCategory(
+    actorUserId: number,
+    categoryKey: string,
+    input: CatalogCategoryInput,
+    reason?: string,
+  ) {
+    const category = await this.catalog.upsertCategory(
+      categoryKey,
+      input || {},
+    );
+    await this.log(
+      actorUserId,
+      'catalog.category_changed',
+      'repair_category',
+      categoryKey,
+      reason,
+      {
+        label: category.label,
+        isActive: category.isActive,
+        sortOrder: category.sortOrder,
+      },
+    );
+    return category;
+  }
+
+  async upsertActivity(
+    actorUserId: number,
+    categoryKey: string,
+    activityKey: string,
+    input: CatalogActivityInput,
+    reason?: string,
+  ) {
+    const activity = await this.catalog.upsertActivity(
+      categoryKey,
+      activityKey,
+      input || {},
+    );
+    await this.log(
+      actorUserId,
+      'catalog.activity_changed',
+      'repair_activity',
+      `${categoryKey}:${activityKey}`,
+      reason,
+      {
+        label: activity.label,
+        unitType: activity.unitType,
+        isActive: activity.isActive,
+        sortOrder: activity.sortOrder,
+      },
+    );
+    return activity;
+  }
+
+  listPricingRules() {
+    return this.catalog.listPricingRules();
+  }
+
+  async createPricingRule(
+    actorUserId: number,
+    input: PricingRuleInput,
+    reason?: string,
+  ) {
+    const rule = await this.catalog.createPricingRule(input || {});
+    await this.log(
+      actorUserId,
+      'pricing.rule_created',
+      'pricing_rule',
+      rule.id,
+      reason,
+      {
+        version: rule.version,
+        categoryKey: rule.categoryKey,
+        activityKey: rule.activityKey,
+        isActive: rule.isActive,
+      },
+    );
+    return rule;
+  }
+
+  async setPricingRuleActive(
+    actorUserId: number,
+    id: number,
+    isActive: boolean,
+    reason?: string,
+  ) {
+    const rule = await this.catalog.setPricingRuleActive(id, isActive);
+    await this.log(
+      actorUserId,
+      'pricing.rule_status_changed',
+      'pricing_rule',
+      id,
+      reason,
+      {
+        isActive: rule.isActive,
+        version: rule.version,
+      },
+    );
+    return rule;
+  }
+
+  async setMediaModeration(
+    actorUserId: number,
+    id: number,
+    moderationStatus: string,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      moderationStatus,
+      ['pending', 'approved', 'rejected'],
+      'Invalid moderation status',
+    );
     const media = await this.media.setModerationStatus(id, moderationStatus);
-    await this.log(actorUserId, 'media.moderation_changed', 'media', id, reason, { moderationStatus });
+    await this.log(
+      actorUserId,
+      'media.moderation_changed',
+      'media',
+      id,
+      reason,
+      { moderationStatus },
+    );
+    if (moderationStatus === 'approved' && media?.requestId) {
+      await this.referrals.processCompletedRequest(Number(media.requestId));
+    }
     return media;
   }
 
-  async adjustCredits(actorUserId: number, workerUserId: number, amount: number, reason?: string) {
-    const wallet = await this.billing.adjustCredits(workerUserId, Number(amount), actorUserId, reason || 'admin_adjustment');
-    await this.log(actorUserId, 'credits.adjusted', 'worker', workerUserId, reason, { amount });
-    return wallet;
+  async adjustCredits(
+    actorUserId: number,
+    workerUserId: number,
+    amount: number,
+    reason?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const wallet = await this.billing.adjustCredits(
+        workerUserId,
+        Number(amount),
+        actorUserId,
+        reason || 'admin_adjustment',
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'credits.adjusted',
+        'worker',
+        workerUserId,
+        reason,
+        { amount },
+        manager,
+      );
+      return wallet;
+    });
   }
 
-  async setPlan(actorUserId: number, workerUserId: number, planKey: string, reason?: string) {
-    const plan = await this.billing.setPlan(workerUserId, planKey || 'free');
-    await this.log(actorUserId, 'worker.plan_changed', 'worker', workerUserId, reason, { planKey: plan.planKey });
-    return plan;
+  async setPlan(
+    actorUserId: number,
+    workerUserId: number,
+    planKey: string,
+    reason?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const plan = await this.billing.setPlan(
+        workerUserId,
+        planKey || 'free',
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'worker.plan_changed',
+        'worker',
+        workerUserId,
+        reason,
+        { planKey: plan.planKey },
+        manager,
+      );
+      return plan;
+    });
   }
 
   listReferrals() {
@@ -122,7 +344,11 @@ export class AdminService {
   }
 
   restoreReferralReward(actorUserId: number, id: number, reason?: string) {
-    return this.referrals.restoreReward(id, actorUserId, reason || 'admin_restore');
+    return this.referrals.restoreReward(
+      id,
+      actorUserId,
+      reason || 'admin_restore',
+    );
   }
 
   private async log(
@@ -132,9 +358,13 @@ export class AdminService {
     targetId: number | string,
     reason?: string,
     metadataJson?: Record<string, any>,
+    manager?: EntityManager,
   ) {
-    return this.auditRepo.save(
-      this.auditRepo.create({
+    const auditRepo = manager
+      ? manager.getRepository(AdminAuditLogEntity)
+      : this.auditRepo;
+    return auditRepo.save(
+      auditRepo.create({
         adminUserId,
         action,
         targetType,
@@ -146,6 +376,7 @@ export class AdminService {
   }
 
   private assertOneOf(value: string, allowed: string[], message: string) {
-    if (!allowed.includes(String(value))) throw new BadRequestException(message);
+    if (!allowed.includes(String(value)))
+      throw new BadRequestException(message);
   }
 }

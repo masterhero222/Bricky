@@ -18,9 +18,14 @@ function serviceWith(overrides: Record<string, any> = {}) {
     (overrides.galleryRepo || repo()) as any,
     (overrides.workerProfilesRepo || repo()) as any,
     (overrides.workerSkillsRepo || repo()) as any,
-    (overrides.requestRepo || repo()) as any,
+    (overrides.repairRequestsRepo || repo()) as any,
     (overrides.referralRewardsRepo || repo()) as any,
-    (overrides.media || { findByWorker: jest.fn().mockResolvedValue([]), createAsset: jest.fn(), deleteAsset: jest.fn() }) as any,
+    (overrides.media || {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    }) as any,
   );
 }
 
@@ -259,5 +264,171 @@ describe('WorkersService media moderation', () => {
     const worker = await service.findByUserId(203);
 
     expect(worker.profileBannerKey).toBe('blueprint_general_v1');
+  });
+
+  it('builds public completed-project history from v2 requests and approved media only', async () => {
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 91,
+          assignedWorkerUserId: 201,
+          categoryKey: 'painting',
+          addressText: 'Sofia, private address',
+          addressVisibility: 'exact_after_assignment',
+          description: 'Painting',
+          status: 'completed',
+          completedAt: new Date('2026-07-19T12:00:00Z'),
+          archivedAt: new Date('2026-07-19T12:05:00Z'),
+          createdAt: new Date('2026-07-17T12:00:00Z'),
+        },
+      ]),
+    });
+    const media = {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          kind: 'request_before',
+          publicUrl: '/uploads/requests/91/before/approved.jpg',
+          storageKey: 'requests/91/before/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-17T12:00:00Z'),
+        },
+        {
+          id: 2,
+          kind: 'request_after',
+          publicUrl: '/uploads/requests/91/after/pending.jpg',
+          storageKey: 'requests/91/after/pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-19T11:00:00Z'),
+        },
+        {
+          id: 3,
+          kind: 'request_after',
+          publicUrl: '/uploads/requests/91/after/approved.jpg',
+          storageKey: 'requests/91/after/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-19T11:05:00Z'),
+        },
+      ]),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    const result = await service.getHistoryByUserId(201);
+
+    expect(repairRequestsRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          assignedWorkerUserId: 201,
+          status: 'completed',
+        }),
+      }),
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        requestId: 91,
+        categoryKey: 'painting',
+        address: null,
+        beforePhotos: [expect.objectContaining({ id: 1 })],
+        afterPhotos: [expect.objectContaining({ id: 3 })],
+      }),
+    ]);
+  });
+});
+
+describe('WorkersService v2 independence from legacy tables', () => {
+  const missingTableError = Object.assign(new Error("Table 'worker' doesn't exist"), {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+  });
+
+  it('returns v2 workers when the legacy worker table is absent', async () => {
+    const workerRepository = repo({
+      find: jest.fn().mockRejectedValue(missingTableError),
+    });
+    const workerProfilesRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          userId: 301,
+          publicName: 'V2 Worker',
+          city: 'Sofia',
+          bio: 'Professional worker',
+          experience: '8 years',
+          equipment: 'Own equipment',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          profileBannerKey: 'blueprint_general_v1',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+    });
+    const service = serviceWith({
+      workerRepository,
+      workerProfilesRepo,
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      repairRequestsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      referralRewardsRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+    });
+
+    const workers = await service.getAll();
+
+    expect(workers).toEqual([
+      expect.objectContaining({
+        userId: 301,
+        workerUserId: 301,
+        fullName: 'V2 Worker',
+      }),
+    ]);
+    expect(workerRepository.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns v2 gallery media when the legacy gallery table is absent', async () => {
+    const galleryRepo = repo({
+      find: jest.fn().mockRejectedValue({
+        driverError: { code: 'ER_NO_SUCH_TABLE', errno: 1146 },
+      }),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 41,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/301/gallery/approved.jpg',
+          storageKey: 'workers/301/gallery/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ galleryRepo, media });
+
+    const gallery = await service.getGalleryByUserId(301);
+
+    expect(gallery).toEqual([
+      expect.objectContaining({
+        id: 41,
+        moderationStatus: 'approved',
+      }),
+    ]);
+  });
+
+  it('does not hide non-legacy database failures', async () => {
+    const connectionError = Object.assign(new Error('Database connection lost'), {
+      code: 'PROTOCOL_CONNECTION_LOST',
+    });
+    const service = serviceWith({
+      workerRepository: repo({
+        find: jest.fn().mockRejectedValue(connectionError),
+      }),
+      workerProfilesRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+    });
+
+    await expect(service.getAll()).rejects.toBe(connectionError);
   });
 });

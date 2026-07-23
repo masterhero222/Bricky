@@ -50,11 +50,11 @@ function photoUrl(photo) {
   return photoMediaUrl(photo);
 }
 
-function statusTone(status = "") {
-  const s = String(status).toLowerCase();
-  if (s.includes("зав")) return "border-emerald-300 text-emerald-200 bg-emerald-500/15";
-  if (s.includes("проц")) return "border-amber-300 text-amber-200 bg-amber-500/15";
-  if (s.includes("кандид")) return "border-sky-300 text-sky-200 bg-sky-500/15";
+function statusTone(statusKey = "") {
+  const s = String(statusKey).toLowerCase();
+  if (["client_confirmed", "reviewed", "completed"].includes(s)) return "border-emerald-300 text-emerald-200 bg-emerald-500/15";
+  if (["worker_confirmed", "worker_on_site", "inspected", "in_progress", "work_finished", "ready_for_client_confirmation"].includes(s)) return "border-amber-300 text-amber-200 bg-amber-500/15";
+  if (["applied", "assigned", "worker_selected"].includes(s)) return "border-sky-300 text-sky-200 bg-sky-500/15";
   return "border-white/70 text-white bg-white/10";
 }
 
@@ -330,12 +330,18 @@ export default function RepairMap() {
   }
 
   const activeRequest = requests.find((request) => String(request.id) === String(activeId)) || requests[0] || null;
-  const hasApplied =
-    activeRequest &&
-    Array.isArray(activeRequest.appliedWorkers) &&
-    activeRequest.appliedWorkers.map(Number).includes(currentUserId);
-  const activeStatusKey = activeRequest?.statusKey || String(activeRequest?.status || "").toLowerCase();
-  const isClosed = ["completed", "canceled", "archived", "завършена", "отказана", "архивирана"].includes(activeStatusKey);
+  const hasApplied = Array.isArray(activeRequest?.applications)
+    ? activeRequest.applications.some(
+        (application) =>
+          Number(application?.workerUserId) === currentUserId &&
+          !["withdrawn", "rejected"].includes(application?.status),
+      )
+    : false;
+  const activeStatusKey = activeRequest?.statusKey || "";
+  const isClosed = ["completed", "canceled", "archived"].includes(activeStatusKey);
+  const canApply = Array.isArray(activeRequest?.allowedActions)
+    ? activeRequest.allowedActions.includes("apply")
+    : ["published", "applied"].includes(activeStatusKey);
   const activePhotos = Array.isArray(activeRequest?.photos) ? activeRequest.photos : [];
 
   return (
@@ -422,8 +428,8 @@ export default function RepairMap() {
               <p className="text-gray-400">Избери заявка от картата.</p>
             ) : (
               <div className="space-y-4">
-                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeRequest.status)}`}>
-                  {activeRequest.status || "нова"}
+                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeStatusKey)}`}>
+                  {activeRequest.statusLabel || activeStatusKey}
                 </div>
 
                 <div>
@@ -480,7 +486,7 @@ export default function RepairMap() {
                 <button
                   type="button"
                   onClick={() => applyFromMap(activeRequest.id)}
-                  disabled={Boolean(applyingId) || hasApplied || isClosed}
+                  disabled={Boolean(applyingId) || hasApplied || isClosed || !canApply}
                   className="w-full rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-300 px-4 py-3 font-black"
                 >
                   {hasApplied

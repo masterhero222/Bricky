@@ -16,6 +16,8 @@ Bricky__backup_*/frontend/path
 # Local Codex/worktree artifacts
 .codex-remote-attachments/
 .worktrees/
+/backups/
+frontend/.env.real
 
 # Local secrets/notes
 Брики админ акаунт.txt

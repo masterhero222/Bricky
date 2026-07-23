@@ -14,6 +14,6 @@ export class WorkerSkillEntity {
   @Column({ name: 'category_key', length: 80 })
   categoryKey: string;
 
-  @Column({ name: 'activity_key', length: 120, nullable: true })
+  @Column({ name: 'activity_key', type: 'varchar', length: 120, nullable: true })
   activityKey: string | null;
 }
