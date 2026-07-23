@@ -89,6 +89,47 @@ async function sha256(filePath) {
   return hash.digest('hex');
 }
 
+async function directoryFingerprint(directory) {
+  const root = resolve(directory);
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    fail(`Build directory does not exist: ${root}`);
+  }
+  const files = [];
+  const walk = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const absolutePath = resolve(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+      } else if (entry.isFile()) {
+        files.push(absolutePath);
+      } else {
+        fail(`Build directory contains an unsupported entry: ${absolutePath}`);
+      }
+    }
+  };
+  walk(root);
+  files.sort((left, right) =>
+    relative(root, left).localeCompare(relative(root, right), 'en'),
+  );
+  if (files.length === 0) {
+    fail(`Build directory is empty: ${root}`);
+  }
+
+  const hash = createHash('sha256');
+  let bytes = 0;
+  for (const filePath of files) {
+    const path = relative(root, filePath).replaceAll('\\', '/');
+    const size = statSync(filePath).size;
+    bytes += size;
+    hash.update(`${path}\0${size}\0${await sha256(filePath)}\n`);
+  }
+  return {
+    sha256: hash.digest('hex'),
+    files: files.length,
+    bytes,
+  };
+}
+
 function timestamp() {
   return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z');
 }
@@ -389,6 +430,174 @@ async function verifyBackup() {
         ok: true,
         verifiedAt: new Date().toISOString(),
         manifestPath,
+        source: manifest.source,
+        artifacts: manifest.artifacts,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function readDeploymentBundle(manifestPath, git, verifyActiveBuilds) {
+  if (!isAbsolute(manifestPath) || !existsSync(manifestPath)) {
+    fail(
+      'SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST must be an absolute path to an existing manifest.',
+    );
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (
+    manifest.formatVersion !== 1 ||
+    manifest.kind !== 'sprint3-deployment-bundle' ||
+    manifest.ok !== true
+  ) {
+    fail('Deployment bundle manifest is invalid.');
+  }
+  if (git && manifest.source?.git?.commit !== git.commit) {
+    fail('Deployment bundle references a different Git commit.');
+  }
+  const bundleDirectory = dirname(manifestPath);
+  for (const key of ['backend', 'frontend']) {
+    const artifact = manifest.artifacts?.[key];
+    if (!artifact?.file || !artifact?.sha256 || !artifact?.buildFingerprint) {
+      fail(`Deployment bundle is missing the ${key} artifact.`);
+    }
+    const artifactPath = resolve(bundleDirectory, artifact.file);
+    if (
+      !isPathWithin(bundleDirectory, artifactPath) ||
+      !existsSync(artifactPath) ||
+      !statSync(artifactPath).isFile()
+    ) {
+      fail(`Deployment bundle has an invalid ${key} artifact path.`);
+    }
+    if (statSync(artifactPath).size !== artifact.bytes) {
+      fail(`Deployment bundle ${key} size mismatch.`);
+    }
+    if ((await sha256(artifactPath)) !== artifact.sha256) {
+      fail(`Deployment bundle ${key} checksum mismatch.`);
+    }
+    command('tar', ['-tzf', artifactPath]);
+  }
+
+  if (verifyActiveBuilds) {
+    const activeBuilds = {
+      backend: await directoryFingerprint(resolve(backendRoot, 'dist')),
+      frontend: await directoryFingerprint(
+        resolve(repositoryRoot, 'frontend/dist'),
+      ),
+    };
+    for (const key of ['backend', 'frontend']) {
+      const expected = manifest.artifacts[key].buildFingerprint;
+      if (
+        expected.sha256 !== activeBuilds[key].sha256 ||
+        expected.files !== activeBuilds[key].files ||
+        expected.bytes !== activeBuilds[key].bytes
+      ) {
+        fail(`Active ${key} build does not match the deployment bundle.`);
+      }
+    }
+  }
+  return manifest;
+}
+
+async function packageDeployment() {
+  if (
+    process.env.SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE !==
+    'PACKAGE_BRICKY_DEPLOYMENT'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE=PACKAGE_BRICKY_DEPLOYMENT.',
+    );
+  }
+  const configuredOutputRoot = requireEnv('SPRINT3_DEPLOYMENT_BUNDLE_ROOT');
+  if (!isAbsolute(configuredOutputRoot)) {
+    fail('SPRINT3_DEPLOYMENT_BUNDLE_ROOT must be an absolute path.');
+  }
+  const outputRoot = resolve(configuredOutputRoot);
+  if (isPathWithin(repositoryRoot, outputRoot)) {
+    fail('Deployment bundles must be stored outside the Git worktree.');
+  }
+  const git = gitMetadata();
+  if (git.dirty) {
+    fail('The release worktree is dirty.');
+  }
+  const backendDist = resolve(backendRoot, 'dist');
+  const frontendDist = resolve(repositoryRoot, 'frontend/dist');
+  const backendFingerprint = await directoryFingerprint(backendDist);
+  const frontendFingerprint = await directoryFingerprint(frontendDist);
+  const releaseDirectory = resolve(
+    outputRoot,
+    `${timestamp()}-${git.commit.slice(0, 12)}`,
+  );
+  if (existsSync(releaseDirectory)) {
+    fail(`Deployment bundle already exists: ${releaseDirectory}`);
+  }
+  mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
+
+  const backendArchive = resolve(releaseDirectory, 'backend-build.tar.gz');
+  const frontendArchive = resolve(releaseDirectory, 'frontend-build.tar.gz');
+  command('tar', [
+    '-czf',
+    backendArchive,
+    '-C',
+    repositoryRoot,
+    'backend/dist',
+    'backend/package.json',
+    'backend/package-lock.json',
+  ]);
+  command('tar', [
+    '-czf',
+    frontendArchive,
+    '-C',
+    repositoryRoot,
+    'frontend/dist',
+  ]);
+
+  const manifestPath = resolve(releaseDirectory, 'deployment-manifest.json');
+  const manifest = {
+    formatVersion: 1,
+    kind: 'sprint3-deployment-bundle',
+    ok: true,
+    createdAt: new Date().toISOString(),
+    source: {
+      git,
+      node: process.version,
+    },
+    artifacts: {
+      backend: {
+        file: 'backend-build.tar.gz',
+        bytes: statSync(backendArchive).size,
+        sha256: await sha256(backendArchive),
+        buildFingerprint: backendFingerprint,
+      },
+      frontend: {
+        file: 'frontend-build.tar.gz',
+        bytes: statSync(frontendArchive).size,
+        sha256: await sha256(frontendArchive),
+        buildFingerprint: frontendFingerprint,
+      },
+    },
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await readDeploymentBundle(manifestPath, git, true);
+  console.log(
+    JSON.stringify({ ...manifest, manifestPath, releaseDirectory }, null, 2),
+  );
+}
+
+async function verifyDeploymentBundle() {
+  const manifestPath = requireEnv('SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST');
+  const manifest = await readDeploymentBundle(manifestPath, null, false);
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        manifestPath: resolve(manifestPath),
+        manifestSha256: await sha256(manifestPath),
         source: manifest.source,
         artifacts: manifest.artifacts,
       },
@@ -1026,6 +1235,14 @@ async function deploymentPreflight() {
     migrationReportPath,
     git,
   );
+  const deploymentBundleManifestPath = requireEnv(
+    'SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST',
+  );
+  const deploymentBundle = await readDeploymentBundle(
+    deploymentBundleManifestPath,
+    git,
+    true,
+  );
 
   const backendEntry = resolve(backendRoot, 'dist/main.js');
   const frontendEntry = resolve(repositoryRoot, 'frontend/dist/index.html');
@@ -1074,6 +1291,11 @@ async function deploymentPreflight() {
     git,
     migrationReportPath: resolve(migrationReportPath),
     migrationCompletedAt: migrationReport.completedAt,
+    deploymentBundleManifestPath: resolve(deploymentBundleManifestPath),
+    deploymentBundleManifestSha256: await sha256(
+      deploymentBundleManifestPath,
+    ),
+    deploymentBundleCreatedAt: deploymentBundle.createdAt,
     backendEntry,
     frontendEntry,
     pm2: {
@@ -1182,7 +1404,7 @@ async function acceptProduction() {
   console.log(JSON.stringify({ ...report, reportPath }, null, 2));
 }
 
-function selfTest() {
+async function selfTest() {
   assertSafeDatabaseName('bricky_sprint3_rehearsal');
   assertReleaseGitMatchesManifest(
     { commit: 'release-commit', dirty: false },
@@ -1220,6 +1442,34 @@ function selfTest() {
       );
     }
   }
+  const temporaryRoot = resolve(
+    process.env.TEMP || process.env.TMPDIR || '/tmp',
+    `bricky-sprint3-release-self-test-${process.pid}`,
+  );
+  rmSync(temporaryRoot, { recursive: true, force: true });
+  try {
+    const first = resolve(temporaryRoot, 'first');
+    const second = resolve(temporaryRoot, 'second');
+    mkdirSync(first, { recursive: true });
+    mkdirSync(second, { recursive: true });
+    writeFileSync(resolve(first, 'index.js'), 'same-build\n');
+    writeFileSync(resolve(second, 'index.js'), 'same-build\n');
+    const firstFingerprint = await directoryFingerprint(first);
+    const secondFingerprint = await directoryFingerprint(second);
+    if (
+      JSON.stringify(firstFingerprint) !== JSON.stringify(secondFingerprint)
+    ) {
+      fail('Equal build directories produced different fingerprints.');
+    }
+    writeFileSync(resolve(second, 'index.js'), 'changed-build\n');
+    if (
+      (await directoryFingerprint(second)).sha256 === firstFingerprint.sha256
+    ) {
+      fail('Changed build directory kept the same fingerprint.');
+    }
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
   console.log(JSON.stringify({ ok: true, action: 'self-test' }, null, 2));
 }
 
@@ -1227,6 +1477,8 @@ const actions = {
   preflight,
   backup,
   verify: verifyBackup,
+  'package-deployment': packageDeployment,
+  'verify-deployment-bundle': verifyDeploymentBundle,
   'restore-rehearsal': restoreRehearsal,
   'certify-rehearsal': certifyRehearsal,
   'migrate-production': migrateProduction,
@@ -1240,6 +1492,8 @@ const actions = {
         '  preflight           Read-only production configuration and connectivity checks',
         '  backup              Create DB/uploads archives and a checksum manifest',
         '  verify              Verify an existing backup manifest and its artifacts',
+        '  package-deployment  Create immutable backend/frontend build archives',
+        '  verify-deployment-bundle Verify deployment archive checksums',
         '  restore-rehearsal   Restore only to a disposable rehearsal DB and directory',
         '  certify-rehearsal   Run all rehearsal gates and write a release certificate',
         '  migrate-production  Apply migrations only after matching backup/rehearsal evidence',

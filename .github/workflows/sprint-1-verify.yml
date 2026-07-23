@@ -44,6 +44,31 @@ jobs:
       - name: Run Bricky verification gate
         run: node scripts/verify-sprint-1.mjs
 
+      - name: Package and verify immutable deployment bundle
+        working-directory: backend
+        env:
+          SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE: PACKAGE_BRICKY_DEPLOYMENT
+          SPRINT3_DEPLOYMENT_BUNDLE_ROOT: ${{ runner.temp }}/sprint3-deployment-bundles
+        run: |
+          npm run release:package-deployment:sprint3
+          export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST
+          SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST="$(find "$SPRINT3_DEPLOYMENT_BUNDLE_ROOT" -name deployment-manifest.json -type f -print -quit)"
+          test -n "$SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST"
+          npm run release:verify-deployment-bundle:sprint3
+
+          backend_archive="$(node -e "
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const manifestPath = process.env.SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST;
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            process.stdout.write(path.resolve(path.dirname(manifestPath), manifest.artifacts.backend.file));
+          ")"
+          printf 'tamper' >> "$backend_archive"
+          if npm run release:verify-deployment-bundle:sprint3; then
+            echo "Tampered deployment bundle was accepted."
+            exit 1
+          fi
+
   migration-rehearsal:
     runs-on: ubuntu-latest
     timeout-minutes: 10

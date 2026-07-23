@@ -23,6 +23,8 @@
     "release:preflight:sprint3": "node scripts/sprint3-release.mjs preflight",
     "release:backup:sprint3": "node scripts/sprint3-release.mjs backup",
     "release:verify-backup:sprint3": "node scripts/sprint3-release.mjs verify",
+    "release:package-deployment:sprint3": "node scripts/sprint3-release.mjs package-deployment",
+    "release:verify-deployment-bundle:sprint3": "node scripts/sprint3-release.mjs verify-deployment-bundle",
     "release:restore-rehearsal:sprint3": "node scripts/sprint3-release.mjs restore-rehearsal",
     "release:certify-rehearsal:sprint3": "node scripts/sprint3-release.mjs certify-rehearsal",
     "release:migrate-production:sprint3": "node scripts/sprint3-release.mjs migrate-production",
