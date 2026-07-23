@@ -91,15 +91,13 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Create isolated lifecycle database
+      - name: Create isolated Sprint 3 lifecycle database
         env:
           MYSQL_PWD: root
         run: |
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260704_000_legacy_baseline.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_001_sprint2_foundation_up.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_002_moderation_gate_up.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260718_sprint3_v2_data_core.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260719_sprint3_v2_schema_alignment.sql
 
       - name: Run MySQL request lifecycle E2E
         working-directory: backend
