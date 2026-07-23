@@ -577,10 +577,10 @@ async function main() {
         method: 'POST',
         token: restrictedWorker.token,
         body: {},
-        expected: [403],
+        expected: [401],
       })
     ).status,
-    403,
+    401,
   );
   await api(`/admin/users/${restrictedWorkerUser.id}/status`, {
     method: 'POST',
