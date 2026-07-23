@@ -25,7 +25,7 @@ Sprint 3 изгражда професионалното data ядро на Bric
 | Admin backoffice | 95% | Users, workers, requests, media, referrals и audit са налични |
 | Frontend интеграция | 95% | Основните роли и маршрути работят през реалния API |
 | Privacy и security | 98% | Release candidate-ът защитава контакти, адреси, роли и suspended users |
-| Production readiness | 75% | Инструментите са готови; live rehearsal/deploy не са изпълнени |
+| Production readiness | 80% | Backup/rollback и post-deploy acceptance gates са готови; live deploy не е изпълнен |
 
 ## Завършено
 
@@ -112,6 +112,19 @@ draft
       профили и не позволява enumeration на pending/private/blocked майстори.
 - [x] Backend и frontend production dependency audit са с 0 уязвимости.
 
+### Production release gates
+
+- [x] Backup manifest-ът пази SHA-256 за DB и uploads.
+- [x] Restore rehearsal доказва DB/uploads rollback чрез fingerprint.
+- [x] Production migration изисква същия commit, backup и rehearsal evidence.
+- [x] Deployment preflight проверява PM2, nginx и build artifacts.
+- [x] Public smoke проверява readiness, SPA routes, assets, worker privacy и
+      реални `/uploads` изображения.
+- [x] Production acceptance изисква точния deployed commit и стар token на
+      suspend-нат test user.
+- [x] При успех се издава `post-deploy-report.json`, свързан чрез SHA-256 с
+      production migration evidence.
+
 ## Проверен browser flow
 
 Пълният flow е изпълнен през реални Nest backend, MySQL и Vite frontend:
@@ -132,9 +145,10 @@ draft
 Проверено на 23.07.2026 г. локално и в GitHub Actions върху текущия merge с
 `origin/main`:
 
-Release candidate code fix: `087cad2` (`fix: remove private fields from public worker responses`)
+Release candidate privacy fix: `087cad2` (`fix: remove private fields from public worker responses`)
 
-Validated branch head: `96c98b8` (`test: enforce worker privacy across public API shapes`)
+Latest locally validated release tooling: `55ba5c0`
+(`ci: certify sprint 3 production acceptance`)
 
 | Проверка | Резултат |
 | --- | --- |
@@ -153,8 +167,8 @@ Validated branch head: `96c98b8` (`test: enforce worker privacy across public AP
 | Sprint 2 migration and rollback rehearsal | Passed |
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
 | Public worker list/profile/batch privacy smoke | Passed |
-| Bricky verification GitHub workflow #94 | Passed |
-| Sprint 3 CI GitHub workflow #30 | Passed |
+| Public post-deploy contract test | Passed |
+| GitHub verification workflows | Passed on previous head; current head pending push |
 
 ## Текущо състояние на интеграцията
 
@@ -183,6 +197,8 @@ Validated branch head: `96c98b8` (`test: enforce worker privacy across public AP
 - [ ] След deploy публичният `/api/workers` да бъде проверен за липса на
       `email`, `phone` и други private полета.
 - [ ] Suspended user да бъде проверен срещу production API със стар token.
+- [x] Acceptance командата автоматично отказва production при липсващ или
+      неправилно приет suspended-user token.
 
 Pre-deploy baseline от 23.07.2026 г.:
 
@@ -204,6 +220,7 @@ Pre-deploy baseline от 23.07.2026 г.:
 - [ ] Изпълнение и проверка на rollback процедурата в rehearsal средата.
 - [ ] Production deployment.
 - [ ] Post-deploy API и browser smoke test.
+- [ ] Архивиране на успешния `post-deploy-report.json`.
 
 ### P2 - след release
 
@@ -222,4 +239,5 @@ Sprint 3 е завършен само когато:
 4. Release candidate е deploy-нат.
 5. Client, worker и admin smoke flow работи на live.
 6. Public API не издава private контакти или точен адрес.
-7. Production evidence и rollback данните са архивирани.
+7. `post-deploy-report.json`, production evidence и rollback данните са
+   архивирани.

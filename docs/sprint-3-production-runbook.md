@@ -201,7 +201,15 @@ build artifacts, PM2 process path/status, `nginx -t`, активния `frontend
 и backend proxy port.
 
 5. Проверка, че nginx сочи към активния `frontend/dist`.
-6. Restart на `bricky-backend` чрез PM2.
+6. Задаване на точния release SHA и restart на `bricky-backend` чрез PM2:
+
+```bash
+export APP_COMMIT_SHA="$(git rev-parse HEAD)"
+pm2 restart bricky-backend --update-env
+```
+
+`GET /api/health/ready` трябва да върне същия SHA в полето `commit`.
+
 7. Проверка на PM2 status и error log.
 8. Read-only public/API smoke върху `https://bricky.bg`:
 
@@ -211,8 +219,38 @@ npm run release:smoke-public:sprint3
 ```
 
 Smoke командата не създава данни. Тя проверява SPA маршрутите, production
-assets, public workers API, worker profile API и липсата на публични
-`email`/`phone` полета.
+assets, readiness договора, public workers API, worker profile API, реални
+`/uploads` изображения и липсата на публични `email`/`phone` полета.
+
+## 6.1 Production acceptance certificate
+
+Преди deployment се създава отделен тестов worker, взема се валиден token и
+след това акаунтът се suspend-ва от админ. Token-ът не се записва във файл или
+в shell history. След restart се изпълнява финалният read-only acceptance gate:
+
+```bash
+export SPRINT3_PUBLIC_URL=https://bricky.bg
+export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
+export SPRINT3_SUSPENDED_USER_TOKEN='already-issued-token-from-suspended-test-user'
+export SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION
+npm run release:accept-production:sprint3
+unset SPRINT3_SUSPENDED_USER_TOKEN
+```
+
+Командата отказва acceptance, ако:
+
+- `/api/health/ready` не доказва точния checkout commit;
+- DB или uploads readiness не е `ok`;
+- SPA route или build asset не се зарежда;
+- public worker response съдържа private поле;
+- публична `/uploads` снимка не се сервира като image;
+- старият token не е отказан с `Account is not active`;
+- PM2/nginx сочат към различни build artifacts;
+- production migration evidence chain е счупена.
+
+При успех до migration report-а се записва непрезаписваем
+`post-deploy-report.json` с SHA-256 връзка към migration report-а, точния Git
+commit, deployment preflight-а и public smoke резултата.
 
 Задължителни post-deploy проверки:
 
@@ -264,6 +302,7 @@ DB dump и uploads archive от един manifest са една recovery точ�
 - `restore-report.json`;
 - `rehearsal-certificate.json`;
 - `production-migration-report.json`;
+- `post-deploy-report.json`;
 - schema verification output;
 - test/build output;
 - API/browser smoke резултат;
