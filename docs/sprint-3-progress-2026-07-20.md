@@ -108,6 +108,8 @@ draft
 - [x] Издадени по-рано token-и не заобикалят последващ suspend/block.
 - [x] Worker-only endpoints проверяват worker role.
 - [x] Public worker grid допуска само active, approved и public профили.
+- [x] Public worker batch lookup допуска само active, approved и public
+      профили и не позволява enumeration на pending/private/blocked майстори.
 - [x] Backend и frontend production dependency audit са с 0 уязвимости.
 
 ## Проверен browser flow
@@ -138,7 +140,7 @@ Validated branch head: `96c98b8` (`test: enforce worker privacy across public AP
 | --- | --- |
 | Sprint 1/2/3 cross-sprint verification | Passed |
 | Backend test suites | 28/28 passed |
-| Backend tests | 163/163 passed |
+| Backend tests | 164/164 passed |
 | Backend production build | Passed |
 | Backend Sprint 3 release self-test | Passed |
 | Backend production audit | 0 vulnerabilities |
@@ -151,8 +153,8 @@ Validated branch head: `96c98b8` (`test: enforce worker privacy across public AP
 | Sprint 2 migration and rollback rehearsal | Passed |
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
 | Public worker list/profile/batch privacy smoke | Passed |
-| Bricky verification GitHub workflow #90 | Passed |
-| Sprint 3 CI GitHub workflow #26 | Passed |
+| Bricky verification GitHub workflow #94 | Passed |
+| Sprint 3 CI GitHub workflow #30 | Passed |
 
 ## Текущо състояние на интеграцията
 
