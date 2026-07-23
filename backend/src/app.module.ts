@@ -14,6 +14,8 @@ import { CatalogModule } from './catalog/catalog.module';
 import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { HealthModule } from './health/health.module';
+import { resolveTypeOrmSynchronize } from './config/database-policy';
 
 @Module({
   imports: [
@@ -30,7 +32,7 @@ import { ReferralsModule } from './referrals/referrals.module';
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
+      synchronize: resolveTypeOrmSynchronize(),
     }),
 
     UsersModule,
@@ -45,6 +47,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     NotificationsModule,
     RequestsModule,
     WorkersModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

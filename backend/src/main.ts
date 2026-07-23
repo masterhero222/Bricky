@@ -6,16 +6,17 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { existsSync, mkdirSync } from 'fs';
+import { accessSync, constants, existsSync, mkdirSync } from 'fs';
 import { getCorsOrigins, validateRuntimeConfig } from './config/runtime-config';
+import { getUploadsRoot } from './common/storage-paths';
 
 async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // ensure uploads folder exists
-  const uploadsDir = join(process.cwd(), 'uploads');
+  const uploadsDir = getUploadsRoot();
   if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+  accessSync(uploadsDir, constants.R_OK | constants.W_OK);
 
   // serve /uploads/*
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });

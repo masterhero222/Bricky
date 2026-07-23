@@ -4,27 +4,28 @@
 
 Работен branch: `codex/sprint-3-integration`
 
-## Обобщение
+## Резюме
 
-Sprint 3 изгражда професионалното data ядро на Bricky: v2 база, регистрации,
-пълен lifecycle на поръчките, медийна модерация, backoffice, referral основа и
-реален frontend flow.
+Sprint 3 изгражда професионалното data ядро на Bricky: каноничен v2 модел,
+регистрации по роли, контролиран lifecycle на поръчките, медийна модерация,
+административен backoffice, referral основа и реална frontend интеграция.
 
-**Общ прогрес: приблизително 94%.**
+**Общ прогрес: приблизително 95%.**
 
-| Област                       | Прогрес | Състояние                                                                                          |
-| ---------------------------- | ------: | -------------------------------------------------------------------------------------------------- |
-| V2 база и identity модел     |     96% | Схемата, миграциите и integrity договорите са готови                                                |
-| Request lifecycle            |     97% | Пълният browser flow е доказан                                                                     |
-| Media moderation             |     95% | Pending/approved/rejected flow работи                                                              |
-| Admin backoffice             |     93% | Операциите, audit timeline и атомарното управление на plans/credits работят                         |
-| Frontend интеграция          |     93% | Основните роли работят през реалния API; маршрутите се зареждат в отделни chunks                    |
-| Privacy и security hardening |     95% | Request и public worker DTO правилата са затворени и тествани                                      |
-| Production readiness         |     75% | Автоматизираните gates са готови; production backup/restore rehearsal и deployment не са изпълнени |
+Функционалното ядро е готово и локалните quality gates са зелени. Sprint 3
+още не е production stable, защото остават финалният merge, GitHub CI и
+production release процедурата с backup, restore rehearsal, миграции и smoke
+проверка.
 
-Sprint 3 **не е production stable**. Функционалното ядро работи, но privacy
-корекциите са затворени, а release gates трябва да бъдат изпълнени преди
-качване на live.
+| Област | Прогрес | Статус |
+| --- | ---: | --- |
+| V2 база и identity модел | 98% | Схемата, миграциите и DB договорите са готови |
+| Request lifecycle | 98% | Пълният client/admin/worker flow е реализиран и тестван |
+| Media moderation | 97% | Pending/approved/rejected и запазване на стария avatar работят |
+| Admin backoffice | 95% | Users, workers, requests, media, referrals и audit са налични |
+| Frontend интеграция | 95% | Основните роли и маршрути работят през реалния API |
+| Privacy и security | 97% | Контакти, адреси, роли и suspended users са защитени |
+| Production readiness | 75% | Инструментите са готови; live rehearsal/deploy не са изпълнени |
 
 ## Завършено
 
@@ -33,43 +34,46 @@ Sprint 3 **не е production stable**. Функционалното ядро р
 - [x] Каноничен идентификатор `users.id`.
 - [x] `client_profiles`, `worker_profiles` и `worker_skills`.
 - [x] Транзакционна регистрация на клиент и майстор.
-- [x] Английски machine keys в DB и български labels във frontend.
-- [x] TypeORM `synchronize` е изключен за production.
-- [x] Production startup отказва слаб/липсващ JWT secret и непълни DB настройки.
-- [x] CORS production default допуска само HTTPS Bricky домейните.
-- [x] Secret fallback-ът и test environment endpoint-ът са премахнати.
-- [x] Ненужният MJML/mailer dependency stack е премахнат.
-- [x] Backend production dependency audit е свален от 63 сигнала до 0.
-- [x] Frontend production dependency audit е 0.
-- [x] Backend build чисти stale output и копира mail template-а на правилния runtime path.
-- [x] Добавени са versioned SQL миграции.
-- [x] Добавен е TypeORM metadata regression test.
-- [x] Backend стартира върху чиста MySQL 8.4 база без legacy worker таблици.
-- [x] Legacy reads са само контролиран fallback при `ER_NO_SUCH_TABLE`.
+- [x] Machine keys в DB и български labels във frontend.
+- [x] Versioned Sprint 3 SQL миграции.
+- [x] TypeORM `synchronize` е забранен в production.
+- [x] Production startup валидира DB, JWT, CORS и uploads настройките.
+- [x] Legacy таблиците са само контролиран fallback.
 
-### Заявки и lifecycle
+### Поръчки и lifecycle
 
 - [x] `repair_requests`, `request_applications` и `request_events`.
-- [x] Клиент създава заявка.
-- [x] Админ одобрява или архивира заявката и снимките.
-- [x] Само одобрен, видим и активен майстор може да кандидатства.
-- [x] Suspended и unapproved майстори са блокирани.
-- [x] Кандидатстването е idempotent.
-- [x] Майстор може да се откаже само преди да бъде избран.
-- [x] Клиент може да освободи избран майстор само преди започване на работа.
-- [x] Клиент избира кандидат.
-- [x] Майстор потвърждава поръчката.
-- [x] Майстор маркира пристигане на адрес.
-- [x] Майстор маркира извършен оглед.
-- [x] Майстор започва работа.
-- [x] Майстор качва снимки след ремонта.
-- [x] Майстор маркира работата като завършена.
-- [x] Майстор изпраща поръчката за клиентско потвърждение.
-- [x] Клиент потвърждава изпълнението.
-- [x] Клиент оставя едно ревю.
-- [x] Майстор затваря поръчката.
-- [x] Завършената поръчка излиза от активния worker feed.
+- [x] Клиент създава заявка със снимки.
+- [x] Админ одобрява или архивира заявката и модерира снимките.
+- [x] Само active, approved и public майстор вижда и кандидатства.
+- [x] Suspended и unapproved майсторите са блокирани.
+- [x] Майсторът може да оттегли кандидатура само преди избиране.
+- [x] Клиентът може да освободи избран майстор само преди започване на работа.
+- [x] Клиентът избира кандидат, а майсторът потвърждава поръчката.
+- [x] Майсторът маркира пристигане, оглед и начало на работа.
+- [x] Майсторът качва снимки след ремонта и приключва работата.
+- [x] Клиентът потвърждава и оставя едно ревю.
+- [x] Майсторът затваря поръчката.
 - [x] Immutable timeline пази actor, event, timestamp и metadata.
+
+Каноничен lifecycle:
+
+```text
+draft
+  -> pending_approval
+  -> published
+  -> applied
+  -> assigned
+  -> worker_confirmed
+  -> on_site
+  -> inspected
+  -> in_progress
+  -> work_finished
+  -> awaiting_client_confirmation
+  -> client_confirmed
+  -> reviewed
+  -> completed
+```
 
 ### Снимки и модерация
 
@@ -77,218 +81,118 @@ Sprint 3 **не е production stable**. Функционалното ядро р
 - [x] Статуси `pending`, `approved` и `rejected`.
 - [x] Pending и rejected файлове не се показват публично.
 - [x] Старият одобрен avatar остава активен до одобряване на новия.
-- [x] Avatar, gallery и request media използват общ moderation contract.
+- [x] Avatar, gallery и request media използват един moderation contract.
 - [x] Админът преглежда снимките в modal viewer на същата страница.
-- [x] Реални multipart endpoints за before/after снимки.
-- [x] JPEG, PNG и WebP, до 8 MB на файл и до 20 файла.
-- [x] Production flow не записва `data:` URL изображения.
+- [x] Upload-ите се обработват до WebP с размер и резолюция за production.
+- [x] Upload файловете се почистват при неуспешен DB запис.
+- [x] Production flow не записва base64/data URL изображения.
 
-### Admin, catalog и pricing
+### Admin, catalog, pricing и referrals
 
 - [x] Backoffice за users, workers, requests, media, referrals и audit.
-- [x] Approve, reject, hide и suspend на майстори.
-- [x] Одобряване и архивиране на заявки.
-- [x] Управление на категории и дейности.
-- [x] Versioned pricing rules.
-- [x] Immutable request pricing snapshot.
-- [x] Ръчните промени по планове и кредити валидират реален worker account.
-- [x] Wallet, credit ledger и admin audit се записват в една DB транзакция.
-- [x] Не се допуска отрицателен кредитен баланс, нулева транзакция или повече от един активен plan запис за майстор.
-- [x] Schema и integrity проверките валидират billing indexes, constraints и дублирани/невалидни записи.
-- [x] Audit log за административните действия.
-
-### Referral, SEO и frontend
-
-- [x] Referral attribution при регистрация.
-- [x] Qualification и reward транзакции.
-- [x] Idempotent reward обработка.
+- [x] Approve, reject, hide, suspend и reactivate операции.
+- [x] Категории, дейности и versioned pricing rules.
+- [x] Immutable pricing snapshot за всяка заявка.
+- [x] Worker plans, credit wallet и transaction ledger.
+- [x] Админските billing промени са атомарни и се записват в audit log.
+- [x] Referral attribution, qualification и idempotent rewards.
 - [x] Blog MVP за SEO.
-- [x] Реален API dev режим чрез `npm run dev:real`.
-- [x] Client, worker и admin login работят през реалния API.
-- [x] Worker dashboard, заявки и карта работят през реалния API.
-- [x] Client dashboard и worker preview работят през реалния API.
-- [x] Admin login води директно към `/admin`.
-- [x] Admin navbar води към backoffice.
-- [x] Worker map има връщане към заявките.
+
+### Privacy и security
+
+- [x] Public worker DTO не връща телефон, email или password данни.
 - [x] Worker feed не връща клиентски телефон или email.
-- [x] Преди назначаване майсторът вижда само район и груби координати.
-- [x] Точният адрес се отключва само за назначения майстор, клиента и админа.
-- [x] Публичните worker DTO от v2 и legacy не връщат телефон или email.
-- [x] Client candidate UI не показва телефон на майстора.
-- [x] Request wizard използва identity от authenticated user.
-- [x] Request wizard не изпраща email и телефон като request полета.
-- [x] Видимият `mock` текст е премахнат от request wizard.
-- [x] Frontend lint и production build минават.
-- [x] Route-level code splitting намалява началния JS bundle от 721 KB на 304 KB.
-- [x] Lazy маршрутите за home, workers, blog, requests и admin са проверени без browser errors.
-- [x] Има единен release preflight за env, Git, MySQL, uploads и frontend API contract.
-- [x] Има manifest-базиран DB/uploads backup с SHA-256 проверка.
-- [x] Restore инструментът пише само в ясно именувана rehearsal база и директория.
-- [x] Rehearsal certification gate обединява schema, integrity, audits, tests, builds и API smoke в подписан с checksums evidence файл.
-- [x] Production migration gate приема само съвпадащи backup manifest, restore report, rehearsal certificate и Git commit.
-- [x] Schema verification използва общ contract за rehearsal и production read-only check.
-- [x] Има read-only integrity проверка за orphan записи, дублирани contract записи и media файлове.
-- [x] Документиран е Sprint 3 production/rollback runbook.
+- [x] Точният адрес е скрит преди назначаване.
+- [x] Точният адрес се отключва само за клиента, админа и назначения майстор.
+- [x] JWT guard проверява актуалния user status и role от DB при всяка заявка.
+- [x] Издадени по-рано token-и не заобикалят последващ suspend/block.
+- [x] Worker-only endpoints проверяват worker role.
+- [x] Public worker grid допуска само active, approved и public профили.
+- [x] Backend и frontend production dependency audit са с 0 уязвимости.
 
-На 23.07.2026 г. е изпълнена и targeted UI проверка върху локалния frontend:
+## Проверен browser flow
 
-- стъпката за контакт няма полета за име, телефон или email;
-- wizard-ът няма видим `mock` текст;
-- worker заявките търсят по категория, район и описание;
-- worker заявките не визуализират телефон или email.
+Пълният flow е изпълнен през реални Nest backend, MySQL и Vite frontend:
 
-## Browser E2E доказателство
+1. Клиентът създава заявка със снимка.
+2. Админът одобрява снимката и публикува заявката.
+3. Майсторът вижда заявката и кандидатства.
+4. Клиентът отваря профила и избира майстора.
+5. Майсторът потвърждава, пристига, оглежда и започва.
+6. Майсторът качва after снимка и приключва работата.
+7. Клиентът потвърждава и оставя ревю.
+8. Майсторът затваря поръчката.
+9. Поръчката влиза в completed archive.
+10. Admin timeline съдържа всички lifecycle събития.
 
-На 20.07.2026 г. е изпълнен пълен browser lifecycle през реални Nest backend,
-MySQL и Vite frontend.
+## Последни локални проверки
 
-Тестова заявка: `#4`, категория `Боядисване`.
+Проверено на 23.07.2026 г. върху текущия merge с `origin/main`:
 
-Потвърдени стъпки:
+| Проверка | Резултат |
+| --- | --- |
+| Sprint 1/2/3 cross-sprint verification | Passed |
+| Backend test suites | 28/28 passed |
+| Backend tests | 159/159 passed |
+| Backend production build | Passed |
+| Backend Sprint 3 release self-test | Passed |
+| Backend production audit | 0 vulnerabilities |
+| Frontend ESLint | Passed |
+| Frontend production build | Passed |
+| Pricing contract | 97 activities, 174 material items |
+| Mock moderation enforcement | Passed |
+| Frontend production audit | 0 vulnerabilities |
+| Migration contract verification | Passed |
 
-1. Клиент създава заявка със снимка.
-2. Админ одобрява снимката и публикува заявката.
-3. Майстор вижда заявката и кандидатства.
-4. Клиент отваря профила и избира майстора.
-5. Майстор потвърждава, пристига, оглежда и започва работа.
-6. Майстор качва after снимка и приключва работата.
-7. Клиент потвърждава и оставя 5-звездно ревю.
-8. Майстор затваря поръчката.
-9. Поръчката се архивира като `completed`.
-10. Admin timeline показва всички 15 lifecycle събития.
+## Текущо състояние на интеграцията
 
-Потвърдени timeline събития:
+- [x] Създаден е safety branch преди merge:
+  `codex/sprint-3-pre-main-merge-20260723`.
+- [x] `origin/main` е интегриран локално.
+- [x] Sprint 3 request/review lifecycle е запазен.
+- [x] Sprint 2 image processing, health и DB protections са интегрирани.
+- [x] Локалните cross-sprint gates са зелени.
+- [ ] Merge промените да бъдат stage-нати и commit-нати.
+- [ ] Branch-ът да бъде push-нат.
+- [ ] GitHub CI да мине върху интегрирания commit.
+- [ ] Да бъде отворен Sprint 3 pull request към `main`.
 
-```text
-request.created
-request.media_uploaded
-admin.status_changed
-application.created
-request.assigned
-worker.confirmed
-worker.on_site
-worker.inspected
-worker.started_work
-request.media_uploaded
-worker.finished_work
-worker.ready_for_client_confirmation
-client.confirmed_work
-request.reviewed
-request.closed_by_worker
-```
+## Остава до production stable
 
-## Последни проверки
+### P0 - release и privacy
 
-| Проверка                          | Резултат                    |
-| --------------------------------- | --------------------------- |
-| GitHub Sprint 3 CI                | Passed on `b848559`         |
-| Backend tests                     | 19 suites, 132 tests passed |
-| Billing/admin transaction tests   | Passed                      |
-| Request privacy regression        | Passed                      |
-| Runtime security config tests     | Passed                      |
-| TypeORM metadata regression       | Passed                      |
-| Backend production build          | Passed                      |
-| Backend production audit          | Passed, 0 vulnerabilities   |
-| Frontend ESLint                   | Passed                      |
-| Frontend production build         | Passed                      |
-| Frontend route-level lazy loading | Passed, 721 KB -> 304 KB     |
-| Lazy route browser smoke          | Passed, no browser errors    |
-| Clean MySQL migration             | Passed                      |
-| Повторно изпълнение на миграциите | Passed                      |
-| Synthetic v2 upgrade              | Passed                      |
-| Реален Nest + MySQL startup       | Passed                      |
-| Client/admin/worker API smoke     | Passed                      |
-| Restricted worker API test        | Passed                      |
-| Media moderation API test         | Passed                      |
-| Пълен browser lifecycle           | Passed                      |
-| Timeline и completed archive      | Passed                      |
-| Production-backup migration       | Not run                     |
-| Production smoke test             | Not run                     |
-| Current live public privacy smoke | Failed: legacy `/api/workers` exposes `email` |
+- [ ] Интегрираният release candidate да бъде deploy-нат.
+- [ ] След deploy публичният `/api/workers` да бъде проверен за липса на
+      `email`, `phone` и други private полета.
+- [ ] Suspended user да бъде проверен срещу production API със стар token.
 
-Последният автоматизиран API smoke резултат:
-
-```json
-{
-  "ok": true,
-  "requestId": 3,
-  "clientUserId": 10,
-  "workerUserId": 11,
-  "restrictedWorkerUserId": 12,
-  "timelineEvents": 15
-}
-```
-
-## Текущи blockers
-
-### P0 - privacy и contact bypass
-
-- [ ] Release candidate-ът да бъде deploy-нат; текущият live backend още връща `email` в public workers API.
-- [x] Worker feed да не връща или показва клиентски email.
-- [x] Worker feed да не връща или показва телефон.
-- [x] Точният адрес да е скрит преди клиентът да избере майстор.
-- [x] Точният адрес да се отключва само за назначения майстор.
-- [x] Телефонът на майстора да не се показва в client candidate/profile UI.
-- [x] Backend DTO тестове да доказват privacy правилата.
-
-### P1 - request form cleanup
-
-- [x] Да се премахне целият видим текст `mock` от реалния request wizard.
-- [x] Новата заявка да използва identity от authenticated user.
-- [x] Email и телефон да не се подават като доверени request полета.
-- [x] Private phone да се управлява само в собствения client profile.
-- [x] Контактната стъпка да не блокира заявката с повторно искане на лични данни.
-
-### P1 - release gates
+### P1 - production release gates
 
 - [ ] Свеж backup на production DB.
 - [ ] Свеж backup на production uploads.
+- [ ] Проверка на SHA-256 manifest-а.
 - [ ] Restore на двата backup-а в отделна rehearsal среда.
-- [ ] Sprint 3 миграции върху възстановено production копие.
-- [ ] Проверка за orphan записи и счупени foreign keys.
-- [ ] Проверка за липсващи media файлове.
-- [x] Документирана rollback процедура.
-- [ ] Изпълнена и проверена rollback процедура в rehearsal среда.
+- [ ] Sprint 3 миграции върху възстановеното production копие.
+- [ ] Проверка за orphan записи, счупени foreign keys и липсващи media файлове.
+- [ ] Изпълнение и проверка на rollback процедурата в rehearsal средата.
 - [ ] Production deployment.
-- [ ] Production smoke test след deployment.
+- [ ] Post-deploy API и browser smoke test.
 
-### P2 - след release blockers
+### P2 - след release
 
-- [x] Code splitting на основния frontend bundle.
-- [ ] Допълнително разделяне на големите worker/request компоненти.
-- [x] Обновяване на Browserslist/Baseline browser data.
+- [ ] Допълнително code splitting на големите worker/request компоненти.
 - [ ] Премахване на временните legacy compatibility пътища след beta периода.
-
-## Следващ ред на работа
-
-1. Production DB/uploads backup.
-2. Restore rehearsal и миграции върху възстановеното копие.
-3. Integrity и orphan проверки.
-4. Документиране и проверка на rollback процедурата.
-5. Повторен реален browser smoke върху rehearsal средата.
-6. Production deployment и post-deploy smoke test.
+- [ ] Реален payment provider за plans/credits.
+- [ ] Object storage миграция при нужда от хоризонтално скалиране.
 
 ## Definition of Done
 
 Sprint 3 е завършен само когато:
 
-- [x] чистата v2 база работи без legacy таблици;
-- [x] пълният client/admin/worker API flow минава;
-- [x] пълният browser lifecycle минава;
-- [x] media moderation работи end-to-end;
-- [x] suspended и unapproved ограниченията са доказани;
-- [x] timeline и completed archive са доказани;
-- [x] privacy blocker-ите са отстранени и покрити с тестове;
-- [x] request wizard няма mock contract;
-- [ ] production backup-ите са създадени и успешно възстановени;
-- [ ] миграциите минават върху възстановено production копие;
-- [ ] rollback процедурата е проверена;
-- [ ] production deployment и smoke test минават.
-
-## Правила за безопасност
-
-- Не се изпълнява destructive cleanup върху production.
-- TypeORM `synchronize` не се включва в production.
-- DB и uploads се архивират заедно преди миграция.
-- Legacy таблиците не се трият в Sprint 3.
-- Sprint 3 не се маркира като stable преди всички release gates да са зелени.
+1. Merge commit-ът е в GitHub и всички CI проверки са зелени.
+2. Production DB и uploads backup-ите са валидирани.
+3. Restore rehearsal, migrations и rollback са изпълнени успешно.
+4. Release candidate е deploy-нат.
+5. Client, worker и admin smoke flow работи на live.
+6. Public API не издава private контакти или точен адрес.
+7. Production evidence и rollback данните са архивирани.

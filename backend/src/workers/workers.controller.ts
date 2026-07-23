@@ -17,13 +17,21 @@ import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateWorkerAppearanceDto } from './dto/update-worker-appearance.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import {
+  deleteStoredMedia,
+  StoredMedia,
+  storeUploadedImage,
+} from '../common/media-storage';
 
 @Controller('workers')
 export class WorkersController {
   constructor(private readonly workersService: WorkersService) {}
+
+  private assertWorkerRole(req: any) {
+    if (String(req.user?.role || '') !== 'worker') {
+      throw new BadRequestException('Worker only');
+    }
+  }
 
   @Post('by-user-ids')
   async getByUserIds(@Body() body: any) {
@@ -39,6 +47,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Req() req: any) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
 
     let worker: any = await this.workersService.findByUserId(userId, { includeUnapprovedMedia: true });
@@ -52,6 +61,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Put('me')
   async updateMe(@Req() req: any, @Body() data: any) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
     return this.workersService.updateProfileByUserId(userId, data);
   }
@@ -71,21 +81,7 @@ export class WorkersController {
   @Post('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const userId = (req as any)?.user?.id ?? 'unknown';
-          const dir = join(process.cwd(), 'uploads', 'users', String(userId), 'avatar');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (req: any, file, cb) => {
-          const userId = req?.user?.id ?? 'unknown';
-          const safeExt = extname(file.originalname || '').toLowerCase() || '.jpg';
-          const name = `worker_${userId}_${Date.now()}${safeExt}`;
-          cb(null, name);
-        },
-      }),
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: 8 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
         cb(ok ? null : new Error('Invalid file type'), ok);
@@ -93,12 +89,24 @@ export class WorkersController {
     }),
   )
   async uploadAvatar(@Req() req: any, @UploadedFile() file: any) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
-    if (!file?.filename) {
+    if (!file?.buffer) {
       return this.workersService.findByUserId(userId);
     }
-    const avatarUrl = `/uploads/users/${userId}/avatar/${file.filename}`;
-    return this.workersService.setAvatar(userId, avatarUrl);
+    const stored = await storeUploadedImage(
+      file.buffer,
+      ['users', String(userId), 'avatar'],
+      `/uploads/users/${userId}/avatar`,
+      `worker_${userId}`,
+      { createThumbnail: false },
+    );
+    try {
+      return await this.workersService.setAvatar(userId, stored.url);
+    } catch (error) {
+      await deleteStoredMedia(stored.storageKey);
+      throw error;
+    }
   }
 
   // =========================
@@ -108,6 +116,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me/gallery')
   async myGallery(@Req() req: any) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
     return this.workersService.getGalleryByUserId(userId, { includeUnapprovedMedia: true });
   }
@@ -116,20 +125,6 @@ export class WorkersController {
   @Post('me/gallery')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const userId = (req as any)?.user?.id ?? 'unknown';
-          const dir = join(process.cwd(), 'uploads', 'workers', String(userId), 'gallery');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (req: any, file, cb) => {
-          const userId = req?.user?.id ?? 'unknown';
-          const safeExt = extname(file.originalname || '').toLowerCase() || '.jpg';
-          const name = `gallery_${userId}_${Date.now()}_${Math.floor(Math.random() * 999999)}${safeExt}`;
-          cb(null, name);
-        },
-      }),
       limits: { fileSize: 8 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = /(jpg|jpeg|png|webp)$/i.test(file.mimetype);
@@ -138,22 +133,45 @@ export class WorkersController {
     }),
   )
   async uploadGallery(@Req() req: any, @UploadedFiles() files: any[]) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
 
     const list = Array.isArray(files) ? files : [];
     if (!list.length) throw new BadRequestException('No images');
 
-    const urls = list
-      .map((f) => (f?.filename ? `/uploads/workers/${userId}/gallery/${f.filename}` : null))
-      .filter(Boolean);
-
-    return this.workersService.addGalleryImages(userId, urls as string[]);
+    const stored: StoredMedia[] = [];
+    try {
+      for (const file of list) {
+        stored.push(
+          await storeUploadedImage(
+          file.buffer,
+          ['workers', String(userId), 'gallery'],
+          `/uploads/workers/${userId}/gallery`,
+          `gallery_${userId}`,
+          { createThumbnail: false },
+          ),
+        );
+      }
+    } catch (error) {
+      await deleteStoredMedia(...stored.map((image) => image.storageKey));
+      throw error;
+    }
+    try {
+      return await this.workersService.addGalleryImages(
+        userId,
+        stored.map((image) => image.url),
+      );
+    } catch (error) {
+      await deleteStoredMedia(...stored.map((image) => image.storageKey));
+      throw error;
+    }
   }
 
   // за да работи с твоя apiPost(.../delete)
   @UseGuards(JwtAuthGuard)
   @Post('me/gallery/:id/delete')
   async deleteGallery(@Req() req: any, @Param('id') id: string) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
     const imageId = Number(id);
     return this.workersService.deleteGalleryImage(userId, imageId);
@@ -162,6 +180,7 @@ export class WorkersController {
   @UseGuards(JwtAuthGuard)
   @Get('me/history')
   async myHistory(@Req() req: any) {
+    this.assertWorkerRole(req);
     const userId = Number(req.user.id);
     return this.workersService.getHistoryByUserId(userId);
   }

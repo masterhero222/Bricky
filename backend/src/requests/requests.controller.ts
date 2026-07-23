@@ -12,13 +12,15 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { existsSync, mkdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
 import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestDraftDto } from './dto/request-draft.dto';
+import {
+  deleteStoredMedia,
+  storeUploadedImage,
+  StoredMedia,
+} from '../common/media-storage';
 
 const REQUEST_MEDIA_MIME_EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -26,36 +28,8 @@ const REQUEST_MEDIA_MIME_EXTENSIONS: Record<string, string> = {
   'image/webp': '.webp',
 };
 
-function requestMediaStorage(kind: 'before' | 'after') {
-  return diskStorage({
-    destination: (req, file, callback) => {
-      const requestId = Number((req as any)?.params?.id);
-      const directory = join(
-        process.cwd(),
-        'uploads',
-        'requests',
-        requestId > 0 ? String(requestId) : 'invalid',
-        kind,
-      );
-      if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
-      callback(null, directory);
-    },
-    filename: (req: any, file, callback) => {
-      const requestId = Number(req?.params?.id) || 'invalid';
-      const extension =
-        REQUEST_MEDIA_MIME_EXTENSIONS[String(file.mimetype || '').toLowerCase()] ||
-        '.jpg';
-      callback(
-        null,
-        `request_${requestId}_${kind}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}${extension}`,
-      );
-    },
-  });
-}
-
-function requestMediaUploadOptions(kind: 'before' | 'after') {
+function requestMediaUploadOptions() {
   return {
-    storage: requestMediaStorage(kind),
     limits: { fileSize: 8 * 1024 * 1024 },
     fileFilter: (req: any, file: any, callback: any) => {
       const allowed = Boolean(
@@ -66,29 +40,29 @@ function requestMediaUploadOptions(kind: 'before' | 'after') {
   };
 }
 
-function uploadedRequestPhotos(
+async function storeRequestPhotos(
   requestId: number,
   kind: 'before' | 'after',
   files: any[],
 ) {
-  return (Array.isArray(files) ? files : [])
-    .filter((file) => file?.filename)
-    .map((file) => ({
-      url: `/uploads/requests/${requestId}/${kind}/${file.filename}`,
-      storageKey: `requests/${requestId}/${kind}/${file.filename}`,
-      mimeType: file.mimetype || null,
-      sizeBytes: Number(file.size) || null,
-    }));
-}
-
-function removeUploadedFiles(files: any[]) {
-  for (const file of Array.isArray(files) ? files : []) {
-    if (!file?.path || !existsSync(file.path)) continue;
-    try {
-      unlinkSync(file.path);
-    } catch {
-      // A failed cleanup must not hide the original request error.
+  const stored: StoredMedia[] = [];
+  try {
+    for (const file of Array.isArray(files) ? files : []) {
+      if (!file?.buffer) continue;
+      stored.push(
+        await storeUploadedImage(
+          file.buffer,
+          ['requests', String(requestId), kind],
+          `/uploads/requests/${requestId}/${kind}`,
+          `request_${requestId}_${kind}`,
+          { createThumbnail: false },
+        ),
+      );
     }
+    return stored;
+  } catch (error) {
+    await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
+    throw error;
   }
 }
 
@@ -113,7 +87,7 @@ export class RequestsController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/media/before')
   @UseInterceptors(
-    FilesInterceptor('images', 20, requestMediaUploadOptions('before')),
+    FilesInterceptor('images', 20, requestMediaUploadOptions()),
   )
   async uploadBeforeMedia(
     @Req() req: any,
@@ -121,16 +95,18 @@ export class RequestsController {
     @UploadedFiles() files: any[],
   ) {
     if (req.user?.role !== 'client') {
-      removeUploadedFiles(files);
       throw new BadRequestException('Client only');
     }
 
     const requestId = Number(id);
-    const photos = uploadedRequestPhotos(requestId, 'before', files);
-    if (!requestId || !photos.length) {
-      removeUploadedFiles(files);
-      throw new BadRequestException('No images');
-    }
+    if (!requestId || !files?.length) throw new BadRequestException('No images');
+    const stored = await storeRequestPhotos(requestId, 'before', files);
+    const photos = stored.map((photo) => ({
+      url: photo.url,
+      storageKey: photo.storageKey,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
+    }));
 
     try {
       return await this.requests.addBeforeMedia(
@@ -139,7 +115,7 @@ export class RequestsController {
         photos,
       );
     } catch (error) {
-      removeUploadedFiles(files);
+      await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
       throw error;
     }
   }
@@ -147,7 +123,7 @@ export class RequestsController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/media/after')
   @UseInterceptors(
-    FilesInterceptor('images', 20, requestMediaUploadOptions('after')),
+    FilesInterceptor('images', 20, requestMediaUploadOptions()),
   )
   async uploadAfterMedia(
     @Req() req: any,
@@ -155,16 +131,18 @@ export class RequestsController {
     @UploadedFiles() files: any[],
   ) {
     if (req.user?.role !== 'worker') {
-      removeUploadedFiles(files);
       throw new BadRequestException('Worker only');
     }
 
     const requestId = Number(id);
-    const photos = uploadedRequestPhotos(requestId, 'after', files);
-    if (!requestId || !photos.length) {
-      removeUploadedFiles(files);
-      throw new BadRequestException('No images');
-    }
+    if (!requestId || !files?.length) throw new BadRequestException('No images');
+    const stored = await storeRequestPhotos(requestId, 'after', files);
+    const photos = stored.map((photo) => ({
+      url: photo.url,
+      storageKey: photo.storageKey,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
+    }));
 
     try {
       return await this.requests.addAfterMedia(
@@ -173,7 +151,7 @@ export class RequestsController {
         photos,
       );
     } catch (error) {
-      removeUploadedFiles(files);
+      await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
       throw error;
     }
   }

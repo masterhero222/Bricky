@@ -16,6 +16,7 @@ import {
   resolveWorkerBannerKey,
 } from './worker-banner.catalog';
 import * as bcrypt from 'bcrypt';
+import { UsersService } from '../users/users.service';
 
 type CreateWorkerProfileInput = {
   userId: number;
@@ -71,6 +72,7 @@ export class WorkersService {
     private readonly referralRewardsRepo: Repository<ReferralRewardEntity>,
 
     private readonly media: MediaService,
+    private readonly users: UsersService,
   ) {}
 
   /**
@@ -145,7 +147,18 @@ export class WorkersService {
 
     // 1) try v2/public canonical userId
     const profile = await this.workerProfilesRepo.findOne({ where: { userId: n } });
-    if (profile) return this.withV2WorkerSummary(profile);
+    if (profile) {
+      const user = await this.users.findOne(n);
+      if (
+        !user ||
+        user.status !== 'active' ||
+        profile.approvalStatus !== 'approved' ||
+        profile.visibilityStatus !== 'public'
+      ) {
+        throw new NotFoundException('Worker not found');
+      }
+      return this.withV2WorkerSummary(profile);
+    }
 
     // 2) legacy fallback: try as userId
     const worker = await this.optionalLegacyRead(
@@ -157,7 +170,13 @@ export class WorkersService {
       null,
     );
 
-    if (!worker) throw new NotFoundException('Worker not found');
+    if (!worker || !worker.isApproved) {
+      throw new NotFoundException('Worker not found');
+    }
+    const user = await this.users.findOne(Number(worker.userId));
+    if (!user || user.status !== 'active') {
+      throw new NotFoundException('Worker not found');
+    }
     return this.withGallerySummary(worker);
   }
 
@@ -280,14 +299,38 @@ export class WorkersService {
   }
 
   async getAll(options: WorkerMediaVisibilityOptions = {}) {
-    const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
-    const profileUserIds = new Set(profiles.map((profile) => Number(profile.userId)));
+    const allProfiles = await this.workerProfilesRepo.find({
+      order: { createdAt: 'DESC' },
+    });
     const legacyWorkers = await this.optionalLegacyRead(
       'worker',
       () => this.workerRepository.find(),
       [] as Worker[],
     );
-    const legacyOnly = legacyWorkers.filter((worker) => !profileUserIds.has(Number(worker.userId)));
+    const activeUsers = await this.users.findByIds([
+      ...allProfiles.map((profile) => Number(profile.userId)),
+      ...legacyWorkers.map((worker) => Number(worker.userId)),
+    ]);
+    const activeUserIds = new Set(
+      activeUsers
+        .filter((user) => user.status === 'active')
+        .map((user) => Number(user.id)),
+    );
+    const profiles = allProfiles.filter(
+      (profile) =>
+        activeUserIds.has(Number(profile.userId)) &&
+        profile.approvalStatus === 'approved' &&
+        profile.visibilityStatus === 'public',
+    );
+    const allProfileUserIds = new Set(
+      allProfiles.map((profile) => Number(profile.userId)),
+    );
+    const legacyOnly = legacyWorkers.filter(
+      (worker) =>
+        activeUserIds.has(Number(worker.userId)) &&
+        Boolean(worker.isApproved) &&
+        !allProfileUserIds.has(Number(worker.userId)),
+    );
 
     return [
       ...(await Promise.all(profiles.map((profile) => this.withV2WorkerSummary(profile, options)))),

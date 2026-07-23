@@ -1,8 +1,8 @@
-import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel } from "../constants/repairCatalog";
+import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel } from "../constants/repairCatalog.js";
 import {
   DEFAULT_WORKER_BANNER_KEY,
   WORKER_BANNER_CATALOG,
-} from "../constants/workerBannerCatalog";
+} from "../constants/workerBannerCatalog.js";
 
 const STORAGE_KEY = "bricky.dev.db";
 
@@ -502,10 +502,19 @@ function currentWorker(db = readDb()) {
   return db.workers.find((w) => Number(w.userId) === userId) || null;
 }
 
+function activeCurrentWorker(db = readDb()) {
+  const worker = currentWorker(db);
+  if (!worker || worker.status !== "active") {
+    const error = new Error("Worker account is not active");
+    error.response = { status: 401, data: { message: error.message } };
+    throw error;
+  }
+  return worker;
+}
+
 export function saveDevWorkerProfile(data = {}) {
   const db = readDb();
-  const worker = currentWorker(db);
-  if (!worker) return null;
+  const worker = activeCurrentWorker(db);
 
   Object.assign(worker, {
     fullName: data.fullName ?? worker.fullName,
@@ -522,8 +531,7 @@ export function saveDevWorkerProfile(data = {}) {
 
 export async function updateDevWorkerAppearance(data = {}) {
   const db = readDb();
-  const worker = currentWorker(db);
-  if (!worker) throw new Error("Worker not found");
+  const worker = activeCurrentWorker(db);
 
   const key = String(data?.profileBannerKey || "").trim();
   if (!WORKER_BANNER_CATALOG[key]) {
@@ -539,8 +547,8 @@ export async function updateDevWorkerAppearance(data = {}) {
 
 export async function uploadDevWorkerAvatar(file) {
   const db = readDb();
-  const worker = currentWorker(db);
-  if (!worker || !file) return null;
+  const worker = activeCurrentWorker(db);
+  if (!file) return null;
 
   const url = await fileToDataUrl(file);
   db.media = Array.isArray(db.media) ? db.media : [];
@@ -561,8 +569,7 @@ export async function uploadDevWorkerAvatar(file) {
 
 export async function uploadDevWorkerGallery(files = []) {
   const db = readDb();
-  const worker = currentWorker(db);
-  if (!worker) return [];
+  const worker = activeCurrentWorker(db);
 
   const clean = Array.from(files).filter((file) => String(file?.type || "").startsWith("image/"));
   const images = await Promise.all(
@@ -588,8 +595,7 @@ export async function uploadDevWorkerGallery(files = []) {
 
 export function deleteDevWorkerGalleryImage(imageId) {
   const db = readDb();
-  const worker = currentWorker(db);
-  if (!worker) return [];
+  const worker = activeCurrentWorker(db);
 
   worker.gallery = (Array.isArray(worker.gallery) ? worker.gallery : []).filter((img) => String(img.id) !== String(imageId));
   db.media = (Array.isArray(db.media) ? db.media : []).filter(
@@ -975,7 +981,7 @@ export function setDevIdentity(role, id) {
       : ["admin", "super_admin"].includes(role)
       ? db.admins?.find((a) => Number(a.id) === Number(id))
       : db.clients.find((c) => Number(c.id) === Number(id));
-  if (!user) return null;
+  if (!user || (user.status && user.status !== "active")) return null;
 
   const userId = role === "worker" ? user.userId : user.id;
   localStorage.setItem("token", `local-dev-token-${role}-${userId}`);
@@ -1274,6 +1280,18 @@ export async function mockRequest(method, url, data) {
   const user = currentUser();
   const role = localStorage.getItem("role") || user.role;
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
+  const requiresActiveSession =
+    path.startsWith("/workers/me") ||
+    path.startsWith("/requests") ||
+    path.startsWith("/admin/");
+  if (
+    requiresActiveSession &&
+    user?.status &&
+    user.status !== "active" &&
+    path !== "/auth/register"
+  ) {
+    return fail("Account is not active", 401);
+  }
 
   if (method === "post" && path === "/auth/dev-login") {
     const loginRole = ["worker", "admin", "super_admin"].includes(data?.role) ? data.role : "client";
@@ -1648,14 +1666,28 @@ export async function mockRequest(method, url, data) {
 
   if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId), db));
   if (method === "get" && path === "/workers") {
-    return response(db.workers.map((worker) => publicWorker(worker, db)));
+    return response(
+      db.workers
+        .filter(
+          (worker) =>
+            worker.status === "active" &&
+            worker.approvalStatus === "approved" &&
+            worker.visibilityStatus === "public",
+        )
+        .map((worker) => publicWorker(worker, db)),
+    );
   }
 
   const workerById = path.match(/^\/workers\/(\d+)$/);
   if (method === "get" && workerById) {
     const id = Number(workerById[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return worker ? response(publicWorker(worker, db)) : fail("Worker not found", 404);
+    return worker &&
+      worker.status === "active" &&
+      worker.approvalStatus === "approved" &&
+      worker.visibilityStatus === "public"
+      ? response(publicWorker(worker, db))
+      : fail("Worker not found", 404);
   }
 
   if (method === "get" && /^\/workers\/\d+\/gallery$/.test(path)) {
@@ -1696,6 +1728,7 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/requests/map") {
+    if (role !== "worker") return fail("Worker only", 403);
     const items = sortNewest(db.requests);
     return response(
       role === "worker"

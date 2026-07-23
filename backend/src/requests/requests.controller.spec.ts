@@ -1,8 +1,29 @@
 import { BadRequestException } from '@nestjs/common';
 import { RequestsController } from './requests.controller';
+import { storeUploadedImage } from '../common/media-storage';
+
+jest.mock('../common/media-storage', () => ({
+  storeUploadedImage: jest.fn(),
+  deleteStoredMedia: jest.fn(),
+}));
 
 describe('RequestsController v2 routes', () => {
   function setup() {
+    (storeUploadedImage as jest.Mock).mockImplementation(
+      async (
+        buffer: Buffer,
+        directorySegments: string[],
+        publicDirectory: string,
+        filenamePrefix: string,
+      ) => ({
+        url: `${publicDirectory}/${filenamePrefix}.webp`,
+        thumbnailUrl: null,
+        storageKey: `${directorySegments.join('/')}/${filenamePrefix}.webp`,
+        thumbnailStorageKey: null,
+        mimeType: 'image/webp',
+        sizeBytes: buffer.length,
+      }),
+    );
     const service = {
       create: jest.fn(),
       addBeforeMedia: jest.fn(),
@@ -82,16 +103,14 @@ describe('RequestsController v2 routes', () => {
     const { controller, service, clientRequest, workerRequest } = setup();
     const beforeFiles = [
       {
-        filename: 'before.jpg',
+        buffer: Buffer.from('before'),
         mimetype: 'image/jpeg',
-        size: 123,
       },
     ];
     const afterFiles = [
       {
-        filename: 'after.webp',
+        buffer: Buffer.from('after'),
         mimetype: 'image/webp',
-        size: 456,
       },
     ];
 
@@ -104,18 +123,18 @@ describe('RequestsController v2 routes', () => {
 
     expect(service.addBeforeMedia).toHaveBeenCalledWith(55, 101, [
       expect.objectContaining({
-        url: '/uploads/requests/55/before/before.jpg',
-        storageKey: 'requests/55/before/before.jpg',
-        mimeType: 'image/jpeg',
-        sizeBytes: 123,
+        url: '/uploads/requests/55/before/request_55_before.webp',
+        storageKey: 'requests/55/before/request_55_before.webp',
+        mimeType: 'image/webp',
+        sizeBytes: 6,
       }),
     ]);
     expect(service.addAfterMedia).toHaveBeenCalledWith(55, 201, [
       expect.objectContaining({
-        url: '/uploads/requests/55/after/after.webp',
-        storageKey: 'requests/55/after/after.webp',
+        url: '/uploads/requests/55/after/request_55_after.webp',
+        storageKey: 'requests/55/after/request_55_after.webp',
         mimeType: 'image/webp',
-        sizeBytes: 456,
+        sizeBytes: 5,
       }),
     ]);
   });

@@ -94,6 +94,10 @@ describe('Worker media moderation integration', () => {
       emptyRepo() as any,
       emptyRepo() as any,
       media,
+      {
+        findOne: jest.fn().mockResolvedValue({ id: 201, status: 'active' }),
+        findByIds: jest.fn().mockResolvedValue([{ id: 201, status: 'active' }]),
+      } as any,
     );
     const auditRepo = emptyRepo();
     const referrals = {

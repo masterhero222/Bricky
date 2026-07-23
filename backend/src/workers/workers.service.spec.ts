@@ -26,6 +26,12 @@ function serviceWith(overrides: Record<string, any> = {}) {
       createAsset: jest.fn(),
       deleteAsset: jest.fn(),
     }) as any,
+    (overrides.users || {
+      findOne: jest.fn().mockResolvedValue({ id: 201, status: 'active' }),
+      findByIds: jest.fn(async (ids: number[]) =>
+        ids.map((id) => ({ id, status: 'active' })),
+      ),
+    }) as any,
   );
 }
 

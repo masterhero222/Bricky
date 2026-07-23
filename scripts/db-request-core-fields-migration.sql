@@ -14,8 +14,6 @@
 --
 -- Rollback is at the bottom of this file.
 
-USE bricky;
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS bricky_add_column_if_missing//

@@ -42,7 +42,7 @@ export default function Workers() {
       const skill =
         Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
       const description = w.description || "Няма описание.";
-      const avatar = w.avatarUrl ? mediaUrl(w.avatarUrl) : "/media_files/Snejan.jpg";
+      const avatar = w.avatarThumbnailUrl || w.avatarUrl ? mediaUrl(w.avatarThumbnailUrl || w.avatarUrl) : "/media_files/Snejan.jpg";
       const completedJobs = Array.isArray(w.completedJobs) ? w.completedJobs : [];
       const jobTypes = Array.from(new Set(completedJobs.map((job) => job.category).filter(Boolean))).slice(0, 3);
 

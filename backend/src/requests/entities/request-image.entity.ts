@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import type { ModerationStatus } from '../../moderation/moderation.types';
 
 export type RequestImageKind = 'general' | 'before' | 'after';
 
@@ -29,8 +30,14 @@ export class RequestImageEntity {
   @Column({ type: 'longtext' })
   url: string;
 
+  @Column({ type: 'longtext', nullable: true })
+  thumbnailUrl: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   storageKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  thumbnailStorageKey: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })
   mimeType: string | null;
@@ -43,6 +50,18 @@ export class RequestImageEntity {
 
   @Column({ type: 'boolean', default: true })
   isApproved: boolean;
+
+  @Column({ type: 'varchar', length: 30, default: 'pending_review' })
+  moderationStatus: ModerationStatus;
+
+  @Column({ type: 'text', nullable: true })
+  moderationReason: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  moderatedByUserId: number | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  moderatedAt: Date | null;
 
   @CreateDateColumn()
   created_at: Date;

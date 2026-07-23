@@ -189,12 +189,21 @@ assert.equal(getPricingActivity("vik", "Отстраняване на теч")?.
 assert.equal(getPricingActivity("vik", "leak_repair")?.label, "Отстраняване на теч");
 
 const requestSource = readFileSync(new URL("../src/pages/Requests.jsx", import.meta.url), "utf8");
+const workerProfileSource = readFileSync(new URL("../src/pages/workers/WorkerProfile.jsx", import.meta.url), "utf8");
+const workerCalculatorSource = readFileSync(new URL("../src/components/workers/WorkerCalculatorPanel.jsx", import.meta.url), "utf8");
 const engineSource = readFileSync(new URL("../src/utils/repairPriceCalculator.js", import.meta.url), "utf8");
 for (const deprecatedMode of ["labor_plus_consumables", "labor_plus_materials_estimate"]) {
   assert.equal(requestSource.includes(deprecatedMode), false, `Request flow still uses ${deprecatedMode}`);
   assert.equal(engineSource.includes(deprecatedMode), false, `Calculator engine still uses ${deprecatedMode}`);
 }
 assert.equal(requestSource.includes("estimateRepairPrice"), false, "Request flow uses deprecated category estimator");
+assert.equal(workerProfileSource.includes("WorkerCalculatorPanel"), true, "Worker profile must render the shared calculator panel");
+assert.equal(workerCalculatorSource.includes("PRICE_TABLE"), false, "Worker calculator still contains a duplicate price table");
+assert.equal(workerCalculatorSource.includes("laborPerM2"), false, "Worker calculator still accepts a manual labor price");
+assert.equal(workerCalculatorSource.includes("calculateRepairEstimate"), true, "Worker calculator must use the shared pricing engine");
+assert.equal(workerCalculatorSource.includes("REPAIR_CATEGORY_OPTIONS"), true, "Worker calculator must use the shared repair catalog");
+assert.equal(workerCalculatorSource.includes('["labor_only", "Труд"]'), true, "Worker calculator must expose labor-only mode");
+assert.equal(workerCalculatorSource.includes('["labor_plus_materials", "Труд + материали"]'), true, "Worker calculator must expose labor and materials mode");
 
 const oldDescription = [
   "Тип ремонт: Плочки",

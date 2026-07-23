@@ -61,3 +61,8 @@ export function photoMediaUrl(photo) {
 
   return mediaUrl(raw);
 }
+
+export function photoThumbnailUrl(photo) {
+  if (typeof photo === "string") return mediaUrl(photo);
+  return mediaUrl(photo?.thumbnailUrl || photo?.url || photo?.dataUrl || photo?.src || photo?.imageUrl || photo?.path || "");
+}

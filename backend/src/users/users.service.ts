@@ -1,7 +1,7 @@
 // src/users/users.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { ClientProfileEntity } from './client-profile.entity';
 
@@ -20,6 +20,11 @@ export class UsersService {
 
   findOne(id: number) {
     return this.repo.findOne({ where: { id } });
+  }
+
+  findByIds(ids: number[]) {
+    if (!ids.length) return Promise.resolve([]);
+    return this.repo.find({ where: { id: In(ids) } });
   }
 
   async create(
