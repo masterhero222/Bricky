@@ -95,9 +95,9 @@ jobs:
         env:
           MYSQL_PWD: root
         run: |
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260718_sprint3_v2_data_core.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260719_sprint3_v2_schema_alignment.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint3_e2e; CREATE DATABASE bricky_sprint3_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint3_e2e < backend/migrations/20260718_sprint3_v2_data_core.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint3_e2e < backend/migrations/20260719_sprint3_v2_schema_alignment.sql
 
       - name: Run Sprint 3 MySQL lifecycle smoke
         working-directory: backend
@@ -107,7 +107,7 @@ jobs:
           DB_PORT: 3306
           DB_USER: root
           DB_PASS: root
-          DB_NAME: bricky_sprint1_e2e
+          DB_NAME: bricky_sprint3_e2e
           TYPEORM_SYNCHRONIZE: "false"
           JWT_SECRET: sprint3-ci-only-secret
           UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
