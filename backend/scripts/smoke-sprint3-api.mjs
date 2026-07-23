@@ -231,7 +231,7 @@ async function main() {
   const publicWorkerBatch = (
     await api('/workers/by-user-ids', {
       method: 'POST',
-      body: { ids: [workerUser.id] },
+      body: { ids: [workerUser.id, restrictedWorkerUser.id] },
     })
   ).data;
   assert.ok(Array.isArray(publicWorkerBatch));
@@ -240,6 +240,14 @@ async function main() {
       (candidate) => Number(candidate.workerUserId) === workerUser.id,
     ),
     'Approved worker is missing from the worker batch response',
+  );
+  assert.equal(
+    publicWorkerBatch.some(
+      (candidate) =>
+        Number(candidate.workerUserId) === restrictedWorkerUser.id,
+    ),
+    false,
+    'Pending worker is visible in the public worker batch response',
   );
   assertNoPrivateWorkerFields(publicWorkerBatch, 'workerBatch');
 

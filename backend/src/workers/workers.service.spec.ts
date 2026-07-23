@@ -400,6 +400,79 @@ describe('WorkersService v2 independence from legacy tables', () => {
     expect(workerRepository.find).toHaveBeenCalledTimes(1);
   });
 
+  it('returns only active, approved and public workers from batch lookup', async () => {
+    const workerProfilesRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          userId: 301,
+          publicName: 'Public worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 302,
+          publicName: 'Pending worker',
+          approvalStatus: 'pending',
+          visibilityStatus: 'private',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 303,
+          publicName: 'Private worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'private',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 304,
+          publicName: 'Blocked worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+    });
+    const workerRepository = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 51,
+          userId: 305,
+          fullName: 'Approved legacy worker',
+          isApproved: true,
+        },
+        {
+          id: 52,
+          userId: 306,
+          fullName: 'Unapproved legacy worker',
+          isApproved: false,
+        },
+      ]),
+    });
+    const users = {
+      findOne: jest.fn().mockResolvedValue({ id: 301, status: 'active' }),
+      findByIds: jest.fn().mockResolvedValue([
+        { id: 301, status: 'active' },
+        { id: 302, status: 'active' },
+        { id: 303, status: 'active' },
+        { id: 304, status: 'blocked' },
+        { id: 305, status: 'active' },
+        { id: 306, status: 'active' },
+      ]),
+    };
+    const service = serviceWith({
+      workerProfilesRepo,
+      workerRepository,
+      users,
+    });
+
+    const workers = await service.findByUserIds([
+      301, 302, 303, 304, 305, 306,
+    ]);
+
+    expect(workers.map((worker) => Number(worker.userId))).toEqual([301, 305]);
+  });
+
   it('returns v2 gallery media when the legacy gallery table is absent', async () => {
     const galleryRepo = repo({
       find: jest.fn().mockRejectedValue({

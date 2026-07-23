@@ -229,10 +229,34 @@ export class WorkersService {
           [] as Worker[],
         )
       : [];
+    const activeUsers = await this.users.findByIds([
+      ...profiles.map((profile) => Number(profile.userId)),
+      ...legacy.map((worker) => Number(worker.userId)),
+    ]);
+    const activeUserIds = new Set(
+      activeUsers
+        .filter((user) => user.status === 'active')
+        .map((user) => Number(user.id)),
+    );
+    const publicProfiles = profiles.filter(
+      (profile) =>
+        activeUserIds.has(Number(profile.userId)) &&
+        profile.approvalStatus === 'approved' &&
+        profile.visibilityStatus === 'public',
+    );
+    const publicLegacy = legacy.filter(
+      (worker) =>
+        activeUserIds.has(Number(worker.userId)) &&
+        Boolean(worker.isApproved),
+    );
 
     return [
-      ...(await Promise.all(profiles.map((profile) => this.withV2WorkerSummary(profile)))),
-      ...(await Promise.all(legacy.map((worker) => this.withGallerySummary(worker)))),
+      ...(await Promise.all(
+        publicProfiles.map((profile) => this.withV2WorkerSummary(profile)),
+      )),
+      ...(await Promise.all(
+        publicLegacy.map((worker) => this.withGallerySummary(worker)),
+      )),
     ];
   }
 
