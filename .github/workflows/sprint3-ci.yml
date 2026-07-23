@@ -44,11 +44,13 @@ jobs:
           node --check scripts/rehearse-sprint3-migrations.mjs
           node --check scripts/smoke-sprint3-api.mjs
           node --check scripts/smoke-sprint3-public.mjs
+          node --check scripts/test-smoke-sprint3-public.mjs
           node --check scripts/sprint3-release.mjs
           node --check scripts/sprint3-schema-contract.mjs
           node --check scripts/verify-sprint3-integrity.mjs
           node --check scripts/verify-sprint3-schema.mjs
           npm run release:self-test:sprint3
+          npm run release:test-smoke-public:sprint3
 
       - name: Run backend tests
         run: npm test -- --runInBand

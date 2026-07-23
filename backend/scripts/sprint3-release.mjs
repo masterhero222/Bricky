@@ -1068,30 +1068,118 @@ async function deploymentPreflight() {
     fail(`nginx does not proxy to the configured backend port ${backendPort}.`);
   }
 
-  console.log(
-    JSON.stringify(
-      {
-        ok: true,
-        checkedAt: new Date().toISOString(),
-        git,
-        migrationReportPath: resolve(migrationReportPath),
-        migrationCompletedAt: migrationReport.completedAt,
-        backendEntry,
-        frontendEntry,
-        pm2: {
-          name: processName,
-          status: process.pm2_env.status,
-          pid: process.pid,
-        },
-        nginx: {
-          frontendDist: normalizedFrontendDist,
-          backendPort,
-        },
-      },
-      null,
-      2,
-    ),
+  const result = {
+    ok: true,
+    checkedAt: new Date().toISOString(),
+    git,
+    migrationReportPath: resolve(migrationReportPath),
+    migrationCompletedAt: migrationReport.completedAt,
+    backendEntry,
+    frontendEntry,
+    pm2: {
+      name: processName,
+      status: process.pm2_env.status,
+      pid: process.pid,
+    },
+    nginx: {
+      frontendDist: normalizedFrontendDist,
+      backendPort,
+    },
+  };
+  console.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+async function acceptProduction() {
+  if (
+    process.env.SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE !==
+    'ACCEPT_BRICKY_PRODUCTION'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION.',
+    );
+  }
+  const suspendedUserToken = requireEnv('SPRINT3_SUSPENDED_USER_TOKEN');
+  const publicUrl = requireEnv('SPRINT3_PUBLIC_URL');
+  const migrationReportPath = requireEnv(
+    'SPRINT3_PRODUCTION_MIGRATION_REPORT',
   );
+  const git = gitMetadata();
+  const migrationReport = await readProductionMigrationEvidence(
+    migrationReportPath,
+    git,
+  );
+  const deployment = await deploymentPreflight();
+  const smokeOutput = command(
+    'node',
+    ['scripts/smoke-sprint3-public.mjs'],
+    {
+      env: {
+        ...process.env,
+        SPRINT3_PUBLIC_URL: publicUrl,
+        SPRINT3_EXPECTED_COMMIT_SHA: git.commit,
+        SPRINT3_SUSPENDED_USER_TOKEN: suspendedUserToken,
+      },
+    },
+  );
+  const smoke = JSON.parse(smokeOutput);
+  if (
+    smoke.ok !== true ||
+    smoke.readiness?.commit !== git.commit ||
+    smoke.expectedCommit !== git.commit ||
+    smoke.suspendedTokenRejected !== true ||
+    !Array.isArray(smoke.checkedRoutes) ||
+    !['/', '/workers', '/requests', '/worker/profile', '/client/profile'].every(
+      (route) => smoke.checkedRoutes.includes(route),
+    )
+  ) {
+    fail('Public production smoke evidence is incomplete.');
+  }
+
+  const reportPath = resolve(
+    process.env.SPRINT3_POST_DEPLOY_REPORT ||
+      resolve(dirname(migrationReportPath), 'post-deploy-report.json'),
+  );
+  if (existsSync(reportPath)) {
+    fail(`Post-deploy report already exists: ${reportPath}`);
+  }
+  const migrationCompletedAt = Date.parse(migrationReport.completedAt);
+  const smokeCheckedAt = Date.parse(smoke.checkedAt);
+  if (
+    !Number.isFinite(migrationCompletedAt) ||
+    !Number.isFinite(smokeCheckedAt) ||
+    smokeCheckedAt < migrationCompletedAt
+  ) {
+    fail('Public smoke was not completed after the production migration.');
+  }
+
+  const report = {
+    formatVersion: 1,
+    ok: true,
+    acceptedAt: new Date().toISOString(),
+    publicUrl,
+    git,
+    productionMigrationReportPath: resolve(migrationReportPath),
+    productionMigrationReportSha256: await sha256(migrationReportPath),
+    deployment,
+    smoke,
+    gates: [
+      'migration-evidence-chain',
+      'deployment-preflight',
+      'readiness',
+      'deployed-commit',
+      'spa-routes',
+      'public-assets',
+      'public-worker-privacy',
+      'public-media',
+      'suspended-token-rejection',
+    ],
+  };
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  console.log(JSON.stringify({ ...report, reportPath }, null, 2));
 }
 
 function selfTest() {
@@ -1143,6 +1231,7 @@ const actions = {
   'certify-rehearsal': certifyRehearsal,
   'migrate-production': migrateProduction,
   'deployment-preflight': deploymentPreflight,
+  'accept-production': acceptProduction,
   'self-test': selfTest,
   help() {
     console.log(
@@ -1155,6 +1244,7 @@ const actions = {
         '  certify-rehearsal   Run all rehearsal gates and write a release certificate',
         '  migrate-production  Apply migrations only after matching backup/rehearsal evidence',
         '  deployment-preflight Verify build, migration evidence, PM2 and nginx without restart',
+        '  accept-production   Verify the deployed commit, privacy and suspended-token behavior',
         '  self-test           Verify local safety guards without external services',
       ].join('\n'),
     );
