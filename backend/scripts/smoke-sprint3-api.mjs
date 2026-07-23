@@ -50,6 +50,28 @@ function authHeaders(token) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const privateWorkerFieldPattern =
+  /^(email|phone|phonePrivate|password|passwordHash|password_hash|accessToken|refreshToken)$/i;
+
+function assertNoPrivateWorkerFields(value, location = 'workerResponse') {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertNoPrivateWorkerFields(entry, `${location}[${index}]`),
+    );
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    assert.equal(
+      privateWorkerFieldPattern.test(key),
+      false,
+      `Private field ${location}.${key} is public`,
+    );
+    assertNoPrivateWorkerFields(nestedValue, `${location}.${key}`);
+  }
+}
+
 async function api(path, options = {}) {
   const headers = {
     ...authHeaders(options.token),
@@ -146,7 +168,7 @@ async function main() {
   console.log(`Sprint 3 API smoke: ${apiBase}`);
   console.log(`Database: ${database}`);
 
-  await api('/workers');
+  assertNoPrivateWorkerFields((await api('/workers')).data, 'workers');
 
   const adminUser = await register('client', {
     ...credentials.admin,
@@ -191,6 +213,35 @@ async function main() {
       reason: 'Sprint 3 API smoke',
     },
   });
+
+  const publicWorkers = (await api('/workers')).data;
+  assert.ok(Array.isArray(publicWorkers));
+  assert.ok(
+    publicWorkers.some(
+      (candidate) => Number(candidate.workerUserId) === workerUser.id,
+    ),
+    'Approved worker is missing from the public worker list',
+  );
+  assertNoPrivateWorkerFields(publicWorkers, 'workers');
+
+  const publicWorker = (await api(`/workers/${workerUser.id}`)).data;
+  assert.equal(Number(publicWorker.workerUserId), workerUser.id);
+  assertNoPrivateWorkerFields(publicWorker, 'workerProfile');
+
+  const publicWorkerBatch = (
+    await api('/workers/by-user-ids', {
+      method: 'POST',
+      body: { ids: [workerUser.id] },
+    })
+  ).data;
+  assert.ok(Array.isArray(publicWorkerBatch));
+  assert.ok(
+    publicWorkerBatch.some(
+      (candidate) => Number(candidate.workerUserId) === workerUser.id,
+    ),
+    'Approved worker is missing from the worker batch response',
+  );
+  assertNoPrivateWorkerFields(publicWorkerBatch, 'workerBatch');
 
   const restrictedFeed = await api('/requests/worker', {
     token: restrictedWorker.token,
