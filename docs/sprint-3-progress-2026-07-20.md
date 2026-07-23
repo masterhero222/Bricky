@@ -12,9 +12,9 @@ Sprint 3 изгражда професионалното data ядро на Bric
 
 **Общ прогрес: приблизително 95%.**
 
-Функционалното ядро е готово и локалните quality gates са зелени. Sprint 3
-още не е production stable, защото остават финалният merge, GitHub CI и
-production release процедурата с backup, restore rehearsal, миграции и smoke
+Функционалното ядро е готово, интеграцията с `main` е качена и GitHub CI е
+зелен. Sprint 3 още не е production stable, защото остава production release
+процедурата с backup, restore rehearsal, миграции, deployment и live smoke
 проверка.
 
 | Област | Прогрес | Статус |
@@ -125,15 +125,16 @@ draft
 9. Поръчката влиза в completed archive.
 10. Admin timeline съдържа всички lifecycle събития.
 
-## Последни локални проверки
+## Последни проверки
 
-Проверено на 23.07.2026 г. върху текущия merge с `origin/main`:
+Проверено на 23.07.2026 г. локално и в GitHub Actions върху текущия merge с
+`origin/main`:
 
 | Проверка | Резултат |
 | --- | --- |
 | Sprint 1/2/3 cross-sprint verification | Passed |
 | Backend test suites | 28/28 passed |
-| Backend tests | 159/159 passed |
+| Backend tests | 163/163 passed |
 | Backend production build | Passed |
 | Backend Sprint 3 release self-test | Passed |
 | Backend production audit | 0 vulnerabilities |
@@ -143,6 +144,10 @@ draft
 | Mock moderation enforcement | Passed |
 | Frontend production audit | 0 vulnerabilities |
 | Migration contract verification | Passed |
+| Sprint 2 migration and rollback rehearsal | Passed |
+| Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
+| Bricky verification GitHub workflow | Passed |
+| Sprint 3 CI GitHub workflow | Passed |
 
 ## Текущо състояние на интеграцията
 
@@ -152,10 +157,11 @@ draft
 - [x] Sprint 3 request/review lifecycle е запазен.
 - [x] Sprint 2 image processing, health и DB protections са интегрирани.
 - [x] Локалните cross-sprint gates са зелени.
-- [ ] Merge промените да бъдат stage-нати и commit-нати.
-- [ ] Branch-ът да бъде push-нат.
-- [ ] GitHub CI да мине върху интегрирания commit.
-- [ ] Да бъде отворен Sprint 3 pull request към `main`.
+- [x] Merge промените са stage-нати и commit-нати.
+- [x] Branch-ът е push-нат в GitHub.
+- [x] GitHub CI е зелен върху интегрирания commit.
+- [x] Отворен е draft Sprint 3 pull request към `main`:
+  [PR #7](https://github.com/masterhero222/Bricky/pull/7).
 
 ## Остава до production stable
 
