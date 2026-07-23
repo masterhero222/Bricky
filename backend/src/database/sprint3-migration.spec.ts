@@ -64,6 +64,16 @@ describe('Sprint 3 SQL migrations', () => {
     );
   });
 
+  it.each([
+    'moderationStatus',
+    'moderationReason',
+    'moderatedByUserId',
+    'moderatedAt',
+  ])('aligns review moderation column %s with the entity', (column) => {
+    expect(core).toContain(column);
+    expect(alignment).toContain(`ADD COLUMN ${column}`);
+  });
+
   it('uses MySQL-compatible idempotent column guards', () => {
     const sql = `${core}\n${alignment}`;
 

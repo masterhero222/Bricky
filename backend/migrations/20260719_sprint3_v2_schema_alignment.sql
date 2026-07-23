@@ -65,7 +65,11 @@ ALTER TABLE request_events
 
 SET @review_columns = CONCAT_WS(', ',
   IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
 );
 SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE reviews ', @review_columns));
 PREPARE sprint3_stmt FROM @reviews_alter;

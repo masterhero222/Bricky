@@ -274,6 +274,10 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   completed_at datetime NULL,
   completed_by_worker_id int NULL,
+  moderationStatus varchar(30) NOT NULL DEFAULT 'pending_review',
+  moderationReason text NULL,
+  moderatedByUserId int NULL,
+  moderatedAt datetime NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_review_request_client (request_id, client_user_id),
   KEY idx_reviews_worker (worker_user_id),
@@ -287,7 +291,11 @@ SET @review_columns = CONCAT_WS(', ',
   IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'client_user_id'), NULL, 'ADD COLUMN client_user_id int NULL'),
   IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'worker_user_id'), NULL, 'ADD COLUMN worker_user_id int NULL'),
   IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
 );
 SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE reviews ', @review_columns));
 PREPARE sprint3_stmt FROM @reviews_alter;
