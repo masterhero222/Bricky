@@ -179,7 +179,7 @@ Pre-deploy baseline от 23.07.2026 г.:
 - `GET https://bricky.bg/api/health/ready` връща `200`;
 - `/`, `/workers` и `/api/workers` са достъпни;
 - `npm run release:smoke-public:sprint3` правилно спира с:
-  `Private contact field workers[0].email is public`;
+  `Private field workers[0].email is public`;
 - до успешен Sprint 3 deploy текущият public workers endpoint не трябва да се
   счита за безопасен.
 

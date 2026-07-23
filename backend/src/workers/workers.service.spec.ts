@@ -185,6 +185,9 @@ describe('WorkersService media moderation', () => {
           id: 1,
           userId: 201,
           fullName: 'Legacy Worker',
+          email: 'private@example.test',
+          phone: '0888000000',
+          password: 'private-password-hash',
           avatarUrl: '/uploads/users/201/avatar/very-old.jpg',
         }),
       }),
@@ -194,6 +197,9 @@ describe('WorkersService media moderation', () => {
     const worker = await service.findByUserId(201);
 
     expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/old-approved.jpg');
+    expect(worker).not.toHaveProperty('email');
+    expect(worker).not.toHaveProperty('phone');
+    expect(worker).not.toHaveProperty('password');
   });
 
   it('saves an allowed worker banner immediately', async () => {
@@ -388,6 +394,9 @@ describe('WorkersService v2 independence from legacy tables', () => {
         fullName: 'V2 Worker',
       }),
     ]);
+    expect(workers[0]).not.toHaveProperty('email');
+    expect(workers[0]).not.toHaveProperty('phone');
+    expect(workers[0]).not.toHaveProperty('password');
     expect(workerRepository.find).toHaveBeenCalledTimes(1);
   });
 

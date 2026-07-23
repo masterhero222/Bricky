@@ -34,20 +34,24 @@ async function request(path, expectedContentType) {
   return response;
 }
 
-function assertNoPrivateContact(value, location = 'response') {
+function assertNoPrivateFields(value, location = 'response') {
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
-      assertNoPrivateContact(entry, `${location}[${index}]`),
+      assertNoPrivateFields(entry, `${location}[${index}]`),
     );
     return;
   }
   if (!value || typeof value !== 'object') return;
 
   for (const [key, nestedValue] of Object.entries(value)) {
-    if (/^(email|phone|phonePrivate)$/i.test(key)) {
-      throw new Error(`Private contact field ${location}.${key} is public.`);
+    if (
+      /^(email|phone|phonePrivate|password|passwordHash|password_hash|accessToken|refreshToken)$/i.test(
+        key,
+      )
+    ) {
+      throw new Error(`Private field ${location}.${key} is public.`);
     }
-    assertNoPrivateContact(nestedValue, `${location}.${key}`);
+    assertNoPrivateFields(nestedValue, `${location}.${key}`);
   }
 }
 
@@ -71,7 +75,7 @@ for (const assetPath of [...new Set(assetPaths)]) {
 const workersResponse = await request('/api/workers', 'application/json');
 const workers = await workersResponse.json();
 assert.ok(Array.isArray(workers), 'GET /api/workers must return an array.');
-assertNoPrivateContact(workers, 'workers');
+assertNoPrivateFields(workers, 'workers');
 
 let workerProfileChecked = false;
 if (workers.length > 0) {
@@ -83,7 +87,7 @@ if (workers.length > 0) {
     'application/json',
   );
   const profile = await profileResponse.json();
-  assertNoPrivateContact(profile, 'workerProfile');
+  assertNoPrivateFields(profile, 'workerProfile');
   workerProfileChecked = true;
 }
 

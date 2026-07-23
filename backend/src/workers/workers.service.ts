@@ -507,11 +507,10 @@ export class WorkersService {
       this.media.findByWorker(userId).catch(() => [] as any[]),
     ]);
     const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
+    const publicWorker = this.withoutPrivateWorkerFields(worker);
 
     return {
-      ...worker,
-      email: null,
-      phone: null,
+      ...publicWorker,
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
       profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
       gallery,
@@ -549,8 +548,6 @@ export class WorkersService {
       workerUserId: userId,
       fullName: profile.publicName,
       publicName: profile.publicName,
-      email: null,
-      phone: null,
       city: profile.city,
       skills: skills.map((skill) => REPAIR_CATEGORY_BY_KEY[skill.categoryKey as RepairCategoryKey] || skill.activityKey || skill.categoryKey).filter(Boolean),
       skillKeys: skills.map((skill) => skill.categoryKey).filter(Boolean),
@@ -570,6 +567,26 @@ export class WorkersService {
       completedJobs,
       createdAt: profile.createdAt,
     };
+  }
+
+  private withoutPrivateWorkerFields(
+    worker: Worker,
+  ): Record<string, unknown> & Pick<Worker, 'id' | 'userId'> {
+    const publicWorker: Record<string, unknown> &
+      Pick<Worker, 'id' | 'userId'> = { ...worker };
+    for (const key of [
+      'email',
+      'phone',
+      'phonePrivate',
+      'password',
+      'passwordHash',
+      'password_hash',
+      'accessToken',
+      'refreshToken',
+    ]) {
+      delete publicWorker[key];
+    }
+    return publicWorker;
   }
 
   private async replaceWorkerSkills(workerUserId: number, skills: string[], manager?: EntityManager) {
