@@ -130,7 +130,9 @@ draft
 Проверено на 23.07.2026 г. локално и в GitHub Actions върху текущия merge с
 `origin/main`:
 
-Release candidate commit: `087cad2` (`fix: remove private fields from public worker responses`)
+Release candidate code fix: `087cad2` (`fix: remove private fields from public worker responses`)
+
+Validated branch head: `96c98b8` (`test: enforce worker privacy across public API shapes`)
 
 | Проверка | Резултат |
 | --- | --- |
@@ -148,8 +150,9 @@ Release candidate commit: `087cad2` (`fix: remove private fields from public wor
 | Migration contract verification | Passed |
 | Sprint 2 migration and rollback rehearsal | Passed |
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
-| Bricky verification GitHub workflow #86 | Passed |
-| Sprint 3 CI GitHub workflow #22 | Passed |
+| Public worker list/profile/batch privacy smoke | Passed |
+| Bricky verification GitHub workflow #90 | Passed |
+| Sprint 3 CI GitHub workflow #26 | Passed |
 
 ## Текущо състояние на интеграцията
 
