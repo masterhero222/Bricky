@@ -99,7 +99,7 @@ jobs:
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260718_sprint3_v2_data_core.sql
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < backend/migrations/20260719_sprint3_v2_schema_alignment.sql
 
-      - name: Run MySQL request lifecycle E2E
+      - name: Run Sprint 3 MySQL lifecycle smoke
         working-directory: backend
         env:
           NODE_ENV: test
@@ -109,8 +109,9 @@ jobs:
           DB_PASS: root
           DB_NAME: bricky_sprint1_e2e
           TYPEORM_SYNCHRONIZE: "false"
-          JWT_SECRET: sprint2-ci-only-secret
+          JWT_SECRET: sprint3-ci-only-secret
           UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          SPRINT3_API_URL: http://127.0.0.1:3000
           MAIL_HOST: 127.0.0.1
           MAIL_PORT: 2525
           MAIL_USER: test
@@ -118,4 +119,28 @@ jobs:
           MAIL_FROM: test@example.test
         run: |
           mkdir -p "$UPLOADS_DIR"
-          npm run test:e2e -- --runInBand
+          npm run build
+          node dist/main.js > "$RUNNER_TEMP/sprint3-api.log" 2>&1 &
+          api_pid=$!
+
+          cleanup() {
+            kill "$api_pid" 2>/dev/null || true
+            cat "$RUNNER_TEMP/sprint3-api.log"
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null; then
+              break
+            fi
+
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              echo "Sprint 3 API exited before becoming ready."
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null
+          npm run smoke:api:sprint3
