@@ -168,7 +168,7 @@ Latest locally validated release tooling: `55ba5c0`
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
 | Public worker list/profile/batch privacy smoke | Passed |
 | Public post-deploy contract test | Passed |
-| GitHub verification workflows | Passed on previous head; current head pending push |
+| GitHub verification workflows | Passed on current pushed head |
 
 ## Текущо състояние на интеграцията
 
