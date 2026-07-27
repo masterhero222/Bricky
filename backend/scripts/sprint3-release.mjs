@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -129,6 +130,113 @@ async function directoryFingerprint(directory) {
     files: files.length,
     bytes,
   };
+}
+
+function fingerprintsMatch(left, right) {
+  return (
+    left?.sha256 === right?.sha256 &&
+    left?.files === right?.files &&
+    left?.bytes === right?.bytes
+  );
+}
+
+function activateBuildDirectories({
+  activeBackend,
+  activeFrontend,
+  stagedBackend,
+  stagedFrontend,
+  rollbackBackend,
+  rollbackFrontend,
+}) {
+  const pairs = [
+    {
+      label: 'backend',
+      active: activeBackend,
+      staged: stagedBackend,
+      rollback: rollbackBackend,
+      activated: false,
+      preserved: false,
+    },
+    {
+      label: 'frontend',
+      active: activeFrontend,
+      staged: stagedFrontend,
+      rollback: rollbackFrontend,
+      activated: false,
+      preserved: false,
+    },
+  ];
+
+  for (const pair of pairs) {
+    if (
+      !existsSync(pair.active) ||
+      !statSync(pair.active).isDirectory() ||
+      !existsSync(pair.staged) ||
+      !statSync(pair.staged).isDirectory() ||
+      existsSync(pair.rollback)
+    ) {
+      fail(`Unsafe ${pair.label} activation paths.`);
+    }
+    mkdirSync(dirname(pair.rollback), { recursive: true, mode: 0o700 });
+  }
+
+  try {
+    for (const pair of pairs) {
+      renameSync(pair.active, pair.rollback);
+      pair.preserved = true;
+      renameSync(pair.staged, pair.active);
+      pair.activated = true;
+    }
+  } catch (error) {
+    for (const pair of pairs.reverse()) {
+      if (pair.activated && existsSync(pair.active)) {
+        renameSync(pair.active, pair.staged);
+        pair.activated = false;
+      }
+      if (pair.preserved && existsSync(pair.rollback)) {
+        renameSync(pair.rollback, pair.active);
+        pair.preserved = false;
+      }
+    }
+    throw error;
+  }
+}
+
+function restoreActivatedBuildDirectories({
+  activeBackend,
+  activeFrontend,
+  rollbackBackend,
+  rollbackFrontend,
+  failedRoot,
+}) {
+  const pairs = [
+    {
+      label: 'frontend',
+      active: activeFrontend,
+      rollback: rollbackFrontend,
+      failed: resolve(failedRoot, 'frontend-dist'),
+    },
+    {
+      label: 'backend',
+      active: activeBackend,
+      rollback: rollbackBackend,
+      failed: resolve(failedRoot, 'backend-dist'),
+    },
+  ];
+  mkdirSync(failedRoot, { recursive: true, mode: 0o700 });
+  for (const pair of pairs) {
+    if (
+      !existsSync(pair.active) ||
+      !existsSync(pair.rollback) ||
+      existsSync(pair.failed)
+    ) {
+      fail(`Cannot restore the previous ${pair.label} build safely.`);
+    }
+  }
+  for (const pair of pairs) {
+    renameSync(pair.active, pair.failed);
+    renameSync(pair.rollback, pair.active);
+  }
 }
 
 function readBrowserSmokeEvidence(
@@ -560,9 +668,7 @@ async function packageDeployment() {
     process.env.SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE !==
     'PACKAGE_BRICKY_DEPLOYMENT'
   ) {
-    fail(
-      'Set SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE=PACKAGE_BRICKY_DEPLOYMENT.',
-    );
+    fail('Set SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE=PACKAGE_BRICKY_DEPLOYMENT.');
   }
   const configuredOutputRoot = requireEnv('SPRINT3_DEPLOYMENT_BUNDLE_ROOT');
   if (!isAbsolute(configuredOutputRoot)) {
@@ -756,9 +862,7 @@ async function databaseFingerprint(database) {
       columns: columnRows.map((row) => ({
         tableName: row.TABLE_NAME || row.table_name,
         columnName: row.COLUMN_NAME || row.column_name,
-        ordinalPosition: Number(
-          row.ORDINAL_POSITION || row.ordinal_position,
-        ),
+        ordinalPosition: Number(row.ORDINAL_POSITION || row.ordinal_position),
         columnType: row.COLUMN_TYPE || row.column_type,
         isNullable: row.IS_NULLABLE || row.is_nullable,
         columnDefault: row.COLUMN_DEFAULT ?? row.column_default ?? null,
@@ -766,9 +870,7 @@ async function databaseFingerprint(database) {
         extra: row.EXTRA || row.extra,
       })),
     };
-    return createHash('sha256')
-      .update(JSON.stringify(snapshot))
-      .digest('hex');
+    return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
   } finally {
     await connection.end();
   }
@@ -955,9 +1057,7 @@ async function certifyRehearsal() {
   const restoreReportPath = requireEnv('SPRINT3_RESTORE_REPORT');
   const apiUrl = requireEnv('SPRINT3_API_URL').replace(/\/+$/, '');
   const webUrl = requireEnv('SPRINT3_WEB_URL').replace(/\/+$/, '');
-  const browserReportPath = resolve(
-    requireEnv('SPRINT3_BROWSER_SMOKE_REPORT'),
-  );
+  const browserReportPath = resolve(requireEnv('SPRINT3_BROWSER_SMOKE_REPORT'));
   const browserSessionPath = resolve(
     process.env.SPRINT3_SMOKE_SESSION_FILE ||
       resolve(dirname(restoreReportPath), 'browser-session.json'),
@@ -1327,7 +1427,10 @@ async function readProductionMigrationEvidence(reportPath, git) {
   return report;
 }
 
-async function deploymentPreflight() {
+async function deploymentPreflight({
+  verifyActiveBuilds = true,
+  emitResult = true,
+} = {}) {
   validateProductionEnvironment({ requireTools: false });
   const git = gitMetadata();
   if (git.dirty) {
@@ -1344,7 +1447,7 @@ async function deploymentPreflight() {
   const deploymentBundle = await readDeploymentBundle(
     deploymentBundleManifestPath,
     git,
-    true,
+    verifyActiveBuilds,
   );
 
   const backendEntry = resolve(backendRoot, 'dist/main.js');
@@ -1395,10 +1498,9 @@ async function deploymentPreflight() {
     migrationReportPath: resolve(migrationReportPath),
     migrationCompletedAt: migrationReport.completedAt,
     deploymentBundleManifestPath: resolve(deploymentBundleManifestPath),
-    deploymentBundleManifestSha256: await sha256(
-      deploymentBundleManifestPath,
-    ),
+    deploymentBundleManifestSha256: await sha256(deploymentBundleManifestPath),
     deploymentBundleCreatedAt: deploymentBundle.createdAt,
+    activeBuildsVerified: verifyActiveBuilds,
     backendEntry,
     frontendEntry,
     pm2: {
@@ -1411,8 +1513,221 @@ async function deploymentPreflight() {
       backendPort,
     },
   };
-  console.log(JSON.stringify(result, null, 2));
+  if (emitResult) {
+    console.log(JSON.stringify(result, null, 2));
+  }
   return result;
+}
+
+async function activateDeployment() {
+  if (
+    process.env.SPRINT3_CONFIRM_DEPLOYMENT_ACTIVATION !==
+    'ACTIVATE_BRICKY_DEPLOYMENT'
+  ) {
+    fail(
+      'Set SPRINT3_CONFIRM_DEPLOYMENT_ACTIVATION=ACTIVATE_BRICKY_DEPLOYMENT.',
+    );
+  }
+  if (process.platform === 'win32') {
+    fail('Deployment activation must run on the Linux production host.');
+  }
+
+  const activationRoot = resolve(
+    requireEnv('SPRINT3_DEPLOYMENT_ACTIVATION_ROOT'),
+  );
+  if (
+    !isAbsolute(activationRoot) ||
+    isPathWithin(repositoryRoot, activationRoot)
+  ) {
+    fail(
+      'SPRINT3_DEPLOYMENT_ACTIVATION_ROOT must be absolute and outside the Git worktree.',
+    );
+  }
+
+  const preflight = await deploymentPreflight({
+    verifyActiveBuilds: false,
+    emitResult: false,
+  });
+  const git = preflight.git;
+  const manifestPath = preflight.deploymentBundleManifestPath;
+  const manifest = await readDeploymentBundle(manifestPath, git, false);
+  const bundleDirectory = dirname(manifestPath);
+  const operationRoot = resolve(
+    activationRoot,
+    `${timestamp()}-${git.commit.slice(0, 12)}`,
+  );
+  if (existsSync(operationRoot)) {
+    fail(`Deployment activation already exists: ${operationRoot}`);
+  }
+  mkdirSync(operationRoot, { recursive: true, mode: 0o700 });
+
+  const activeBackend = resolve(backendRoot, 'dist');
+  const activeFrontend = resolve(repositoryRoot, 'frontend/dist');
+  if (
+    statSync(operationRoot).dev !== statSync(dirname(activeBackend)).dev ||
+    statSync(operationRoot).dev !== statSync(dirname(activeFrontend)).dev
+  ) {
+    fail(
+      'Activation root and active build directories must use the same filesystem.',
+    );
+  }
+
+  const stagedRoot = resolve(operationRoot, 'staged');
+  mkdirSync(stagedRoot, { recursive: true, mode: 0o700 });
+  for (const key of ['backend', 'frontend']) {
+    command('tar', [
+      '-xzf',
+      resolve(bundleDirectory, manifest.artifacts[key].file),
+      '-C',
+      stagedRoot,
+    ]);
+  }
+
+  const stagedBackend = resolve(stagedRoot, 'backend/dist');
+  const stagedFrontend = resolve(stagedRoot, 'frontend/dist');
+  const stagedFingerprints = {
+    backend: await directoryFingerprint(stagedBackend),
+    frontend: await directoryFingerprint(stagedFrontend),
+  };
+  for (const key of ['backend', 'frontend']) {
+    if (
+      !fingerprintsMatch(
+        stagedFingerprints[key],
+        manifest.artifacts[key].buildFingerprint,
+      )
+    ) {
+      fail(`Staged ${key} build does not match the deployment manifest.`);
+    }
+  }
+
+  const previousFingerprints = {
+    backend: await directoryFingerprint(activeBackend),
+    frontend: await directoryFingerprint(activeFrontend),
+  };
+  const rollbackBackend = resolve(operationRoot, 'rollback/backend-dist');
+  const rollbackFrontend = resolve(operationRoot, 'rollback/frontend-dist');
+  let activated = false;
+  try {
+    activateBuildDirectories({
+      activeBackend,
+      activeFrontend,
+      stagedBackend,
+      stagedFrontend,
+      rollbackBackend,
+      rollbackFrontend,
+    });
+    activated = true;
+    const activatedFingerprints = {
+      backend: await directoryFingerprint(activeBackend),
+      frontend: await directoryFingerprint(activeFrontend),
+    };
+    for (const key of ['backend', 'frontend']) {
+      if (
+        !fingerprintsMatch(
+          activatedFingerprints[key],
+          manifest.artifacts[key].buildFingerprint,
+        )
+      ) {
+        fail(`Activated ${key} build does not match the deployment manifest.`);
+      }
+    }
+
+    const verifiedPreflight = await deploymentPreflight({
+      verifyActiveBuilds: true,
+      emitResult: false,
+    });
+    const report = {
+      formatVersion: 1,
+      kind: 'sprint3-deployment-activation',
+      ok: true,
+      activatedAt: new Date().toISOString(),
+      git,
+      manifestPath,
+      manifestSha256: await sha256(manifestPath),
+      operationRoot,
+      previousFingerprints,
+      activatedFingerprints,
+      rollback: {
+        backend: rollbackBackend,
+        frontend: rollbackFrontend,
+      },
+      preflight: verifiedPreflight,
+    };
+    const reportPath = resolve(operationRoot, 'activation-report.json');
+    writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    console.log(JSON.stringify({ ...report, reportPath }, null, 2));
+  } catch (error) {
+    if (activated) {
+      restoreActivatedBuildDirectories({
+        activeBackend,
+        activeFrontend,
+        rollbackBackend,
+        rollbackFrontend,
+        failedRoot: resolve(stagedRoot, 'failed'),
+      });
+    }
+    throw error;
+  }
+}
+
+async function readDeploymentActivationEvidence(
+  reportPath,
+  git,
+  manifestPath,
+  manifest,
+) {
+  if (!isAbsolute(reportPath) || !existsSync(reportPath)) {
+    fail(
+      'SPRINT3_DEPLOYMENT_ACTIVATION_REPORT must be an absolute path to an existing report.',
+    );
+  }
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+  const activatedAt = Date.parse(report.activatedAt);
+  if (
+    report.formatVersion !== 1 ||
+    report.kind !== 'sprint3-deployment-activation' ||
+    report.ok !== true ||
+    report.git?.commit !== git.commit ||
+    resolve(report.manifestPath || '') !== resolve(manifestPath) ||
+    report.manifestSha256 !== (await sha256(manifestPath)) ||
+    !Number.isFinite(activatedAt) ||
+    report.preflight?.ok !== true ||
+    report.preflight?.activeBuildsVerified !== true ||
+    report.preflight?.git?.commit !== git.commit
+  ) {
+    fail('Deployment activation report is invalid or incomplete.');
+  }
+  for (const key of ['backend', 'frontend']) {
+    if (
+      !fingerprintsMatch(
+        report.activatedFingerprints?.[key],
+        manifest.artifacts[key].buildFingerprint,
+      )
+    ) {
+      fail(`Deployment activation report has an invalid ${key} fingerprint.`);
+    }
+    const rollbackPath = report.rollback?.[key];
+    if (
+      !rollbackPath ||
+      !isAbsolute(rollbackPath) ||
+      !existsSync(rollbackPath) ||
+      !statSync(rollbackPath).isDirectory()
+    ) {
+      fail(`Deployment activation report has no ${key} rollback build.`);
+    }
+    if (
+      !fingerprintsMatch(
+        report.previousFingerprints?.[key],
+        await directoryFingerprint(rollbackPath),
+      )
+    ) {
+      fail(`Deployment activation report has a damaged ${key} rollback build.`);
+    }
+  }
+  return report;
 }
 
 async function acceptProduction() {
@@ -1420,34 +1735,40 @@ async function acceptProduction() {
     process.env.SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE !==
     'ACCEPT_BRICKY_PRODUCTION'
   ) {
-    fail(
-      'Set SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION.',
-    );
+    fail('Set SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION.');
   }
   const suspendedUserToken = requireEnv('SPRINT3_SUSPENDED_USER_TOKEN');
   const publicUrl = requireEnv('SPRINT3_PUBLIC_URL');
-  const migrationReportPath = requireEnv(
-    'SPRINT3_PRODUCTION_MIGRATION_REPORT',
-  );
+  const migrationReportPath = requireEnv('SPRINT3_PRODUCTION_MIGRATION_REPORT');
   const browserReportPath = requireEnv('SPRINT3_BROWSER_SMOKE_REPORT');
+  const activationReportPath = requireEnv(
+    'SPRINT3_DEPLOYMENT_ACTIVATION_REPORT',
+  );
   const git = gitMetadata();
   const migrationReport = await readProductionMigrationEvidence(
     migrationReportPath,
     git,
   );
   const deployment = await deploymentPreflight();
-  const smokeOutput = command(
-    'node',
-    ['scripts/smoke-sprint3-public.mjs'],
-    {
-      env: {
-        ...process.env,
-        SPRINT3_PUBLIC_URL: publicUrl,
-        SPRINT3_EXPECTED_COMMIT_SHA: git.commit,
-        SPRINT3_SUSPENDED_USER_TOKEN: suspendedUserToken,
-      },
-    },
+  const deploymentBundle = await readDeploymentBundle(
+    deployment.deploymentBundleManifestPath,
+    git,
+    true,
   );
+  const activation = await readDeploymentActivationEvidence(
+    activationReportPath,
+    git,
+    deployment.deploymentBundleManifestPath,
+    deploymentBundle,
+  );
+  const smokeOutput = command('node', ['scripts/smoke-sprint3-public.mjs'], {
+    env: {
+      ...process.env,
+      SPRINT3_PUBLIC_URL: publicUrl,
+      SPRINT3_EXPECTED_COMMIT_SHA: git.commit,
+      SPRINT3_SUSPENDED_USER_TOKEN: suspendedUserToken,
+    },
+  });
   const smoke = JSON.parse(smokeOutput);
   if (
     smoke.ok !== true ||
@@ -1464,7 +1785,7 @@ async function acceptProduction() {
   const browserSmoke = readBrowserSmokeEvidence(browserReportPath, {
     webBase: publicUrl,
     expectedCommit: git.commit,
-    checkedAfter: migrationReport.completedAt,
+    checkedAfter: activation.activatedAt,
   });
 
   const reportPath = resolve(
@@ -1475,13 +1796,18 @@ async function acceptProduction() {
     fail(`Post-deploy report already exists: ${reportPath}`);
   }
   const migrationCompletedAt = Date.parse(migrationReport.completedAt);
+  const deploymentActivatedAt = Date.parse(activation.activatedAt);
   const smokeCheckedAt = Date.parse(smoke.checkedAt);
   if (
     !Number.isFinite(migrationCompletedAt) ||
+    !Number.isFinite(deploymentActivatedAt) ||
     !Number.isFinite(smokeCheckedAt) ||
-    smokeCheckedAt < migrationCompletedAt
+    smokeCheckedAt < migrationCompletedAt ||
+    smokeCheckedAt < deploymentActivatedAt
   ) {
-    fail('Post-deploy smoke was not completed after the production migration.');
+    fail(
+      'Post-deploy smoke was not completed after migration and build activation.',
+    );
   }
 
   const report = {
@@ -1493,12 +1819,17 @@ async function acceptProduction() {
     productionMigrationReportPath: resolve(migrationReportPath),
     productionMigrationReportSha256: await sha256(migrationReportPath),
     deployment,
+    deploymentActivationReportPath: resolve(activationReportPath),
+    deploymentActivationReportSha256: await sha256(activationReportPath),
+    activation,
     smoke,
     browserSmokeReportPath: resolve(browserReportPath),
     browserSmokeReportSha256: await sha256(browserReportPath),
     browserSmoke,
     gates: [
       'migration-evidence-chain',
+      'atomic-build-activation',
+      'rollback-build-preservation',
       'deployment-preflight',
       'readiness',
       'deployed-commit',
@@ -1634,6 +1965,190 @@ async function selfTest() {
     ) {
       fail('Changed build directory kept the same fingerprint.');
     }
+
+    const activation = resolve(temporaryRoot, 'activation');
+    const activeBackend = resolve(activation, 'active/backend-dist');
+    const activeFrontend = resolve(activation, 'active/frontend-dist');
+    const stagedBackend = resolve(activation, 'staged/backend-dist');
+    const stagedFrontend = resolve(activation, 'staged/frontend-dist');
+    const rollbackBackend = resolve(activation, 'rollback/backend-dist');
+    const rollbackFrontend = resolve(activation, 'rollback/frontend-dist');
+    for (const directory of [
+      activeBackend,
+      activeFrontend,
+      stagedBackend,
+      stagedFrontend,
+    ]) {
+      mkdirSync(directory, { recursive: true });
+    }
+    writeFileSync(resolve(activeBackend, 'build.txt'), 'old-backend\n');
+    writeFileSync(resolve(activeFrontend, 'build.txt'), 'old-frontend\n');
+    writeFileSync(resolve(stagedBackend, 'build.txt'), 'new-backend\n');
+    writeFileSync(resolve(stagedFrontend, 'build.txt'), 'new-frontend\n');
+    const testPreviousFingerprints = {
+      backend: await directoryFingerprint(activeBackend),
+      frontend: await directoryFingerprint(activeFrontend),
+    };
+    activateBuildDirectories({
+      activeBackend,
+      activeFrontend,
+      stagedBackend,
+      stagedFrontend,
+      rollbackBackend,
+      rollbackFrontend,
+    });
+    if (
+      readFileSync(resolve(activeBackend, 'build.txt'), 'utf8') !==
+        'new-backend\n' ||
+      readFileSync(resolve(activeFrontend, 'build.txt'), 'utf8') !==
+        'new-frontend\n'
+    ) {
+      fail('Build activation did not publish both staged builds.');
+    }
+    const activationManifestPath = resolve(
+      activation,
+      'deployment-manifest.json',
+    );
+    const activationReportPath = resolve(activation, 'activation-report.json');
+    const activationGit = {
+      commit: 'release-commit',
+      branch: 'release-branch',
+      dirty: false,
+    };
+    const activationManifest = {
+      artifacts: {
+        backend: {
+          buildFingerprint: await directoryFingerprint(activeBackend),
+        },
+        frontend: {
+          buildFingerprint: await directoryFingerprint(activeFrontend),
+        },
+      },
+    };
+    writeFileSync(
+      activationManifestPath,
+      `${JSON.stringify(activationManifest)}\n`,
+    );
+    writeFileSync(
+      activationReportPath,
+      `${JSON.stringify({
+        formatVersion: 1,
+        kind: 'sprint3-deployment-activation',
+        ok: true,
+        activatedAt: '2026-07-27T10:00:00.000Z',
+        git: activationGit,
+        manifestPath: activationManifestPath,
+        manifestSha256: await sha256(activationManifestPath),
+        previousFingerprints: testPreviousFingerprints,
+        activatedFingerprints: {
+          backend: await directoryFingerprint(activeBackend),
+          frontend: await directoryFingerprint(activeFrontend),
+        },
+        rollback: {
+          backend: rollbackBackend,
+          frontend: rollbackFrontend,
+        },
+        preflight: {
+          ok: true,
+          activeBuildsVerified: true,
+          git: activationGit,
+        },
+      })}\n`,
+    );
+    await readDeploymentActivationEvidence(
+      activationReportPath,
+      activationGit,
+      activationManifestPath,
+      activationManifest,
+    );
+    const validActivationReport = readFileSync(activationReportPath, 'utf8');
+    const tamperedActivationReport = JSON.parse(validActivationReport);
+    tamperedActivationReport.activatedFingerprints.backend.sha256 =
+      'tampered-build';
+    writeFileSync(
+      activationReportPath,
+      `${JSON.stringify(tamperedActivationReport)}\n`,
+    );
+    let tamperedActivationRejected = false;
+    try {
+      await readDeploymentActivationEvidence(
+        activationReportPath,
+        activationGit,
+        activationManifestPath,
+        activationManifest,
+      );
+    } catch {
+      tamperedActivationRejected = true;
+    }
+    if (!tamperedActivationRejected) {
+      fail('Tampered deployment activation evidence passed the self-test.');
+    }
+    writeFileSync(activationReportPath, validActivationReport);
+    restoreActivatedBuildDirectories({
+      activeBackend,
+      activeFrontend,
+      rollbackBackend,
+      rollbackFrontend,
+      failedRoot: resolve(activation, 'failed'),
+    });
+    if (
+      readFileSync(resolve(activeBackend, 'build.txt'), 'utf8') !==
+        'old-backend\n' ||
+      readFileSync(resolve(activeFrontend, 'build.txt'), 'utf8') !==
+        'old-frontend\n'
+    ) {
+      fail('Build activation rollback did not restore both previous builds.');
+    }
+
+    const failedActivation = resolve(temporaryRoot, 'failed-activation');
+    const failedActiveBackend = resolve(
+      failedActivation,
+      'active/backend-dist',
+    );
+    const failedActiveFrontend = resolve(
+      failedActivation,
+      'active/frontend-dist',
+    );
+    const failedStagedBackend = resolve(
+      failedActivation,
+      'staged/backend-dist',
+    );
+    const missingStagedFrontend = resolve(
+      failedActivation,
+      'staged/frontend-dist',
+    );
+    for (const directory of [
+      failedActiveBackend,
+      failedActiveFrontend,
+      failedStagedBackend,
+    ]) {
+      mkdirSync(directory, { recursive: true });
+    }
+    writeFileSync(resolve(failedActiveBackend, 'build.txt'), 'old-backend\n');
+    writeFileSync(resolve(failedActiveFrontend, 'build.txt'), 'old-frontend\n');
+    writeFileSync(resolve(failedStagedBackend, 'build.txt'), 'new-backend\n');
+    let partialActivationRejected = false;
+    try {
+      activateBuildDirectories({
+        activeBackend: failedActiveBackend,
+        activeFrontend: failedActiveFrontend,
+        stagedBackend: failedStagedBackend,
+        stagedFrontend: missingStagedFrontend,
+        rollbackBackend: resolve(failedActivation, 'rollback/backend-dist'),
+        rollbackFrontend: resolve(failedActivation, 'rollback/frontend-dist'),
+      });
+    } catch {
+      partialActivationRejected = true;
+    }
+    if (
+      !partialActivationRejected ||
+      readFileSync(resolve(failedActiveBackend, 'build.txt'), 'utf8') !==
+        'old-backend\n' ||
+      readFileSync(resolve(failedActiveFrontend, 'build.txt'), 'utf8') !==
+        'old-frontend\n'
+    ) {
+      fail('Partial build activation was not rolled back safely.');
+    }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
@@ -1650,6 +2165,7 @@ const actions = {
   'certify-rehearsal': certifyRehearsal,
   'migrate-production': migrateProduction,
   'deployment-preflight': deploymentPreflight,
+  'activate-deployment': activateDeployment,
   'accept-production': acceptProduction,
   'self-test': selfTest,
   help() {
@@ -1665,6 +2181,7 @@ const actions = {
         '  certify-rehearsal   Run all rehearsal gates and write a release certificate',
         '  migrate-production  Apply migrations only after matching backup/rehearsal evidence',
         '  deployment-preflight Verify build, migration evidence, PM2 and nginx without restart',
+        '  activate-deployment Stage, verify and activate both build archives with rollback',
         '  accept-production   Verify the deployed commit, privacy and suspended-token behavior',
         '  self-test           Verify local safety guards without external services',
       ].join('\n'),

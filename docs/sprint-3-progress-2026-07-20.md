@@ -202,7 +202,7 @@ GitHub evidence:
 - [x] Merge промените са stage-нати и commit-нати.
 - [x] Branch-ът е push-нат в GitHub.
 - [x] GitHub CI е зелен върху интегрирания commit.
-- [x] Отворен е draft Sprint 3 pull request към `main`:
+- [x] Sprint 3 pull request-ът към `main` е ready за review и mergeable:
   [PR #7](https://github.com/masterhero222/Bricky/pull/7).
 
 ## Остава до production stable
@@ -240,9 +240,11 @@ Pre-deploy baseline от 23.07.2026 г.:
 - [ ] Проверка за orphan записи, счупени foreign keys и липсващи media файлове.
 - [ ] Изпълнение и проверка на rollback процедурата в rehearsal средата.
 - [ ] Production deployment.
+- [ ] Production `activation-report.json` с проверени rollback build-ове.
 - [ ] Post-deploy API и browser smoke test.
 - [ ] Архивиране на успешния `post-deploy-report.json`.
 - [x] Immutable backend/frontend deployment bundle и checksum manifest.
+- [x] Staged build activation с fingerprint проверка и автоматичен rollback.
 
 ### P2 - след release
 
@@ -261,5 +263,5 @@ Sprint 3 е завършен само когато:
 4. Release candidate е deploy-нат.
 5. Client, worker и admin smoke flow работи на live.
 6. Public API не издава private контакти или точен адрес.
-7. `post-deploy-report.json`, production evidence и rollback данните са
-   архивирани.
+7. `activation-report.json`, `post-deploy-report.json`, production evidence и
+   rollback данните са архивирани.

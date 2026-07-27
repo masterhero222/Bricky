@@ -192,30 +192,54 @@ restart не се прави.
 
 ## 6. Application deployment
 
-1. Checkout на точния rehearsal commit.
-2. `npm ci` и backend build.
-3. `npm ci` и frontend build.
-4. Създаване и проверка на immutable deployment bundle извън Git worktree:
+1. Checkout на точния rehearsal commit в чист worktree.
+2. `npm ci` за backend и frontend. Не се изпълнява build директно върху
+   активните `backend/dist` и `frontend/dist`.
+3. Immutable deployment bundle-ът се създава предварително от същия чист
+   commit в CI или изолирано release копие и се прехвърля извън production
+   Git worktree.
 
 ```bash
-export SPRINT3_DEPLOYMENT_BUNDLE_ROOT=/var/www/Bricky-releases/sprint3
+export SPRINT3_DEPLOYMENT_BUNDLE_ROOT=/absolute/release/output
 export SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE=PACKAGE_BRICKY_DEPLOYMENT
 npm run release:package-deployment:sprint3
+unset SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE
+```
 
+4. Проверка на bundle-а върху production host:
+
+```bash
 export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST=/absolute/path/to/deployment-manifest.json
 npm run release:verify-deployment-bundle:sprint3
 ```
 
 Bundle-ът съдържа отделни `backend-build.tar.gz` и
 `frontend-build.tar.gz`. Manifest-ът пази точния Git SHA, SHA-256 и размер на
-архивите, както и fingerprint на всеки файл в двете активни `dist`
+архивите, както и fingerprint на всеки файл в двете кандидат `dist`
 директории.
 
-5. Read-only deployment preflight:
+5. Staging, проверка и контролирана активация на двата build-а:
 
 ```bash
 export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
 export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST=/absolute/path/to/deployment-manifest.json
+export SPRINT3_DEPLOYMENT_ACTIVATION_ROOT=/var/www/Bricky-releases/sprint3/activated
+export SPRINT3_CONFIRM_DEPLOYMENT_ACTIVATION=ACTIVATE_BRICKY_DEPLOYMENT
+npm run release:activate-deployment:sprint3
+unset SPRINT3_CONFIRM_DEPLOYMENT_ACTIVATION
+```
+
+Командата първо изпълнява read-only system и migration preflight, извлича
+архивите в staging директория извън live build-а и сравнява всеки fingerprint.
+Предишните backend и frontend build директории се пазят като една rollback
+точка. Ако активацията или последващият preflight се провали, старите два
+build-а се връщат автоматично. Успехът записва непрезаписваем
+`activation-report.json`.
+
+6. Повторен read-only deployment preflight върху вече активираните build-ове:
+
+```bash
+export SPRINT3_DEPLOYMENT_ACTIVATION_REPORT=/absolute/path/to/activation-report.json
 npm run release:deployment-preflight:sprint3
 ```
 
@@ -223,7 +247,6 @@ Preflight проверява release SHA, migration evidence chain, backend/fron
 build fingerprints, deployment archive checksums, PM2 process path/status,
 `nginx -t`, активния `frontend/dist` и backend proxy port.
 
-6. Проверка, че nginx сочи към активния `frontend/dist`.
 7. Задаване на точния release SHA и restart на `bricky-backend` чрез PM2:
 
 ```bash
@@ -246,7 +269,7 @@ assets, readiness договора, public workers API, worker profile API, ре
 `/uploads` изображения и липсата на публични `email`/`phone` полета.
 
 10. Authenticated browser smoke с отделни production smoke акаунти. Паролите
-се въвеждат скрито и не се записват в report-а:
+    се въвеждат скрито и не се записват в report-а:
 
 ```bash
 cd /var/www/Bricky/frontend
@@ -283,6 +306,7 @@ console, page и network errors.
 ```bash
 export SPRINT3_PUBLIC_URL=https://bricky.bg
 export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
+export SPRINT3_DEPLOYMENT_ACTIVATION_REPORT=/absolute/path/to/activation-report.json
 export SPRINT3_BROWSER_SMOKE_REPORT=/absolute/path/to/production-browser-smoke.json
 export SPRINT3_SUSPENDED_USER_TOKEN='already-issued-token-from-suspended-test-user'
 export SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION
@@ -324,12 +348,14 @@ commit, deployment preflight-а, public smoke и browser smoke резултат�
 ### Application rollback
 
 Използва се предходният доказано работещ Git commit и неговите build artifacts.
-Преди извличане задължително се изпълнява
-`release:verify-deployment-bundle:sprint3` върху предходния manifest. Backend
-и frontend архивите от един и същ manifest се връщат заедно в отделна
-директория, сравняват се със записаните fingerprints и едва тогава заменят
-активните `dist` директории. След това се обновява `APP_COMMIT_SHA`, PM2 се
-рестартира и public smoke се изпълнява отново.
+Първата rollback точка са двата предишни build-а, записани в същия
+`activation-report.json`. Те се връщат винаги заедно. Ако се използва по-стар
+release bundle, преди извличане задължително се изпълнява
+`release:verify-deployment-bundle:sprint3` върху неговия manifest. Backend и
+frontend архивите от един и същ manifest се връщат заедно, сравняват се със
+записаните fingerprints и едва тогава заменят активните `dist` директории.
+След това се обновява `APP_COMMIT_SHA`, PM2 се рестартира и public smoke се
+изпълнява отново.
 
 Не се смесва backend archive от един manifest с frontend archive от друг.
 
@@ -366,6 +392,7 @@ DB dump и uploads archive от един manifest са една recovery точ�
 - `production-migration-report.json`;
 - `deployment-manifest.json`;
 - `backend-build.tar.gz` и `frontend-build.tar.gz`;
+- `activation-report.json` и двата запазени rollback build-а;
 - `post-deploy-report.json`;
 - schema verification output;
 - test/build output;

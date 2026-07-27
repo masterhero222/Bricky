@@ -29,6 +29,7 @@
     "release:certify-rehearsal:sprint3": "node scripts/sprint3-release.mjs certify-rehearsal",
     "release:migrate-production:sprint3": "node scripts/sprint3-release.mjs migrate-production",
     "release:deployment-preflight:sprint3": "node scripts/sprint3-release.mjs deployment-preflight",
+    "release:activate-deployment:sprint3": "node scripts/sprint3-release.mjs activate-deployment",
     "release:accept-production:sprint3": "node scripts/sprint3-release.mjs accept-production",
     "release:smoke-public:sprint3": "node scripts/smoke-sprint3-public.mjs",
     "release:test-smoke-public:sprint3": "node scripts/test-smoke-sprint3-public.mjs",
