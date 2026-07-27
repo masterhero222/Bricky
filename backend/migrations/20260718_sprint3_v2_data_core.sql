@@ -423,6 +423,21 @@ PREPARE sprint3_stmt FROM @copy_category_active;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;
 
+SET @legacy_category_group_default = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE repair_categories ALTER COLUMN category_group SET DEFAULT ''general''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'repair_categories'
+    AND column_name = 'category_group'
+);
+PREPARE sprint3_stmt FROM @legacy_category_group_default;
+EXECUTE sprint3_stmt;
+DEALLOCATE PREPARE sprint3_stmt;
+
 INSERT INTO repair_categories (category_key, label, is_active, sort_order)
 VALUES
   ('vik', 'VIK repairs', 1, 10),

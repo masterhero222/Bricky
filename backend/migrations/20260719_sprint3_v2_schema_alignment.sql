@@ -104,6 +104,21 @@ PREPARE sprint3_stmt FROM @copy_category_active;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;
 
+SET @legacy_category_group_default = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE repair_categories ALTER COLUMN category_group SET DEFAULT ''general''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'repair_categories'
+    AND column_name = 'category_group'
+);
+PREPARE sprint3_stmt FROM @legacy_category_group_default;
+EXECUTE sprint3_stmt;
+DEALLOCATE PREPARE sprint3_stmt;
+
 SET @activity_columns = CONCAT_WS(', ',
   IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_activities' AND column_name = 'is_active'), NULL, 'ADD COLUMN is_active tinyint(1) NOT NULL DEFAULT 1')
 );

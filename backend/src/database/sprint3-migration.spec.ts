@@ -57,6 +57,25 @@ describe('Sprint 3 SQL migrations', () => {
     );
   });
 
+  it.each([
+    ['core', core],
+    ['alignment', alignment],
+  ])(
+    'guards the %s category seed against the required legacy category_group column',
+    (_name, migration) => {
+      const guardAt = migration.indexOf(
+        'ALTER TABLE repair_categories ALTER COLUMN category_group SET DEFAULT',
+      );
+      const seedAt = migration.indexOf(
+        'INSERT INTO repair_categories (category_key, label, is_active, sort_order)',
+      );
+
+      expect(migration).toContain("column_name = 'category_group'");
+      expect(guardAt).toBeGreaterThanOrEqual(0);
+      expect(seedAt).toBeGreaterThan(guardAt);
+    },
+  );
+
   it('adds the worker profile banner used by the public profile editor', () => {
     expect(core).toContain('profile_banner_key varchar(64)');
     expect(alignment).toContain(
