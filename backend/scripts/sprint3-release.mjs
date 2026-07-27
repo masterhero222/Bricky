@@ -75,7 +75,10 @@ function command(commandName, args, options = {}) {
   );
 }
 
-function commandAvailable(commandName, versionArgs = ['--version']) {
+function commandAvailable(
+  commandName,
+  versionArgs = commandName === 'nginx' ? ['-v'] : ['--version'],
+) {
   const result = spawnSync(commandName, versionArgs, {
     encoding: 'utf8',
     stdio: 'pipe',
