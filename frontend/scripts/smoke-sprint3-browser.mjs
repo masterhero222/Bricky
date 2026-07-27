@@ -84,10 +84,15 @@ async function loginAs(page, role, account) {
   await openRoute(page, "/auth/login");
   await page.locator('input[name="email"]').fill(account.email);
   await page.locator('input[name="password"]').fill(account.password);
-  await Promise.all([
-    page.waitForURL((url) => url.pathname === roleRoutes[role], { timeout }),
-    page.locator('button[type="submit"], form button').first().click(),
-  ]);
+  await page.locator('button[type="submit"], form button').first().click();
+  await page.waitForFunction(
+    ({ expectedRole, expectedPath }) =>
+      localStorage.getItem("role") === expectedRole &&
+      Boolean(localStorage.getItem("token")) &&
+      window.location.pathname === expectedPath,
+    { expectedRole: role, expectedPath: roleRoutes[role] },
+    { timeout },
+  );
   await settle(page);
 
   const identity = await page.evaluate(() => ({
