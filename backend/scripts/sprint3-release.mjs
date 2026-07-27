@@ -1469,14 +1469,14 @@ async function deploymentPreflight({
   const processName =
     process.env.SPRINT3_PM2_PROCESS_NAME?.trim() || 'bricky-backend';
   const processes = JSON.parse(command('pm2', ['jlist']));
-  const process = processes.find((entry) => entry.name === processName);
-  if (!process) {
+  const pm2Process = processes.find((entry) => entry.name === processName);
+  if (!pm2Process) {
     fail(`PM2 process does not exist: ${processName}`);
   }
-  if (process.pm2_env?.status !== 'online') {
+  if (pm2Process.pm2_env?.status !== 'online') {
     fail(`PM2 process ${processName} is not online.`);
   }
-  if (resolve(process.pm2_env?.pm_exec_path || '') !== backendEntry) {
+  if (resolve(pm2Process.pm2_env?.pm_exec_path || '') !== backendEntry) {
     fail(`PM2 process ${processName} points to a different backend entry.`);
   }
 
@@ -1508,8 +1508,8 @@ async function deploymentPreflight({
     frontendEntry,
     pm2: {
       name: processName,
-      status: process.pm2_env.status,
-      pid: process.pid,
+      status: pm2Process.pm2_env.status,
+      pid: pm2Process.pid,
     },
     nginx: {
       frontendDist: normalizedFrontendDist,
