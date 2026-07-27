@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity('admin_audit_logs')
+@Entity('admin_action_audit_logs')
 export class AdminAuditLogEntity {
   @PrimaryGeneratedColumn()
   id: number;

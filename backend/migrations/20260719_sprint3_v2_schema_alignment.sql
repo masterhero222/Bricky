@@ -59,19 +59,19 @@ ALTER TABLE request_pricing_snapshots
   MODIFY COLUMN pricing_version varchar(80) NULL,
   MODIFY COLUMN currency varchar(10) NOT NULL DEFAULT 'EUR';
 
-ALTER TABLE request_events
+ALTER TABLE repair_request_events
   MODIFY COLUMN actor_user_id int NULL,
   MODIFY COLUMN event_type varchar(80) NOT NULL;
 
 SET @review_columns = CONCAT_WS(', ',
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
 );
-SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE reviews ', @review_columns));
+SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE repair_request_reviews ', @review_columns));
 PREPARE sprint3_stmt FROM @reviews_alter;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;

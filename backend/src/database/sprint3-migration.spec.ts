@@ -7,6 +7,10 @@ const readMigration = (name: string) =>
 describe('Sprint 3 SQL migrations', () => {
   const core = readMigration('20260718_sprint3_v2_data_core.sql');
   const alignment = readMigration('20260719_sprint3_v2_schema_alignment.sql');
+  const integrityVerifier = readFileSync(
+    resolve(__dirname, '../../scripts/verify-sprint3-integrity.mjs'),
+    'utf8',
+  );
 
   it('creates the canonical users table before altering it', () => {
     const createUsersAt = core.indexOf('CREATE TABLE IF NOT EXISTS users');
@@ -34,6 +38,39 @@ describe('Sprint 3 SQL migrations', () => {
   it('defaults new requests to admin moderation', () => {
     expect(core).toContain("NOT NULL DEFAULT 'pending_admin'");
     expect(alignment).toContain("NOT NULL DEFAULT 'pending_admin'");
+  });
+
+  it('keeps the v2 request timeline separate from legacy request_events', () => {
+    const sql = `${core}\n${alignment}`;
+
+    expect(core).toContain(
+      'CREATE TABLE IF NOT EXISTS repair_request_events',
+    );
+    expect(alignment).toContain('ALTER TABLE repair_request_events');
+    expect(sql).not.toMatch(/(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?request_events\b/);
+  });
+
+  it.each([
+    ['request_applications', 'repair_request_applications'],
+    ['reviews', 'repair_request_reviews'],
+    ['notifications', 'user_notifications'],
+    ['admin_audit_logs', 'admin_action_audit_logs'],
+  ])('keeps v2 %s data in the separate %s table', (legacy, canonical) => {
+    const sql = `${core}\n${alignment}`;
+
+    expect(core).toContain(`CREATE TABLE IF NOT EXISTS ${canonical}`);
+    expect(sql).not.toMatch(
+      new RegExp(
+        `(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?${legacy}\\b`,
+      ),
+    );
+  });
+
+  it('checks v2 application and review uniqueness in release verification', () => {
+    expect(integrityVerifier).toContain('FROM repair_request_applications');
+    expect(integrityVerifier).toContain('FROM repair_request_reviews');
+    expect(integrityVerifier).not.toMatch(/\bFROM request_applications\b/);
+    expect(integrityVerifier).not.toMatch(/\bFROM reviews\b/);
   });
 
   it.each([

@@ -72,5 +72,20 @@ describe('TypeORM application metadata', () => {
 
     await expect(metadataBuilder.buildMetadatas()).resolves.toBeUndefined();
     expect(dataSource.entityMetadatas).toHaveLength(activeEntities.length);
+    expect(
+      dataSource.getMetadata(RequestApplicationEntity).tableName,
+    ).toBe('repair_request_applications');
+    expect(dataSource.getMetadata(RequestEventEntity).tableName).toBe(
+      'repair_request_events',
+    );
+    expect(dataSource.getMetadata(ReviewEntity).tableName).toBe(
+      'repair_request_reviews',
+    );
+    expect(dataSource.getMetadata(NotificationEntity).tableName).toBe(
+      'user_notifications',
+    );
+    expect(dataSource.getMetadata(AdminAuditLogEntity).tableName).toBe(
+      'admin_action_audit_logs',
+    );
   });
 });

@@ -42,7 +42,11 @@ Sprint 3 изгражда професионалното data ядро на Bric
 
 ### Поръчки и lifecycle
 
-- [x] `repair_requests`, `request_applications` и `request_events`.
+- [x] `repair_requests`, `repair_request_applications` и
+  `repair_request_events`
+  (отделно от legacy `request_events`).
+- [x] `repair_request_reviews`, `user_notifications` и
+  `admin_action_audit_logs` са отделени от едноименните legacy модели.
 - [x] Клиент създава заявка със снимки.
 - [x] Админ одобрява или архивира заявката и модерира снимките.
 - [x] Само active, approved и public майстор вижда и кандидатства.

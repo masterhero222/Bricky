@@ -94,7 +94,7 @@ try {
       sql: `SELECT COUNT(*) AS count
               FROM (
                 SELECT request_id, worker_user_id
-                  FROM request_applications
+                  FROM repair_request_applications
                  GROUP BY request_id, worker_user_id
                 HAVING COUNT(*) > 1
               ) duplicates`,
@@ -104,7 +104,7 @@ try {
       sql: `SELECT COUNT(*) AS count
               FROM (
                 SELECT request_id, client_user_id
-                  FROM reviews
+                  FROM repair_request_reviews
                  GROUP BY request_id, client_user_id
                 HAVING COUNT(*) > 1
               ) duplicates`,

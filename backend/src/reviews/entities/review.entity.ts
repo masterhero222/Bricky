@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import type { ModerationStatus } from '../../moderation/moderation.types';
 
-@Entity('reviews')
+@Entity('repair_request_reviews')
 @Index(['requestId', 'clientUserId'], { unique: true })
 export class ReviewEntity {
   @PrimaryGeneratedColumn()

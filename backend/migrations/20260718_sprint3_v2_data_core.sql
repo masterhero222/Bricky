@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS request_pricing_snapshots (
   CONSTRAINT fk_request_pricing_snapshots_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS request_events (
+CREATE TABLE IF NOT EXISTS repair_request_events (
   id int NOT NULL AUTO_INCREMENT,
   request_id int NOT NULL,
   actor_user_id int NULL,
@@ -150,10 +150,10 @@ CREATE TABLE IF NOT EXISTS request_events (
   metadata_json json NULL,
   created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
-  KEY idx_request_events_request (request_id),
-  KEY idx_request_events_actor (actor_user_id),
-  CONSTRAINT fk_request_events_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
-  CONSTRAINT fk_request_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT
+  KEY idx_repair_request_events_request (request_id),
+  KEY idx_repair_request_events_actor (actor_user_id),
+  CONSTRAINT fk_repair_request_events_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
+  CONSTRAINT fk_repair_request_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS media_assets (
@@ -229,7 +229,7 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
   KEY idx_pricing_rules_version (version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS request_applications (
+CREATE TABLE IF NOT EXISTS repair_request_applications (
   id int NOT NULL AUTO_INCREMENT,
   request_id int NOT NULL,
   worker_user_id int NOT NULL,
@@ -240,31 +240,31 @@ CREATE TABLE IF NOT EXISTS request_applications (
   created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
-  UNIQUE KEY uq_request_application (request_id, worker_user_id),
-  KEY idx_request_applications_request (request_id),
-  KEY idx_request_applications_worker (worker_user_id),
-  CONSTRAINT fk_request_applications_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
-  CONSTRAINT fk_request_applications_worker FOREIGN KEY (worker_user_id) REFERENCES users(id) ON DELETE CASCADE
+  UNIQUE KEY uq_repair_request_application (request_id, worker_user_id),
+  KEY idx_repair_request_applications_request (request_id),
+  KEY idx_repair_request_applications_worker (worker_user_id),
+  CONSTRAINT fk_repair_request_applications_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
+  CONSTRAINT fk_repair_request_applications_worker FOREIGN KEY (worker_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET @request_application_columns = CONCAT_WS(', ',
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'worker_user_id'), NULL, 'ADD COLUMN worker_user_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'offer_min'), NULL, 'ADD COLUMN offer_min decimal(10,2) NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'offer_max'), NULL, 'ADD COLUMN offer_max decimal(10,2) NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'message'), NULL, 'ADD COLUMN message text NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'request_applications' AND column_name = 'updated_at'), NULL, 'ADD COLUMN updated_at datetime(6) NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'worker_user_id'), NULL, 'ADD COLUMN worker_user_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'offer_min'), NULL, 'ADD COLUMN offer_min decimal(10,2) NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'offer_max'), NULL, 'ADD COLUMN offer_max decimal(10,2) NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'message'), NULL, 'ADD COLUMN message text NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_applications' AND column_name = 'updated_at'), NULL, 'ADD COLUMN updated_at datetime(6) NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)')
 );
 SET @request_applications_alter = IF(
   @request_application_columns = '',
   'SELECT 1',
-  CONCAT('ALTER TABLE request_applications ', @request_application_columns)
+  CONCAT('ALTER TABLE repair_request_applications ', @request_application_columns)
 );
 PREPARE sprint3_stmt FROM @request_applications_alter;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;
 
-CREATE TABLE IF NOT EXISTS reviews (
+CREATE TABLE IF NOT EXISTS repair_request_reviews (
   id int NOT NULL AUTO_INCREMENT,
   request_id int NOT NULL,
   client_user_id int NOT NULL,
@@ -279,30 +279,30 @@ CREATE TABLE IF NOT EXISTS reviews (
   moderatedByUserId int NULL,
   moderatedAt datetime NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_review_request_client (request_id, client_user_id),
-  KEY idx_reviews_worker (worker_user_id),
-  CONSTRAINT fk_reviews_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
-  CONSTRAINT fk_reviews_client FOREIGN KEY (client_user_id) REFERENCES users(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reviews_worker FOREIGN KEY (worker_user_id) REFERENCES users(id) ON DELETE RESTRICT
+  UNIQUE KEY uq_repair_request_review_client (request_id, client_user_id),
+  KEY idx_repair_request_reviews_worker (worker_user_id),
+  CONSTRAINT fk_repair_request_reviews_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE CASCADE,
+  CONSTRAINT fk_repair_request_reviews_client FOREIGN KEY (client_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_repair_request_reviews_worker FOREIGN KEY (worker_user_id) REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET @review_columns = CONCAT_WS(', ',
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'client_user_id'), NULL, 'ADD COLUMN client_user_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'worker_user_id'), NULL, 'ADD COLUMN worker_user_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'client_user_id'), NULL, 'ADD COLUMN client_user_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'worker_user_id'), NULL, 'ADD COLUMN worker_user_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'completed_at'), NULL, 'ADD COLUMN completed_at datetime NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'completed_by_worker_id'), NULL, 'ADD COLUMN completed_by_worker_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderationStatus'), NULL, 'ADD COLUMN moderationStatus varchar(30) NOT NULL DEFAULT ''pending_review'''),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderationReason'), NULL, 'ADD COLUMN moderationReason text NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderatedByUserId'), NULL, 'ADD COLUMN moderatedByUserId int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'repair_request_reviews' AND column_name = 'moderatedAt'), NULL, 'ADD COLUMN moderatedAt datetime NULL')
 );
-SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE reviews ', @review_columns));
+SET @reviews_alter = IF(@review_columns = '', 'SELECT 1', CONCAT('ALTER TABLE repair_request_reviews ', @review_columns));
 PREPARE sprint3_stmt FROM @reviews_alter;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;
 
-CREATE TABLE IF NOT EXISTS notifications (
+CREATE TABLE IF NOT EXISTS user_notifications (
   id int NOT NULL AUTO_INCREMENT,
   user_id int NOT NULL,
   request_id int NULL,
@@ -313,30 +313,30 @@ CREATE TABLE IF NOT EXISTS notifications (
   is_read tinyint(1) NOT NULL DEFAULT 0,
   created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
-  KEY idx_notifications_user (user_id),
-  KEY idx_notifications_request (request_id),
-  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  CONSTRAINT fk_notifications_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE SET NULL
+  KEY idx_user_notifications_user (user_id),
+  KEY idx_user_notifications_request (request_id),
+  CONSTRAINT fk_user_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_user_notifications_request FOREIGN KEY (request_id) REFERENCES repair_requests(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET @notification_columns = CONCAT_WS(', ',
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'user_id'), NULL, 'ADD COLUMN user_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'payload_json'), NULL, 'ADD COLUMN payload_json json NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'read_at'), NULL, 'ADD COLUMN read_at datetime NULL'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'is_read'), NULL, 'ADD COLUMN is_read tinyint(1) NOT NULL DEFAULT 0'),
-  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'created_at'), NULL, 'ADD COLUMN created_at datetime(6) NULL DEFAULT CURRENT_TIMESTAMP(6)')
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'user_id'), NULL, 'ADD COLUMN user_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'request_id'), NULL, 'ADD COLUMN request_id int NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'payload_json'), NULL, 'ADD COLUMN payload_json json NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'read_at'), NULL, 'ADD COLUMN read_at datetime NULL'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'is_read'), NULL, 'ADD COLUMN is_read tinyint(1) NOT NULL DEFAULT 0'),
+  IF(EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user_notifications' AND column_name = 'created_at'), NULL, 'ADD COLUMN created_at datetime(6) NULL DEFAULT CURRENT_TIMESTAMP(6)')
 );
 SET @notifications_alter = IF(
   @notification_columns = '',
   'SELECT 1',
-  CONCAT('ALTER TABLE notifications ', @notification_columns)
+  CONCAT('ALTER TABLE user_notifications ', @notification_columns)
 );
 PREPARE sprint3_stmt FROM @notifications_alter;
 EXECUTE sprint3_stmt;
 DEALLOCATE PREPARE sprint3_stmt;
 
-CREATE TABLE IF NOT EXISTS admin_audit_logs (
+CREATE TABLE IF NOT EXISTS admin_action_audit_logs (
   id int NOT NULL AUTO_INCREMENT,
   admin_user_id int NULL,
   action varchar(80) NOT NULL,
@@ -346,9 +346,9 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   metadata_json json NULL,
   created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
-  KEY idx_admin_audit_admin (admin_user_id),
-  KEY idx_admin_audit_action (action),
-  CONSTRAINT fk_admin_audit_admin FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL
+  KEY idx_admin_action_audit_admin (admin_user_id),
+  KEY idx_admin_action_audit_action (action),
+  CONSTRAINT fk_admin_action_audit_admin FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS worker_plans (

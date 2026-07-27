@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity('request_events')
+@Entity('repair_request_events')
 export class RequestEventEntity {
   @PrimaryGeneratedColumn()
   id: number;

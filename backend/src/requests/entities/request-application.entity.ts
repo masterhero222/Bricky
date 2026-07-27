@@ -2,7 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 
 export type RequestApplicationStatus = 'applied' | 'shortlisted' | 'assigned' | 'withdrawn' | 'rejected';
 
-@Entity('request_applications')
+@Entity('repair_request_applications')
 @Index(['requestId', 'workerUserId'], { unique: true })
 export class RequestApplicationEntity {
   @PrimaryGeneratedColumn()
