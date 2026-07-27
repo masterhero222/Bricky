@@ -84,7 +84,20 @@ async function loginAs(page, role, account) {
   await openRoute(page, "/auth/login");
   await page.locator('input[name="email"]').fill(account.email);
   await page.locator('input[name="password"]').fill(account.password);
-  await page.locator('button[type="submit"], form button').first().click();
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/auth/login"),
+    { timeout },
+  );
+  await page.locator("form").evaluate((form) => form.requestSubmit());
+  const loginResponse = await loginResponsePromise;
+  if (loginResponse.status() >= 400) {
+    const responseBody = await loginResponse.text().catch(() => "<unavailable>");
+    assert.fail(
+      `${role} login failed with ${loginResponse.status()} from ${loginResponse.url()}: ${responseBody}`,
+    );
+  }
   await page.waitForFunction(
     ({ expectedRole, expectedPath }) =>
       localStorage.getItem("role") === expectedRole &&
@@ -226,6 +239,19 @@ async function main() {
       });
     }
     console.log(JSON.stringify(report, null, 2));
+  } catch (error) {
+    console.error(
+      JSON.stringify(
+        {
+          failedAt: page.url(),
+          visibleText: (await page.locator("body").innerText()).slice(0, 1000),
+          browserErrors,
+        },
+        null,
+        2,
+      ),
+    );
+    throw error;
   } finally {
     await browser.close();
   }
