@@ -157,8 +157,8 @@ draft
 
 Release candidate privacy fix: `087cad2` (`fix: remove private fields from public worker responses`)
 
-Latest locally validated release tooling: `55ba5c0`
-(`ci: certify sprint 3 production acceptance`)
+Latest validated browser/release gate: `4e7395e`
+(`fix: expose canonical client profile endpoint`)
 
 Immutable application bundle tooling: `eb5bdc2`
 (`ci: package immutable sprint 3 deployment builds`)
@@ -166,8 +166,8 @@ Immutable application bundle tooling: `eb5bdc2`
 | Проверка | Резултат |
 | --- | --- |
 | Sprint 1/2/3 cross-sprint verification | Passed |
-| Backend test suites | 28/28 passed |
-| Backend tests | 164/164 passed |
+| Backend test suites | 29/29 passed |
+| Backend tests | 167/167 passed |
 | Backend production build | Passed |
 | Backend Sprint 3 release self-test | Passed |
 | Backend production audit | 0 vulnerabilities |
@@ -182,8 +182,14 @@ Immutable application bundle tooling: `eb5bdc2`
 | Public worker list/profile/batch privacy smoke | Passed |
 | Public post-deploy contract test | Passed |
 | Deployment bundle package/verify/tamper test | Passed |
-| Browser smoke syntax/build integration | Passed locally; real MySQL/browser CI pending за текущата промяна |
-| GitHub verification workflows | Passed на предходния pushed head; новият browser gate още не е push-нат |
+| Authenticated Playwright browser smoke | Passed с real MySQL, Nest и production Vite build |
+| Browser evidence artifact | `sprint3-browser-smoke`, SHA-256 `3169b4ce322f5c860cd7472508910b12c47d657d9460f7a2c281c4105cf910b1` |
+| GitHub verification workflows | Всички push и PR runs са зелени на `4e7395e` |
+
+GitHub evidence:
+
+- [Bricky verification run 30258127995](https://github.com/masterhero222/Bricky/actions/runs/30258127995)
+- [Sprint 3 CI run 30258128880](https://github.com/masterhero222/Bricky/actions/runs/30258128880)
 
 ## Текущо състояние на интеграцията
 
