@@ -27,6 +27,13 @@ export class UsersService {
     return this.repo.find({ where: { id: In(ids) } });
   }
 
+  findClientProfile(userId: number) {
+    return this.clientProfilesRepo.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
+  }
+
   async create(
     data: { name: string; email: string; password: string; role: string },
     manager?: EntityManager,

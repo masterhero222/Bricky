@@ -141,6 +141,15 @@ async function main() {
       });
     }
   });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      browserErrors.push({
+        type: "response",
+        status: response.status(),
+        url: response.url(),
+      });
+    }
+  });
 
   try {
     const ready = await readiness();
