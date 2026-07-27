@@ -119,7 +119,7 @@ cd /var/www/Bricky/frontend
 npm ci
 npm run lint
 npm run build
-npm audit --omit=dev --audit-level=high
+npm run audit:production
 ```
 
 API smoke тестът проверява:
@@ -135,12 +135,16 @@ API smoke тестът проверява:
 - admin timeline.
 
 След като rehearsal backend-ът работи срещу възстановената DB и uploads,
-всички проверки се обединяват в един сертификат:
+production frontend build-ът трябва да се сервира на отделен rehearsal URL.
+`VITE_API_URL` сочи към rehearsal backend-а, а backend CORS допуска web URL-а.
+Всички проверки се обединяват в един сертификат:
 
 ```bash
 export DB_NAME=bricky_sprint3_20260723
 export SPRINT3_UPLOADS_DIR=/var/tmp/bricky-sprint3-rehearsal-20260723/uploads
 export SPRINT3_API_URL=http://127.0.0.1:3100
+export SPRINT3_WEB_URL=http://127.0.0.1:4173
+export SPRINT3_BROWSER_SMOKE_REPORT=/absolute/path/to/rehearsal-browser-smoke.json
 export SPRINT3_BACKUP_MANIFEST=/absolute/path/to/manifest.json
 export SPRINT3_RESTORE_REPORT=/absolute/path/to/restore-report.json
 export SPRINT3_CONFIRM_REHEARSAL_CERTIFICATION=CERTIFY_BRICKY_REHEARSAL
@@ -148,9 +152,11 @@ npm run release:certify-rehearsal:sprint3
 ```
 
 Командата издава `rehearsal-certificate.json` само ако schema, integrity,
-rollback restore, backend/frontend audit, tests, builds и API smoke са зелени.
+rollback restore, backend/frontend audit, tests, builds, API lifecycle smoke и
+Playwright browser smoke за client/worker/admin са зелени.
 Сертификатът е свързан чрез SHA-256 с manifest-а, restore report-а, Git
-commit-а и точния списък миграции.
+commit-а, browser report-а и точния списък миграции. Временният session файл с
+тестовите rehearsal акаунти се изтрива автоматично.
 
 ## 5. Production migration
 
@@ -239,6 +245,35 @@ Smoke командата не създава данни. Тя проверява
 assets, readiness договора, public workers API, worker profile API, реални
 `/uploads` изображения и липсата на публични `email`/`phone` полета.
 
+10. Authenticated browser smoke с отделни production smoke акаунти. Паролите
+се въвеждат скрито и не се записват в report-а:
+
+```bash
+cd /var/www/Bricky/frontend
+export SPRINT3_WEB_URL=https://bricky.bg
+export SPRINT3_API_URL=https://bricky.bg/api
+export SPRINT3_EXPECTED_COMMIT_SHA="$(git -C /var/www/Bricky rev-parse HEAD)"
+export SPRINT3_BROWSER_SMOKE_REPORT=/absolute/path/to/production-browser-smoke.json
+export SPRINT3_BROWSER_CLIENT_EMAIL=...
+export SPRINT3_BROWSER_WORKER_EMAIL=...
+export SPRINT3_BROWSER_ADMIN_EMAIL=...
+read -rsp "Client smoke password: " SPRINT3_BROWSER_CLIENT_PASSWORD; echo
+read -rsp "Worker smoke password: " SPRINT3_BROWSER_WORKER_PASSWORD; echo
+read -rsp "Admin smoke password: " SPRINT3_BROWSER_ADMIN_PASSWORD; echo
+export SPRINT3_BROWSER_CLIENT_PASSWORD
+export SPRINT3_BROWSER_WORKER_PASSWORD
+export SPRINT3_BROWSER_ADMIN_PASSWORD
+npx playwright install chromium
+npm run smoke:browser:sprint3
+unset SPRINT3_BROWSER_CLIENT_PASSWORD
+unset SPRINT3_BROWSER_WORKER_PASSWORD
+unset SPRINT3_BROWSER_ADMIN_PASSWORD
+```
+
+Browser smoke-ът проверява public routes, истински login за трите роли,
+защитата на `/admin`, worker map и връщането към заявките, както и липсата на
+console, page и network errors.
+
 ## 6.1 Production acceptance certificate
 
 Преди deployment се създава отделен тестов worker, взема се валиден token и
@@ -248,6 +283,7 @@ assets, readiness договора, public workers API, worker profile API, ре
 ```bash
 export SPRINT3_PUBLIC_URL=https://bricky.bg
 export SPRINT3_PRODUCTION_MIGRATION_REPORT=/absolute/path/to/production-migration-report.json
+export SPRINT3_BROWSER_SMOKE_REPORT=/absolute/path/to/production-browser-smoke.json
 export SPRINT3_SUSPENDED_USER_TOKEN='already-issued-token-from-suspended-test-user'
 export SPRINT3_CONFIRM_PRODUCTION_ACCEPTANCE=ACCEPT_BRICKY_PRODUCTION
 npm run release:accept-production:sprint3
@@ -262,12 +298,15 @@ unset SPRINT3_SUSPENDED_USER_TOKEN
 - public worker response съдържа private поле;
 - публична `/uploads` снимка не се сервира като image;
 - старият token не е отказан с `Account is not active`;
+- browser report-ът не доказва client, worker и admin login върху точния commit;
+- browser console или network проверката съдържа грешка;
+- от картата на майстора няма работещо връщане към заявките;
 - PM2/nginx сочат към различни build artifacts;
 - production migration evidence chain е счупена.
 
 При успех до migration report-а се записва непрезаписваем
 `post-deploy-report.json` с SHA-256 връзка към migration report-а, точния Git
-commit, deployment preflight-а и public smoke резултата.
+commit, deployment preflight-а, public smoke и browser smoke резултатите.
 
 Задължителни post-deploy проверки:
 

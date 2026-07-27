@@ -71,7 +71,7 @@ jobs:
 
   migration-rehearsal:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     services:
       mysql:
@@ -96,7 +96,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install MySQL client
         run: |
@@ -115,6 +117,12 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
+
+      - name: Install frontend browser dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       - name: Create isolated Sprint 3 lifecycle database
         env:
@@ -137,6 +145,10 @@ jobs:
           JWT_SECRET: sprint3-ci-only-secret
           UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
           SPRINT3_API_URL: http://127.0.0.1:3000
+          SPRINT3_WEB_URL: http://127.0.0.1:4173
+          SPRINT3_SMOKE_SESSION_FILE: ${{ runner.temp }}/sprint3-browser-session.json
+          SPRINT3_BROWSER_SMOKE_REPORT: ${{ runner.temp }}/sprint3-browser-report.json
+          CORS_ORIGINS: http://127.0.0.1:4173
           MAIL_HOST: 127.0.0.1
           MAIL_PORT: 2525
           MAIL_USER: test
@@ -147,10 +159,17 @@ jobs:
           npm run build
           node dist/main.js > "$RUNNER_TEMP/sprint3-api.log" 2>&1 &
           api_pid=$!
+          web_pid=""
 
           cleanup() {
+            if [ -n "$web_pid" ]; then
+              kill "$web_pid" 2>/dev/null || true
+            fi
             kill "$api_pid" 2>/dev/null || true
             cat "$RUNNER_TEMP/sprint3-api.log"
+            if [ -f "$RUNNER_TEMP/sprint3-web.log" ]; then
+              cat "$RUNNER_TEMP/sprint3-web.log"
+            fi
           }
           trap cleanup EXIT
 
@@ -169,6 +188,34 @@ jobs:
 
           curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null
           npm run smoke:api:sprint3
+
+          cd ../frontend
+          VITE_API_URL="$SPRINT3_API_URL" VITE_USE_DEV_MOCK=false npm run build
+          npm run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sprint3-web.log" 2>&1 &
+          web_pid=$!
+
+          for attempt in {1..30}; do
+            if curl --fail --silent "$SPRINT3_WEB_URL" >/dev/null; then
+              break
+            fi
+
+            if ! kill -0 "$web_pid" 2>/dev/null; then
+              echo "Sprint 3 frontend exited before becoming ready."
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          curl --fail --silent "$SPRINT3_WEB_URL" >/dev/null
+          npm run smoke:browser:sprint3
+
+      - name: Archive Sprint 3 browser smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-browser-smoke
+          path: ${{ runner.temp }}/sprint3-browser-report.json
+          if-no-files-found: error
 
       - name: Rehearse Sprint 3 backup, migration and rollback restore
         working-directory: backend

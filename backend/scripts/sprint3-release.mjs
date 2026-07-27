@@ -16,6 +16,7 @@ import { Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import mysql from 'mysql2/promise';
 import { migrationNames } from './sprint3-schema-contract.mjs';
 
@@ -128,6 +129,60 @@ async function directoryFingerprint(directory) {
     files: files.length,
     bytes,
   };
+}
+
+function readBrowserSmokeEvidence(
+  reportPath,
+  { webBase, expectedCommit, checkedAfter } = {},
+) {
+  if (!isAbsolute(reportPath) || !existsSync(reportPath)) {
+    fail(
+      'SPRINT3_BROWSER_SMOKE_REPORT must be an absolute path to an existing report.',
+    );
+  }
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+  const normalizedWebBase = webBase?.replace(/\/+$/, '');
+  if (
+    report.formatVersion !== 1 ||
+    report.ok !== true ||
+    (normalizedWebBase &&
+      report.webBase?.replace(/\/+$/, '') !== normalizedWebBase) ||
+    (expectedCommit &&
+      (report.expectedCommit !== expectedCommit ||
+        report.readiness?.commit !== expectedCommit)) ||
+    report.anonymousAdminRejected !== true ||
+    report.mapReturnVerified !== true ||
+    !Array.isArray(report.authenticatedRoles) ||
+    !['client', 'worker', 'admin'].every((role) =>
+      report.authenticatedRoles.includes(role),
+    ) ||
+    !Array.isArray(report.checkedRoutes) ||
+    ![
+      '/',
+      '/workers',
+      '/requests',
+      '/blog',
+      '/client/profile',
+      '/worker/profile',
+      '/admin',
+      '/repair-map',
+    ].every((route) => report.checkedRoutes.includes(route)) ||
+    !Array.isArray(report.browserErrors) ||
+    report.browserErrors.length !== 0
+  ) {
+    fail('Authenticated browser smoke evidence is incomplete.');
+  }
+  const checkedAt = Date.parse(report.checkedAt);
+  if (!Number.isFinite(checkedAt)) {
+    fail('Browser smoke report has an invalid checkedAt timestamp.');
+  }
+  if (checkedAfter) {
+    const requiredAfter = Date.parse(checkedAfter);
+    if (!Number.isFinite(requiredAfter) || checkedAt < requiredAfter) {
+      fail('Browser smoke was completed before the required release event.');
+    }
+  }
+  return report;
 }
 
 function timestamp() {
@@ -899,6 +954,17 @@ async function certifyRehearsal() {
   const manifestPath = requireEnv('SPRINT3_BACKUP_MANIFEST');
   const restoreReportPath = requireEnv('SPRINT3_RESTORE_REPORT');
   const apiUrl = requireEnv('SPRINT3_API_URL').replace(/\/+$/, '');
+  const webUrl = requireEnv('SPRINT3_WEB_URL').replace(/\/+$/, '');
+  const browserReportPath = resolve(
+    requireEnv('SPRINT3_BROWSER_SMOKE_REPORT'),
+  );
+  const browserSessionPath = resolve(
+    process.env.SPRINT3_SMOKE_SESSION_FILE ||
+      resolve(dirname(restoreReportPath), 'browser-session.json'),
+  );
+  if (existsSync(browserReportPath)) {
+    fail(`Browser smoke report already exists: ${browserReportPath}`);
+  }
   const manifest = await verifyManifest(manifestPath);
   const git = gitMetadata();
   assertReleaseGitMatchesManifest(git, manifest);
@@ -927,6 +993,10 @@ async function certifyRehearsal() {
     ...process.env,
     SPRINT3_UPLOADS_DIR: uploadsDir,
     SPRINT3_API_URL: apiUrl,
+    SPRINT3_WEB_URL: webUrl,
+    SPRINT3_BROWSER_SMOKE_REPORT: browserReportPath,
+    SPRINT3_SMOKE_SESSION_FILE: browserSessionPath,
+    SPRINT3_EXPECTED_COMMIT_SHA: git.commit,
   };
   const startedAt = new Date().toISOString();
   command('node', ['scripts/verify-sprint3-schema.mjs'], {
@@ -949,7 +1019,7 @@ async function certifyRehearsal() {
     env: gateEnvironment,
     stdio: 'inherit',
   });
-  command('npm', ['audit', '--omit=dev', '--audit-level=high'], {
+  command('npm', ['run', 'audit:production'], {
     cwd: resolve(repositoryRoot, 'frontend'),
     env: gateEnvironment,
     stdio: 'inherit',
@@ -967,6 +1037,20 @@ async function certifyRehearsal() {
   command('node', ['scripts/smoke-sprint3-api.mjs'], {
     env: gateEnvironment,
     stdio: 'inherit',
+  });
+  try {
+    command('npm', ['run', 'smoke:browser:sprint3'], {
+      cwd: resolve(repositoryRoot, 'frontend'),
+      env: gateEnvironment,
+      stdio: 'inherit',
+    });
+  } finally {
+    rmSync(browserSessionPath, { force: true });
+  }
+  const browserSmoke = readBrowserSmokeEvidence(browserReportPath, {
+    webBase: webUrl,
+    expectedCommit: git.commit,
+    checkedAfter: startedAt,
   });
 
   const certificatePath = resolve(
@@ -989,7 +1073,11 @@ async function certifyRehearsal() {
     rehearsalDatabase: restoreReport.rehearsalDatabase,
     restoredUploadsDir: uploadsDir,
     apiUrl,
+    webUrl,
     migrationNames,
+    browserSmokeReportPath,
+    browserSmokeReportSha256: await sha256(browserReportPath),
+    browserSmoke,
     gates: [
       'schema',
       'integrity',
@@ -1001,6 +1089,7 @@ async function certifyRehearsal() {
       'frontend-lint',
       'frontend-build',
       'api-smoke',
+      'browser-smoke',
     ],
   };
   writeFileSync(certificatePath, `${JSON.stringify(certificate, null, 2)}\n`, {
@@ -1060,6 +1149,7 @@ async function readRehearsalCertificate(
     'frontend-lint',
     'frontend-build',
     'api-smoke',
+    'browser-smoke',
   ];
   if (!requiredGates.every((gate) => certificate.gates?.includes(gate))) {
     fail('Rehearsal certificate is missing required release gates.');
@@ -1070,6 +1160,19 @@ async function readRehearsalCertificate(
   ) {
     fail('Rehearsal certificate was produced with a different migration set.');
   }
+  if (
+    !certificate.browserSmokeReportPath ||
+    !existsSync(certificate.browserSmokeReportPath) ||
+    certificate.browserSmokeReportSha256 !==
+      (await sha256(certificate.browserSmokeReportPath))
+  ) {
+    fail('Rehearsal certificate browser smoke evidence is missing or changed.');
+  }
+  readBrowserSmokeEvidence(certificate.browserSmokeReportPath, {
+    webBase: certificate.webUrl,
+    expectedCommit: certificate.sourceGitCommit,
+    checkedAfter: certificate.startedAt,
+  });
   return certificate;
 }
 
@@ -1326,6 +1429,7 @@ async function acceptProduction() {
   const migrationReportPath = requireEnv(
     'SPRINT3_PRODUCTION_MIGRATION_REPORT',
   );
+  const browserReportPath = requireEnv('SPRINT3_BROWSER_SMOKE_REPORT');
   const git = gitMetadata();
   const migrationReport = await readProductionMigrationEvidence(
     migrationReportPath,
@@ -1357,6 +1461,11 @@ async function acceptProduction() {
   ) {
     fail('Public production smoke evidence is incomplete.');
   }
+  const browserSmoke = readBrowserSmokeEvidence(browserReportPath, {
+    webBase: publicUrl,
+    expectedCommit: git.commit,
+    checkedAfter: migrationReport.completedAt,
+  });
 
   const reportPath = resolve(
     process.env.SPRINT3_POST_DEPLOY_REPORT ||
@@ -1372,7 +1481,7 @@ async function acceptProduction() {
     !Number.isFinite(smokeCheckedAt) ||
     smokeCheckedAt < migrationCompletedAt
   ) {
-    fail('Public smoke was not completed after the production migration.');
+    fail('Post-deploy smoke was not completed after the production migration.');
   }
 
   const report = {
@@ -1385,6 +1494,9 @@ async function acceptProduction() {
     productionMigrationReportSha256: await sha256(migrationReportPath),
     deployment,
     smoke,
+    browserSmokeReportPath: resolve(browserReportPath),
+    browserSmokeReportSha256: await sha256(browserReportPath),
+    browserSmoke,
     gates: [
       'migration-evidence-chain',
       'deployment-preflight',
@@ -1395,6 +1507,9 @@ async function acceptProduction() {
       'public-worker-privacy',
       'public-media',
       'suspended-token-rejection',
+      'authenticated-browser-routes',
+      'browser-console-and-network',
+      'worker-map-return-navigation',
     ],
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
@@ -1441,6 +1556,58 @@ async function selfTest() {
         `Unsafe release Git state was accepted: ${JSON.stringify(unsafeGit)}`,
       );
     }
+  }
+  const browserReportPath = resolve(
+    tmpdir(),
+    `bricky-sprint3-browser-self-test-${process.pid}.json`,
+  );
+  const browserReport = {
+    formatVersion: 1,
+    ok: true,
+    checkedAt: '2026-07-27T10:00:00.000Z',
+    webBase: 'https://bricky.test',
+    expectedCommit: 'release-commit',
+    readiness: { commit: 'release-commit' },
+    checkedRoutes: [
+      '/',
+      '/workers',
+      '/requests',
+      '/blog',
+      '/client/profile',
+      '/worker/profile',
+      '/admin',
+      '/repair-map',
+    ],
+    authenticatedRoles: ['client', 'worker', 'admin'],
+    anonymousAdminRejected: true,
+    mapReturnVerified: true,
+    browserErrors: [],
+  };
+  try {
+    writeFileSync(browserReportPath, JSON.stringify(browserReport));
+    readBrowserSmokeEvidence(browserReportPath, {
+      webBase: 'https://bricky.test',
+      expectedCommit: 'release-commit',
+      checkedAfter: '2026-07-27T09:59:00.000Z',
+    });
+    writeFileSync(
+      browserReportPath,
+      JSON.stringify({ ...browserReport, browserErrors: ['console error'] }),
+    );
+    let invalidReportRejected = false;
+    try {
+      readBrowserSmokeEvidence(browserReportPath, {
+        webBase: 'https://bricky.test',
+        expectedCommit: 'release-commit',
+      });
+    } catch {
+      invalidReportRejected = true;
+    }
+    if (!invalidReportRejected) {
+      fail('Invalid browser smoke evidence passed the release self-test.');
+    }
+  } finally {
+    rmSync(browserReportPath, { force: true });
   }
   const temporaryRoot = resolve(
     process.env.TEMP || process.env.TMPDIR || '/tmp',

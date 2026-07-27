@@ -80,7 +80,12 @@ jobs:
         run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:production
+
+      - name: Validate browser release scripts
+        run: |
+          node --check scripts/audit-production.mjs
+          node --check scripts/smoke-sprint3-browser.mjs
 
       - name: Verify pricing contract
         run: npm run test:pricing

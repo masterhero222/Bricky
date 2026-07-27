@@ -1,6 +1,6 @@
 # Bricky Sprint 3 - статус и прогрес
 
-Последна актуализация: 23.07.2026 г.
+Последна актуализация: 27.07.2026 г.
 
 Работен branch: `codex/sprint-3-integration`
 
@@ -110,7 +110,9 @@ draft
 - [x] Public worker grid допуска само active, approved и public профили.
 - [x] Public worker batch lookup допуска само active, approved и public
       профили и не позволява enumeration на pending/private/blocked майстори.
-- [x] Backend и frontend production dependency audit са с 0 уязвимости.
+- [x] Backend production dependency audit е чист.
+- [x] Frontend audit допуска само конкретния React Router RSC advisory, докато
+      статичната проверка доказва, че Bricky не използва засегнатия RSC Mode.
 
 ### Production release gates
 
@@ -128,6 +130,10 @@ draft
       suspend-нат test user.
 - [x] При успех се издава `post-deploy-report.json`, свързан чрез SHA-256 с
       production migration evidence.
+- [x] Playwright gate проверява истински client, worker и admin login,
+      защитени routes, worker map return и browser console/network errors.
+- [x] Rehearsal certificate и production acceptance изискват непроменен
+      browser smoke report със SHA-256.
 
 ## Проверен browser flow
 
@@ -146,7 +152,7 @@ draft
 
 ## Последни проверки
 
-Проверено на 23.07.2026 г. локално и в GitHub Actions върху текущия merge с
+Проверено на 27.07.2026 г. локално върху текущия merge с
 `origin/main`:
 
 Release candidate privacy fix: `087cad2` (`fix: remove private fields from public worker responses`)
@@ -169,14 +175,15 @@ Immutable application bundle tooling: `eb5bdc2`
 | Frontend production build | Passed |
 | Pricing contract | 97 activities, 174 material items |
 | Mock moderation enforcement | Passed |
-| Frontend production audit | 0 vulnerabilities |
+| Frontend production audit | Един RSC-only upstream advisory с контролиран exception; RSC Mode не се използва |
 | Migration contract verification | Passed |
 | Sprint 2 migration and rollback rehearsal | Passed |
 | Sprint 3 clean-DB MySQL lifecycle smoke | Passed |
 | Public worker list/profile/batch privacy smoke | Passed |
 | Public post-deploy contract test | Passed |
 | Deployment bundle package/verify/tamper test | Passed |
-| GitHub verification workflows | Passed on current pushed head |
+| Browser smoke syntax/build integration | Passed locally; real MySQL/browser CI pending за текущата промяна |
+| GitHub verification workflows | Passed на предходния pushed head; новият browser gate още не е push-нат |
 
 ## Текущо състояние на интеграцията
 

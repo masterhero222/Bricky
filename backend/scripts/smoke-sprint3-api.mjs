@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import mysql from 'mysql2/promise';
 
 const apiBase = String(
@@ -688,6 +690,30 @@ async function main() {
     assert.ok(
       eventTypes.includes(eventType),
       `Timeline is missing ${eventType}`,
+    );
+  }
+
+  const browserSessionPath = process.env.SPRINT3_SMOKE_SESSION_FILE?.trim();
+  if (browserSessionPath) {
+    const resolvedSessionPath = resolve(browserSessionPath);
+    mkdirSync(dirname(resolvedSessionPath), { recursive: true });
+    writeFileSync(
+      resolvedSessionPath,
+      `${JSON.stringify(
+        {
+          formatVersion: 1,
+          generatedAt: new Date().toISOString(),
+          apiBase,
+          accounts: {
+            client: credentials.client,
+            worker: credentials.worker,
+            admin: credentials.admin,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf8', mode: 0o600 },
     );
   }
 
