@@ -1175,7 +1175,7 @@ async function certifyRehearsal() {
     apiUrl,
     webUrl,
     migrationNames,
-    browserSmokeReportPath,
+    browserSmokeReportPath: browserReportPath,
     browserSmokeReportSha256: await sha256(browserReportPath),
     browserSmoke,
     gates: [
