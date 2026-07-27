@@ -51,9 +51,13 @@ function loadAccounts() {
 async function settle(page) {
   await page.waitForLoadState("domcontentloaded");
   await page.waitForLoadState("networkidle", { timeout }).catch(() => {});
-  await page.locator("#root").waitFor({ state: "visible", timeout });
-  const text = (await page.locator("body").innerText()).trim();
-  assert.ok(text.length > 20, `Rendered page is unexpectedly empty: ${page.url()}`);
+  const app = page.locator("#root > *").first();
+  await app.waitFor({ state: "visible", timeout });
+  const bounds = await app.boundingBox();
+  assert.ok(
+    bounds && bounds.width > 0 && bounds.height > 0,
+    `Rendered page is unexpectedly empty: ${page.url()}`,
+  );
 }
 
 async function openRoute(page, route) {
