@@ -33,7 +33,10 @@ read_pm2_value() {
 }
 
 for key in DB_HOST DB_PORT DB_USER DB_PASS DB_NAME JWT_SECRET NODE_ENV TYPEORM_SYNCHRONIZE; do
-  value="$(read_pm2_value "$key")"
+  value="${!key:-}"
+  if [[ -z "$value" ]]; then
+    value="$(read_pm2_value "$key")"
+  fi
   [[ -n "$value" ]] || {
     echo "Missing $key in PM2 process $PM2_PROCESS_ID" >&2
     exit 1
