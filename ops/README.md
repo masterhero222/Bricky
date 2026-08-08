@@ -13,6 +13,10 @@ The backup service resolves the database configuration from the running
 runner. Release confirmations and evidence paths still have to be supplied
 explicitly for each action.
 
+`rehearsal-stack.sh` starts and stops only the isolated API and web preview
+used by the release certificate. Its environment must point to a disposable
+database and restored uploads before `start`.
+
 `/etc/bricky/monitor.env` may configure `BRICKY_ALERT_WEBHOOK_URL`,
 `BRICKY_DISK_LIMIT`, and the public URLs. It must never be committed with a
 real webhook secret.
