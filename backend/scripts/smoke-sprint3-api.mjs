@@ -389,22 +389,24 @@ async function main() {
   assert.equal(assignedWorkerView.clientName, 'Sprint 3 Client');
   assert.equal(assignedWorkerView.email, null);
   assert.equal(assignedWorkerView.phone, null);
-  assert.equal(assignedWorkerView.address, 'София, rehearsal address');
-  assert.equal(assignedWorkerView.addressPrecision, 'exact');
+  assert.equal(assignedWorkerView.address, 'София');
+  assert.equal(assignedWorkerView.addressPrecision, 'rough');
 
-  const withdrawalAfterAssignment = await api(
-    `/requests/${requestId}/withdraw`,
-    {
-      method: 'POST',
-      token: worker.token,
-      body: {},
-      expected: [400],
-    },
+  assert.equal(
+    (
+      await api(`/requests/${requestId}/unassign`, {
+        method: 'POST',
+        token: client.token,
+        body: {},
+      })
+    ).data.statusKey,
+    'applied',
   );
-  assert.match(
-    String(withdrawalAfterAssignment.data?.message || ''),
-    /cannot withdraw/i,
-  );
+  await api(`/requests/${requestId}/assign`, {
+    method: 'POST',
+    token: client.token,
+    body: { workerUserId: workerUser.id },
+  });
 
   assert.equal(
     (
@@ -416,6 +418,28 @@ async function main() {
     ).data.statusKey,
     'worker_confirmed',
   );
+
+  const confirmedWorkerView = (
+    await api('/requests/worker', { token: worker.token })
+  ).data.find((request) => Number(request.id) === requestId);
+  assert.equal(confirmedWorkerView.phone, '0888000000');
+  assert.equal(confirmedWorkerView.address, 'София, rehearsal address');
+  assert.equal(confirmedWorkerView.addressPrecision, 'exact');
+
+  const withdrawalAfterConfirmation = await api(
+    `/requests/${requestId}/withdraw`,
+    {
+      method: 'POST',
+      token: worker.token,
+      body: {},
+      expected: [400],
+    },
+  );
+  assert.match(
+    String(withdrawalAfterConfirmation.data?.message || ''),
+    /cannot withdraw/i,
+  );
+
   assert.equal(
     (
       await api(`/requests/${requestId}/on-site`, {
