@@ -9,6 +9,10 @@ The backup service resolves the database configuration from the running
 `bricky-backend` PM2 process. This avoids maintaining a second password file.
 `BRICKY_PM2_PROCESS_NAME` can override the default process name.
 
+`run-release-from-pm2.sh` does the same for the canonical Sprint 3 release
+runner. Release confirmations and evidence paths still have to be supplied
+explicitly for each action.
+
 `/etc/bricky/monitor.env` may configure `BRICKY_ALERT_WEBHOOK_URL`,
 `BRICKY_DISK_LIMIT`, and the public URLs. It must never be committed with a
 real webhook secret.
