@@ -15,8 +15,8 @@ real webhook secret.
 
 ## Release activation
 
-1. Install the backup, backup wrapper, restore rehearsal, and health scripts in
-   `/usr/local/sbin` as root-owned executable files.
+1. Install the backup, backup wrapper, restore rehearsal, migration rehearsal,
+   and health scripts in `/usr/local/sbin` as root-owned executable files.
 2. Install the four units in `/etc/systemd/system`.
 3. Run both services manually and inspect their journal output.
 4. Verify the newest backup with `gzip -t`, `tar -tzf`, checksums, and a restore
