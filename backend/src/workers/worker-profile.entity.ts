@@ -33,6 +33,12 @@ export class WorkerProfileEntity {
   @Column({ type: 'text', nullable: true })
   equipment: string | null;
 
+  @Column({ name: 'phone_private', type: 'varchar', length: 40, nullable: true })
+  phonePrivate: string | null;
+
+  @Column({ name: 'default_address', type: 'varchar', length: 255, nullable: true })
+  defaultAddress: string | null;
+
   @Column({ name: 'approval_status', default: 'pending' })
   approvalStatus: string;
 

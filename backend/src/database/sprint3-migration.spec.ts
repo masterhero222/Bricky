@@ -7,6 +7,8 @@ const readMigration = (name: string) =>
 describe('Sprint 3 SQL migrations', () => {
   const core = readMigration('20260718_sprint3_v2_data_core.sql');
   const alignment = readMigration('20260719_sprint3_v2_schema_alignment.sql');
+  const accountSettings = readMigration('20260808_account_profile_settings.sql');
+  const passwordReset = readMigration('20260808_password_reset_tokens.sql');
   const integrityVerifier = readFileSync(
     resolve(__dirname, '../../scripts/verify-sprint3-integrity.mjs'),
     'utf8',
@@ -120,6 +122,22 @@ describe('Sprint 3 SQL migrations', () => {
     );
   });
 
+  it('adds private worker contact fields without exposing them in the public profile schema', () => {
+    expect(accountSettings).toContain('phone_private varchar(40) NULL');
+    expect(accountSettings).toContain('default_address varchar(255) NULL');
+    expect(accountSettings).toContain('information_schema.columns');
+  });
+
+  it('stores only hashed, expiring and single-use password reset tokens', () => {
+    expect(passwordReset).toContain('password_reset_tokens');
+    expect(passwordReset).toContain('token_hash char(64)');
+    expect(passwordReset).toContain('expires_at datetime NOT NULL');
+    expect(passwordReset).toContain('consumed_at datetime NULL');
+    expect(passwordReset).toContain('auth_version int NOT NULL DEFAULT 0');
+    expect(passwordReset).toContain('information_schema.columns');
+    expect(passwordReset).not.toMatch(/\btoken\s+varchar/i);
+  });
+
   it.each([
     'moderationStatus',
     'moderationReason',
@@ -131,7 +149,7 @@ describe('Sprint 3 SQL migrations', () => {
   });
 
   it('uses MySQL-compatible idempotent column guards', () => {
-    const sql = `${core}\n${alignment}`;
+    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}`;
 
     expect(sql).not.toMatch(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS/i);
     expect(sql).toContain('information_schema.columns');
@@ -158,7 +176,7 @@ describe('Sprint 3 SQL migrations', () => {
   });
 
   it('does not contain destructive schema or data operations', () => {
-    const sql = `${core}\n${alignment}`;
+    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}`;
 
     expect(sql).not.toMatch(/\bDROP\s+(TABLE|DATABASE)\b/i);
     expect(sql).not.toMatch(/\bTRUNCATE\b/i);

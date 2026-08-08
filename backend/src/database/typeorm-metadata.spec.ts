@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource, EntityTarget, ObjectLiteral } from 'typeorm';
 
 import { AdminAuditLogEntity } from '../admin/admin-audit-log.entity';
+import { PasswordResetTokenEntity } from '../auth/password-reset-token.entity';
 import { WorkerCreditTransactionEntity } from '../billing/worker-credit-transaction.entity';
 import { WorkerCreditWalletEntity } from '../billing/worker-credit-wallet.entity';
 import { WorkerPlanEntity } from '../billing/worker-plan.entity';
@@ -51,6 +52,7 @@ const activeEntities: EntityTarget<ObjectLiteral>[] = [
   ReferralQualificationEntity,
   ReferralRewardEntity,
   AdminAuditLogEntity,
+  PasswordResetTokenEntity,
 ];
 
 describe('TypeORM application metadata', () => {

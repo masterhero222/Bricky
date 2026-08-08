@@ -22,6 +22,7 @@ type CreateWorkerProfileInput = {
   userId: number;
   publicName?: string;
   phone?: string;
+  defaultAddress?: string | null;
   city?: string;
   skills?: string[];
   bio?: string | null;
@@ -198,6 +199,8 @@ export class WorkersService {
       bio: data.bio ?? null,
       experience: data.experience ?? null,
       equipment: data.equipment ?? null,
+      phonePrivate: data.phone ?? null,
+      defaultAddress: data.defaultAddress ?? null,
       approvalStatus: 'pending',
       visibilityStatus: 'private',
       profileBannerKey: DEFAULT_WORKER_BANNER_KEY,

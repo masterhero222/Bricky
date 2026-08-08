@@ -13,6 +13,7 @@ import WorkerProfileEditorPremium from "../../components/workers/WorkerProfileEd
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { DEFAULT_WORKER_BANNER_KEY } from "../../constants/workerBannerCatalog";
+import AccountSettingsPanel from "../../components/account/AccountSettingsPanel";
 
 function formatBG(dateStr) {
   try {
@@ -91,6 +92,7 @@ function toNum(x) {
 const WORKER_TABS = new Set([
   "dashboard",
   "requests",
+  "history",
   "profile",
   "referrals",
   "gallery",
@@ -1447,19 +1449,18 @@ export default function WorkerProfile() {
         {activeTab === "calculator" && <WorkerCalculatorPanel />}
 
         {activeTab === "settings" && (
-          <div className="mx-auto mt-10 max-w-3xl rounded-lg border border-cyan-400/15 bg-[#0b2033] p-6">
-            <h1 className="text-2xl font-bold">Настройки</h1>
-            <p className="mt-3 text-slate-300">
-              Банерът и публичният изглед се управляват само от секция „Профил“.
-            </p>
-          </div>
+          <AccountSettingsPanel
+            onProfileSaved={(account) =>
+              setProfile((current) => ({
+                ...current,
+                fullName: account.profile?.name || current.fullName,
+              }))
+            }
+          />
         )}
 
         {activeTab === "subscription" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Абонамент</h1>
-            <p className="text-gray-400">Bricky PRO — скоро.</p>
-          </div>
+          <AccountSettingsPanel view="subscription" />
         )}
       </main>
 

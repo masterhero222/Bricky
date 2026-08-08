@@ -30,10 +30,13 @@ function shouldUseMock(url) {
     DEV_MOCK_ENABLED &&
     (isDevMockToken() ||
       path.includes("/auth/dev-login") ||
+      path.startsWith("/auth/password-reset/") ||
       path === "/auth/register" ||
       path === "/repair-categories" ||
       path === "/workers" ||
       path.startsWith("/admin/") ||
+      path.startsWith("/account/") ||
+      path.startsWith("/notifications/") ||
       path.startsWith("/referrals") ||
       path.startsWith("/requests") ||
       path.startsWith("/reviews") ||

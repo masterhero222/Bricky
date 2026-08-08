@@ -5,6 +5,7 @@ import LogoutButton from "../LogoutButton";
 const WORKER_PROFILE_NAV_ITEMS = [
   ["dashboard", "Контрол панел"],
   ["requests", "Заявки"],
+  ["history", "История"],
   ["map", "Карта заявки"],
   ["profile", "Профил"],
   ["referrals", "Покани майстор"],

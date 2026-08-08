@@ -29,6 +29,9 @@ export class UserEntity {
   @Column({ default: 'active' })
   status: string;
 
+  @Column({ name: 'auth_version', type: 'int', default: 0 })
+  authVersion: number;
+
   @CreateDateColumn({ name: 'created_at', nullable: true })
   createdAt: Date;
 

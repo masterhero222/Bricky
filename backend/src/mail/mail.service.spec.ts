@@ -71,4 +71,21 @@ describe('MailService', () => {
       '&lt;script&gt;alert(1)&lt;/script&gt;',
     );
   });
+
+  it('renders a password reset email with the one-time HTTPS link', async () => {
+    await service.sendPasswordResetLink({
+      email: 'client@bricky.test',
+      name: 'Иван',
+      resetUrl: 'https://bricky.bg/reset-password?token=secure-token',
+    });
+
+    expect(deliveredMessage).toMatchObject({
+      to: 'client@bricky.test',
+      subject: 'Защитен линк за смяна на паролата - Bricky',
+    });
+    expect(deliveredMessage?.html).toContain(
+      'https://bricky.bg/reset-password?token=secure-token',
+    );
+    expect(deliveredMessage?.html).toContain('30 минути');
+  });
 });

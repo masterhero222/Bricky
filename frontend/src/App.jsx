@@ -18,6 +18,7 @@ const WorkerPreview = lazy(() => import("./pages/workers/WorkerPreview"));
 const Workers = lazy(() => import("./pages/workers/Workers"));
 const Requests = lazy(() => import("./pages/Requests"));
 const AdminBackoffice = lazy(() => import("./pages/AdminBackoffice"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/about" element={<AboutUs />} />
             <Route path="/blog" element={<BlogIndex />} />
             <Route path="/blog/:slug" element={<BlogArticle />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               path="/repair-map"
               element={

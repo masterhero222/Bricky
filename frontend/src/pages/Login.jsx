@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { apiPost } from "../services/api";
+import { Link } from "react-router-dom";
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -97,6 +98,9 @@ export default function Login() {
         {error && <p className="text-red-400 text-center">{error}</p>}
 
         <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
+        <Link to="/reset-password" className="block text-center text-sm font-semibold text-cyan-300 hover:text-cyan-200">
+          Забравена парола?
+        </Link>
 
         {import.meta.env.DEV && (
           <div className="border-t border-gray-700 pt-4 space-y-2">

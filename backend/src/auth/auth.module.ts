@@ -11,12 +11,17 @@ import { UsersModule } from '../users/users.module';
 import { WorkersModule } from '../workers/workers.module';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { getJwtSecret } from '../config/runtime-config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PasswordResetTokenEntity } from './password-reset-token.entity';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
     UsersModule,
     WorkersModule,
     ReferralsModule,
+    MailModule,
+    TypeOrmModule.forFeature([PasswordResetTokenEntity]),
     ConfigModule,
     PassportModule,
     JwtModule.registerAsync({

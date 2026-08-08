@@ -1390,6 +1390,38 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/client/me") return response(publicUser(user, db));
+  if (method === "get" && path === "/account/me") {
+    return response({
+      userId,
+      role,
+      status: user.status || "active",
+      email: user.email || "",
+      profile: {
+        name: user.name || user.fullName || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        city: user.city || null,
+      },
+      subscription: role === "worker" ? { planKey: user.planKey || "free", status: "active", startsAt: null, endsAt: null } : null,
+      notifications: { unreadCount: 0, items: [] },
+    });
+  }
+  if (method === "put" && path === "/account/profile") {
+    user.name = data?.name ?? user.name;
+    if (role === "worker") user.fullName = data?.name ?? user.fullName;
+    user.email = data?.email ?? user.email;
+    user.phone = data?.phone ?? user.phone;
+    user.address = data?.address ?? user.address;
+    writeDb(db);
+    return mockRequest("get", "/account/me");
+  }
+  if (method === "post" && path === "/auth/password-reset/request") {
+    return response({ message: "Ако имейлът е регистриран, ще получите защитен линк за смяна на паролата." });
+  }
+  if (method === "post" && path === "/auth/password-reset/confirm") {
+    return response({ ok: true, message: "Паролата е сменена успешно." });
+  }
+  if (method === "post" && /^\/notifications\/\d+\/read$/.test(path)) return response({ ok: true });
   if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
   if (method === "get" && path === "/referrals/me") {
     if (role !== "worker") return fail("Worker only", 403);

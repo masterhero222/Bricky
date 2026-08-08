@@ -8,6 +8,8 @@ const migrationDir = resolve(scriptDir, '../migrations');
 export const migrationNames = [
   '20260718_sprint3_v2_data_core.sql',
   '20260719_sprint3_v2_schema_alignment.sql',
+  '20260808_account_profile_settings.sql',
+  '20260808_password_reset_tokens.sql',
 ];
 
 export const migrations = migrationNames.map((name) => ({
@@ -37,6 +39,7 @@ const expectedTables = [
   'referrals',
   'referral_qualifications',
   'referral_rewards',
+  'password_reset_tokens',
 ];
 
 const expectedIndexes = [

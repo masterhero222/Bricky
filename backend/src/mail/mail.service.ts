@@ -11,6 +11,7 @@ export class MailService {
   private readonly transporter: Transporter;
   private readonly from: string;
   private readonly confirmationTemplate: Handlebars.TemplateDelegate;
+  private readonly passwordResetTemplate: Handlebars.TemplateDelegate;
 
   constructor(config: ConfigService) {
     const port = config.get<number>('MAIL_PORT') || 587;
@@ -32,6 +33,10 @@ export class MailService {
         join(__dirname, 'templates', 'request-confirmation.hbs'),
         'utf8',
       ),
+      { strict: true },
+    );
+    this.passwordResetTemplate = Handlebars.compile(
+      readFileSync(join(__dirname, 'templates', 'password-reset.hbs'), 'utf8'),
       { strict: true },
     );
   }
@@ -66,6 +71,28 @@ export class MailService {
         `Грешка при изпращане на имейл до ${request.email}: ${message}`,
         details,
       );
+    }
+  }
+
+  async sendPasswordResetLink(request: {
+    email: string;
+    name: string;
+    resetUrl: string;
+  }) {
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: request.email,
+        subject: 'Защитен линк за смяна на паролата - Bricky',
+        html: this.passwordResetTemplate({
+          name: request.name || 'потребител',
+          resetUrl: request.resetUrl,
+        }),
+      });
+      this.logger.log(`Password reset email sent to ${request.email}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Password reset email failed for ${request.email}: ${message}`);
     }
   }
 }

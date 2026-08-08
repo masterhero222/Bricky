@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import RequestInfoRow from "../components/requests/RequestInfoRow";
 import RequestPhotoCarousel from "../components/requests/RequestPhotoCarousel";
+import AccountSettingsPanel from "../components/account/AccountSettingsPanel";
 
 function formatBG(dateStr) {
   try {
@@ -60,7 +61,7 @@ function safeRatingValue(x) {
 export default function ClientProfile() {
   const [activeTab, setActiveTab] = useState(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return ["requests", "create", "profile", "settings"].includes(tab) ? tab : "requests";
+    return ["requests", "history", "create", "profile", "settings"].includes(tab) ? tab : "requests";
   });
 
   const [client, setClient] = useState({
@@ -307,11 +308,11 @@ export default function ClientProfile() {
   }, [requestHistory]);
 
   const visibleRequests = useMemo(
-    () => [
-      ...requestsSorted.map((request) => ({ ...request, _archiveScope: "active" })),
-      ...requestHistorySorted.map((request) => ({ ...request, _archiveScope: "history" })),
-    ],
-    [requestsSorted, requestHistorySorted],
+    () =>
+      activeTab === "history"
+        ? requestHistorySorted.map((request) => ({ ...request, _archiveScope: "history" }))
+        : requestsSorted.map((request) => ({ ...request, _archiveScope: "active" })),
+    [activeTab, requestsSorted, requestHistorySorted],
   );
 
   if (loading) {
@@ -324,6 +325,7 @@ export default function ClientProfile() {
         <nav className="flex flex-col gap-2 px-5 text-sm">
           {[
             ["requests", "Моите заявки"],
+            ["history", "История"],
             ["create", "Направи заявка"],
             ["profile", "Профил"],
             ["settings", "Настройки"],
@@ -345,16 +347,16 @@ export default function ClientProfile() {
 
       <main className="min-w-0 flex-1 px-4 pb-20 pt-12 sm:px-7 lg:ml-64 lg:px-10">
         <div className="mb-8 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
-          {[["requests", "Моите заявки"], ["create", "Направи заявка"], ["profile", "Профил"], ["settings", "Настройки"]].map(([key, label]) => (
+          {[["requests", "Моите заявки"], ["history", "История"], ["create", "Направи заявка"], ["profile", "Профил"], ["settings", "Настройки"]].map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)} className={`shrink-0 rounded-xl px-4 py-3 text-sm font-bold ${activeTab === key ? "bg-green-500/15 text-green-300" : "bg-slate-800/70 text-slate-300"}`}>{label}</button>
           ))}
         </div>
-        {activeTab === "requests" && (
+        {["requests", "history"].includes(activeTab) && (
           <div className="mx-auto max-w-7xl">
             <div className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-              <h1 className="text-3xl font-extrabold sm:text-4xl">Моите заявки</h1>
+              <h1 className="text-3xl font-extrabold sm:text-4xl">{activeTab === "history" ? "История" : "Моите заявки"}</h1>
 
-              <div className="flex flex-wrap gap-3">
+              {activeTab === "requests" && <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => setActiveTab("create")}
                   className="bricky-button-primary"
@@ -368,7 +370,7 @@ export default function ClientProfile() {
                 >
                   <RefreshCw size={19} /> Обнови
                 </button>
-              </div>
+              </div>}
             </div>
 
             {actionMsg && <div className="mb-4 text-yellow-300 font-bold">{actionMsg}</div>}
@@ -643,17 +645,16 @@ export default function ClientProfile() {
         )}
 
         {activeTab === "settings" && (
-          <div className="mx-auto max-w-4xl">
-            <h1 className="mb-3 text-3xl font-extrabold">Настройки</h1>
-            <p className="mb-8 text-slate-400">Управлявай профила, адресите, известията и сигурността си.</p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <SettingsCard title="Профил" text="Име, телефон и имейл за връзка." />
-              <SettingsCard title="Адреси" text="Запазени адреси и бележки за достъп." />
-              <SettingsCard title="Известия" text="Оферти, съобщения и промени по заявките." />
-              <SettingsCard title="Предпочитания за контакт" text="Чат, имейл и удобно време за връзка." />
-              <SettingsCard title="Сигурност" text="Парола и управление на активните устройства." />
-            </div>
-          </div>
+          <AccountSettingsPanel
+            onProfileSaved={(account) =>
+              setClient({
+                name: account.profile?.name || "",
+                email: account.email || "",
+                phone: account.profile?.phone || "",
+                address: account.profile?.address || "",
+              })
+            }
+          />
         )}
       </main>
     </div>
@@ -662,8 +663,4 @@ export default function ClientProfile() {
 
 function ProfileField({ label, value }) {
   return <div className="rounded-xl border border-slate-400/15 bg-slate-950/25 p-5"><div className="text-xs font-bold uppercase text-slate-500">{label}</div><div className="mt-2 font-semibold text-slate-100">{value}</div></div>;
-}
-
-function SettingsCard({ title, text }) {
-  return <button type="button" className="bricky-card rounded-2xl p-6 text-left transition hover:-translate-y-0.5 hover:border-slate-300/30"><div className="text-lg font-extrabold text-slate-100">{title}</div><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></button>;
 }
