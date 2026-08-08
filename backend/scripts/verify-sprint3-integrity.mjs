@@ -31,7 +31,10 @@ function mediaFilePath(row) {
     normalized = normalized.slice('/uploads/'.length);
   } else if (normalized.startsWith('uploads/')) {
     normalized = normalized.slice('uploads/'.length);
-  } else {
+  } else if (
+    normalized.startsWith('/') ||
+    /^[a-z][a-z0-9+.-]*:/i.test(normalized)
+  ) {
     return null;
   }
 
