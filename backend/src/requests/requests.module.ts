@@ -16,6 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { UserEntity } from '../users/user.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
+import { ClientProfileEntity } from '../users/client-profile.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
       RequestPricingSnapshotEntity,
       UserEntity,
       WorkerProfileEntity,
+      ClientProfileEntity,
     ]),
     MailModule,
     AuthModule,

@@ -7,7 +7,7 @@ function repo(overrides: Record<string, any> = {}) {
     save: jest.fn(async (value) => value),
   };
   return {
-    findOne: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
     find: jest.fn().mockResolvedValue([]),
     save: jest.fn(),
     create: jest.fn((value) => value),
@@ -28,8 +28,9 @@ describe('RequestsService v2 data core', () => {
       (overrides.eventsRepo || repo({ save: jest.fn().mockResolvedValue({}) })) as any,
       (overrides.usersRepo || repo()) as any,
       (overrides.workerProfilesRepo || repo()) as any,
+      (overrides.clientProfilesRepo || repo()) as any,
       {} as any,
-      {} as any,
+      (overrides.notifications || { create: jest.fn().mockResolvedValue({}) }) as any,
       (overrides.media || {
         createAsset: jest.fn(),
         findByRequest: jest.fn().mockResolvedValue([]),
@@ -77,7 +78,7 @@ describe('RequestsService v2 data core', () => {
     expect(created.statusLabel).toBe('Чака одобрение');
     expect(created).not.toHaveProperty('status');
     expect(created.nextActor).toBe('admin');
-    expect(created.allowedActions).toEqual(['approve', 'reject', 'hide']);
+    expect(created.allowedActions).toEqual([]);
     expect(created).not.toHaveProperty('assignedWorkerId');
     expect(created).not.toHaveProperty('completedByWorkerId');
     expect(media.createAsset).toHaveBeenCalledWith(expect.objectContaining({ kind: 'request_before', moderationStatus: 'pending' }));
@@ -189,7 +190,7 @@ describe('RequestsService v2 data core', () => {
     expect(result.afterPhotos.map((photo) => photo.url)).toEqual(['/uploads/pending-after.jpg']);
   });
 
-  it('hides client contact details and exact location until the worker is assigned', async () => {
+  it('hides client contact details and exact location until the selected worker confirms', async () => {
     const request: any = {
       id: 1,
       clientUserId: 101,
@@ -231,6 +232,9 @@ describe('RequestsService v2 data core', () => {
       repairRequestsRepo,
       usersRepo,
       workerProfilesRepo,
+      clientProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({ userId: 101, phonePrivate: '0888000000' }),
+      }),
     });
 
     const [beforeAssignment] = await service.getForWorkersFeed(201);
@@ -257,11 +261,23 @@ describe('RequestsService v2 data core', () => {
         clientName: 'Private Client',
         email: null,
         phone: null,
+        address: 'Sofia',
+        addressText: 'Sofia',
+        addressPrecision: 'rough',
+        latitude: 42.7,
+        longitude: 23.32,
+      }),
+    );
+
+    request.status = 'worker_confirmed';
+    const [afterConfirmation] = await service.getForWorkersFeed(201);
+    expect(afterConfirmation).toEqual(
+      expect.objectContaining({
+        clientName: 'Private Client',
+        email: null,
+        phone: '0888000000',
         address: 'Sofia, 100 Bulgaria Boulevard, entrance A',
-        addressText: 'Sofia, 100 Bulgaria Boulevard, entrance A',
         addressPrecision: 'exact',
-        latitude: '42.6977000',
-        longitude: '23.3219000',
       }),
     );
   });
@@ -361,6 +377,26 @@ describe('RequestsService v2 data core', () => {
     const service = serviceWith({ usersRepo, workerProfilesRepo });
 
     await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('does not expose completed request contact details to suspended workers', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'suspended',
+        visibilityStatus: 'hidden',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      find: jest.fn(),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+
+    await expect(service.getCompletedForWorker(201)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repairRequestsRepo.find).not.toHaveBeenCalled();
   });
 
   it('blocks worker applications before admin approval', async () => {
@@ -485,7 +521,7 @@ describe('RequestsService v2 data core', () => {
     expect(request.assignedWorkerUserId).toBeNull();
   });
 
-  it('assigns only an applicant and rejects the remaining active applications', async () => {
+  it('selects one applicant without rejecting the remaining applications before confirmation', async () => {
     const request: any = {
       id: 1,
       clientUserId: 101,
@@ -532,12 +568,12 @@ describe('RequestsService v2 data core', () => {
     expect(request.assignedWorkerUserId).toBe(201);
     expect(request.status).toBe('worker_selected');
     expect(selected.status).toBe('assigned');
-    expect(other.status).toBe('rejected');
+    expect(other.status).toBe('shortlisted');
     expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
     expect(updated.applications).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ workerUserId: 201, status: 'assigned' }),
-        expect.objectContaining({ workerUserId: 202, status: 'rejected' }),
+        expect.objectContaining({ workerUserId: 202, status: 'shortlisted' }),
       ]),
     );
   });
@@ -728,10 +764,11 @@ describe('RequestsService v2 data core', () => {
     await service.withdrawApplication(1, 201);
 
     expect(application.status).toBe('withdrawn');
-    expect(repairRequestsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'published' }));
+    expect(request.status).toBe('published');
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks worker withdrawal after the client selected that worker', async () => {
+  it('lets the selected worker decline before confirmation', async () => {
     const usersRepo = repo({
       findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
@@ -748,8 +785,37 @@ describe('RequestsService v2 data core', () => {
         client: {},
       }),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+    const application: any = { id: 5, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(application),
+      find: jest.fn().mockResolvedValue([application]),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
 
+    const result = await service.withdrawApplication(1, 201);
+    expect(application.status).toBe('withdrawn');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(result.statusKey).toBe('published');
+  });
+
+  it('blocks worker withdrawal after confirmation', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'worker_confirmed',
+        archivedAt: null,
+        client: {},
+      }),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
     await expect(service.withdrawApplication(1, 201)).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -766,6 +832,59 @@ describe('RequestsService v2 data core', () => {
     const service = serviceWith({ repairRequestsRepo });
 
     await expect(service.unassignWorker(1, 101)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lets the client remove a selected worker before confirmation', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'worker_selected',
+      archivedAt: null,
+      client: {},
+    };
+    const application: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([application]) });
+    const service = serviceWith({ repairRequestsRepo, applicationsRepo });
+
+    const result = await service.unassignWorker(1, 101);
+
+    expect(result.statusKey).toBe('applied');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(application.status).toBe('applied');
+  });
+
+  it('requires admin intervention to reopen a confirmed request', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'worker_confirmed',
+      completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
+      client: {},
+    };
+    const selected: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const other: any = { id: 8, requestId: 1, workerUserId: 202, status: 'rejected' };
+    const withdrawn: any = { id: 9, requestId: 1, workerUserId: 203, status: 'withdrawn' };
+    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([selected, other, withdrawn]) });
+    const service = serviceWith({ repairRequestsRepo, applicationsRepo });
+
+    await expect(service.adminIntervene(1, 900, 'reopen', '')).rejects.toBeInstanceOf(BadRequestException);
+    const result = await service.adminIntervene(1, 900, 'reopen', 'Worker unavailable');
+
+    expect(result.statusKey).toBe('applied');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(selected.status).toBe('withdrawn');
+    expect(other.status).toBe('applied');
+    expect(withdrawn.status).toBe('withdrawn');
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
   });
 
   it('runs the compatibility worker steps through the canonical lifecycle', async () => {

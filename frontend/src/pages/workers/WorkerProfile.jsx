@@ -323,12 +323,13 @@ export default function WorkerProfile() {
   }
 
   function canWithdrawApplication(req) {
+    const selectedToMe =
+      isAssignedToMe(req) && ["worker_selected", "assigned"].includes(requestStatusKey(req));
     return (
       hasApplied(req) &&
-      !isAssignedToMe(req) &&
-      !toNum(req.assignedWorkerUserId) &&
       !isClosed(req) &&
-      requestAllows(req, "withdraw_application")
+      requestAllows(req, "withdraw_application") &&
+      (selectedToMe || !toNum(req.assignedWorkerUserId))
     );
   }
 
@@ -954,7 +955,8 @@ export default function WorkerProfile() {
                         hasAssigned ||
                         !requestAllows(r, "apply") ||
                         applyingId === r.id;
-                      const showContact = assignedToMe;
+                      const selectionPending = assignedToMe && ["worker_selected", "assigned"].includes(requestStatusKey(r));
+                      const showContact = assignedToMe && !selectionPending && r.addressPrecision === "exact";
                       const stageAction = workerStepAction(r);
                       const showComplete = Boolean(stageAction);
                       const showAfterPhotos = Boolean(stageAction?.needsPhotos);
@@ -992,10 +994,15 @@ export default function WorkerProfile() {
                           </div>
                         )}
 
-                        {/* ✅ Когато е назначена на този майстор */}
+                        {selectionPending && (
+                          <div className="mt-3 rounded-xl border border-cyan-500/25 bg-cyan-950/25 p-3 text-sm text-cyan-100">
+                            Потвърди заявката, за да получиш телефона и точния адрес на клиента.
+                          </div>
+                        )}
+
                         {showContact && (
                           <div className="mt-3 bg-gray-800 border border-gray-700 rounded-xl p-3">
-                            <div className="text-green-400 font-bold">Данни за посещението</div>
+                            <div className="text-green-400 font-bold">Контакт с клиента</div>
                             <div className="text-sm text-gray-200 mt-2">
                               <div>
                                 <b>Име:</b> {r.clientName || "—"}
@@ -1003,7 +1010,11 @@ export default function WorkerProfile() {
                               <div>
                                 <b>Адрес:</b> {r.address || "—"}
                               </div>
+                              <div>
+                                <b>Телефон:</b> {r.phone || "—"}
+                              </div>
                             </div>
+                            <p className="mt-3 text-xs text-amber-200">Поръчката е потвърдена. За прекратяване се обърни към администратор.</p>
                           </div>
                         )}
 
@@ -1029,7 +1040,7 @@ export default function WorkerProfile() {
                                   : "bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg font-bold"
                               }
                             >
-                              {withdrawingId === r.id ? "Оттеглям..." : "Оттегли кандидатура"}
+                              {withdrawingId === r.id ? "Оттеглям..." : selectionPending ? "Откажи заявката" : "Оттегли кандидатура"}
                             </button>
                           )}
 
@@ -1167,7 +1178,8 @@ export default function WorkerProfile() {
                     hasAssigned ||
                     !requestAllows(req, "apply") ||
                     applyingId === req.id;
-                  const showContact = assignedToMe;
+                  const selectionPending = assignedToMe && ["worker_selected", "assigned"].includes(requestStatusKey(req));
+                  const showContact = assignedToMe && !selectionPending && req.addressPrecision === "exact";
                   const stageAction = workerStepAction(req);
                   const showComplete = Boolean(stageAction);
                   const showAfterPhotos = Boolean(stageAction?.needsPhotos);
@@ -1221,9 +1233,15 @@ export default function WorkerProfile() {
                         </div>
                       )}
 
+                      {selectionPending && (
+                        <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-950/25 p-4 text-sm text-cyan-100">
+                          Потвърди заявката, за да получиш телефона и точния адрес на клиента.
+                        </div>
+                      )}
+
                       {showContact && (
                         <div className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4">
-                          <div className="text-green-400 font-bold">Данни за посещението</div>
+                          <div className="text-green-400 font-bold">Контакт с клиента</div>
                           <div className="grid md:grid-cols-2 gap-3 text-sm mt-3">
                             <div className="text-gray-200">
                               <b>Име:</b> {req.clientName || "—"}
@@ -1231,7 +1249,11 @@ export default function WorkerProfile() {
                             <div className="text-gray-200">
                               <b>Адрес:</b> {req.address || "—"}
                             </div>
+                            <div className="text-gray-200">
+                              <b>Телефон:</b> {req.phone || "—"}
+                            </div>
                           </div>
+                          <p className="mt-3 text-xs text-amber-200">Поръчката е потвърдена. За прекратяване се обърни към администратор.</p>
                         </div>
                       )}
 
@@ -1260,7 +1282,7 @@ export default function WorkerProfile() {
                                   : "bg-yellow-600 hover:bg-yellow-700 px-5 py-2 rounded-lg font-bold"
                               }
                             >
-                              {withdrawingId === req.id ? "Оттеглям..." : "Оттегли кандидатура"}
+                              {withdrawingId === req.id ? "Оттеглям..." : selectionPending ? "Откажи заявката" : "Оттегли кандидатура"}
                             </button>
                           )}
 

@@ -388,6 +388,10 @@ export default function ClientProfile() {
                       r.lifecycleStatusKey || statusKey,
                     ) && Boolean(r.archivedAt || r.isArchived);
                   const canUnassign = assignedUserId && canUnassignWorker(r);
+                  const lockedAfterConfirm =
+                    assignedUserId &&
+                    !["worker_selected", "assigned"].includes(statusKey) &&
+                    !["completed", "canceled", "archived"].includes(statusKey);
                   const canChooseCandidate = !assignedUserId && requestAllows(r, "assign");
                   const reviewedItem = reviewMap?.[Number(r.id)] || null;
                   const alreadyReviewed = !!reviewedItem || statusKey === "reviewed";
@@ -430,6 +434,11 @@ export default function ClientProfile() {
                             >
                               {unassigningId === r.id ? "Премахвам..." : "Премахни майстора"}
                             </button>
+                          )}
+                          {lockedAfterConfirm && (
+                            <p className="mt-3 max-w-sm text-sm font-semibold text-amber-200 md:ml-auto">
+                              Майсторът е потвърдил поръчката. За прекратяване се свържете с администратор.
+                            </p>
                           )}
                         </div>
                       </div>

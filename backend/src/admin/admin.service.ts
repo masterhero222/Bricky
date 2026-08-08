@@ -172,6 +172,31 @@ export class AdminService {
     return request;
   }
 
+  async interveneRequest(
+    actorUserId: number,
+    requestId: number,
+    action: 'cancel' | 'reopen',
+    reason?: string,
+  ) {
+    this.assertOneOf(action, ['cancel', 'reopen'], 'Invalid intervention action');
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
+    const request = await this.requests.adminIntervene(
+      requestId,
+      actorUserId,
+      action,
+      reason.trim(),
+    );
+    await this.log(
+      actorUserId,
+      `request.${action}`,
+      'request',
+      requestId,
+      reason.trim(),
+      { action },
+    );
+    return request;
+  }
+
   listMedia() {
     return this.media.listAll();
   }

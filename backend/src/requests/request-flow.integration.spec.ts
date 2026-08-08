@@ -143,8 +143,9 @@ describe('Sprint 3 canonical request flow', () => {
       eventsRepo as any,
       usersRepo as any,
       workerProfilesRepo as any,
+      { findOne: jest.fn().mockResolvedValue(null) } as any,
       {} as any,
-      {} as any,
+      { create: jest.fn().mockResolvedValue({}) } as any,
       media as any,
       lifecycle,
       {

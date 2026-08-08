@@ -60,6 +60,17 @@ export class AdminController {
     return this.admin.setRequestStatus(Number(req.user.id), Number(requestId), body?.status, body?.reason);
   }
 
+  @Post('requests/:requestId/intervention')
+  interveneRequest(@Req() req: any, @Param('requestId') requestId: string, @Body() body: any) {
+    this.assertAdmin(req.user);
+    return this.admin.interveneRequest(
+      Number(req.user.id),
+      Number(requestId),
+      body?.action,
+      body?.reason,
+    );
+  }
+
   @Get('media')
   media(@Req() req: any) {
     this.assertAdmin(req.user);

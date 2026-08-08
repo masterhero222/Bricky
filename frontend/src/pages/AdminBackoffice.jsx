@@ -21,6 +21,7 @@ export default function AdminBackoffice() {
   const [error, setError] = useState("");
   const [mediaPreview, setMediaPreview] = useState(null);
   const [requestTimeline, setRequestTimeline] = useState(null);
+  const [requestIntervention, setRequestIntervention] = useState(null);
 
   const endpoint = useMemo(() => `/admin/${activeTab}`, [activeTab]);
 
@@ -47,6 +48,7 @@ export default function AdminBackoffice() {
       if (event.key === "Escape") {
         setMediaPreview(null);
         setRequestTimeline(null);
+        setRequestIntervention(null);
       }
     }
 
@@ -139,7 +141,33 @@ export default function AdminBackoffice() {
       </div>
 
       {mediaPreview && <MediaPreviewModal media={mediaPreview} onClose={() => setMediaPreview(null)} />}
-      {requestTimeline && <RequestTimelineModal data={requestTimeline} onClose={() => setRequestTimeline(null)} />}
+      {requestTimeline && (
+        <RequestTimelineModal
+          data={requestTimeline}
+          onClose={() => setRequestTimeline(null)}
+          onIntervene={(action) => setRequestIntervention({ request: requestTimeline.request, action })}
+        />
+      )}
+      {requestIntervention && (
+        <RequestInterventionModal
+          request={requestIntervention.request}
+          action={requestIntervention.action}
+          onClose={() => setRequestIntervention(null)}
+          onConfirm={async (reason) => {
+            const succeeded = await run(() =>
+              apiPost(`/admin/requests/${requestIntervention.request.id}/intervention`, {
+                action: requestIntervention.action,
+                reason,
+              }),
+            );
+            if (succeeded) {
+              setRequestIntervention(null);
+              setRequestTimeline(null);
+            }
+            return succeeded;
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -647,9 +675,19 @@ function MediaPreviewModal({ media, onClose }) {
   );
 }
 
-function RequestTimelineModal({ data, onClose }) {
+function RequestTimelineModal({ data, onClose, onIntervene }) {
   const request = data?.request || {};
   const events = Array.isArray(data?.events) ? data.events : [];
+  const canIntervene = [
+    "worker_confirmed",
+    "worker_on_site",
+    "inspected",
+    "in_progress",
+    "work_finished",
+    "ready_for_client_confirmation",
+    "client_confirmed",
+    "reviewed",
+  ].includes(request.statusKey);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4" role="dialog" aria-modal="true">
@@ -669,6 +707,18 @@ function RequestTimelineModal({ data, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-5 py-5">
+          {canIntervene && (
+            <div className="mb-5 flex flex-wrap gap-3 rounded-md border border-amber-500/30 bg-amber-950/20 p-4">
+              <div className="mr-auto">
+                <div className="font-semibold text-amber-100">Заключена потвърдена поръчка</div>
+                <div className="mt-1 text-sm text-slate-400">Само администратор може да я прекрати или преотвори.</div>
+              </div>
+              <SmallButton onClick={() => onIntervene?.("reopen")}>Освободи и преотвори</SmallButton>
+              <button type="button" onClick={() => onIntervene?.("cancel")} className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600">
+                Прекрати поръчката
+              </button>
+            </div>
+          )}
           {events.length ? (
             <ol className="relative border-l border-cyan-500/40 pl-6">
               {events.map((event) => (
@@ -694,6 +744,53 @@ function RequestTimelineModal({ data, onClose }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function RequestInterventionModal({ request, action, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const isCancel = action === "cancel";
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(reason.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-4" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Затвори" onClick={onClose} />
+      <form onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-lg border border-slate-700 bg-slate-950 p-6 shadow-2xl">
+        <h2 className="text-xl font-bold text-white">
+          {isCancel ? "Прекрати поръчката" : "Освободи и преотвори"} #{request.id}
+        </h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Действието ще бъде записано в timeline-а и административния одит.
+        </p>
+        <label htmlFor="request-intervention-reason" className="mt-5 block text-sm font-semibold text-slate-200">Причина</label>
+        <textarea
+          id="request-intervention-reason"
+          autoFocus
+          rows={4}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          className="mt-2 w-full rounded-md border border-slate-700 bg-slate-900 p-3 text-white outline-none focus:border-cyan-400"
+          placeholder="Опишете причината за намесата..."
+        />
+        <div className="mt-5 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-md bg-slate-800 px-4 py-2 font-semibold">Назад</button>
+          <button type="submit" disabled={!reason.trim() || submitting} className={`rounded-md px-4 py-2 font-semibold text-white disabled:opacity-50 ${isCancel ? "bg-red-700" : "bg-blue-700"}`}>
+            {submitting ? "Записване..." : "Потвърди"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

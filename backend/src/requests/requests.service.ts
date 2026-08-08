@@ -25,6 +25,7 @@ import { MediaService } from '../media/media.service';
 import { MediaAssetEntity } from '../media/media-asset.entity';
 import { UserEntity } from '../users/user.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
+import { ClientProfileEntity } from '../users/client-profile.entity';
 import {
   REQUEST_LIFECYCLE_ACTIONS,
   REQUEST_LIFECYCLE_STATES,
@@ -91,6 +92,8 @@ export class RequestsService {
     private readonly usersRepo: Repository<UserEntity>,
     @InjectRepository(WorkerProfileEntity)
     private readonly workerProfilesRepo: Repository<WorkerProfileEntity>,
+    @InjectRepository(ClientProfileEntity)
+    private readonly clientProfilesRepo: Repository<ClientProfileEntity>,
     private readonly mailService: MailService,
     private readonly notifications: NotificationsService,
     private readonly media: MediaService,
@@ -399,6 +402,7 @@ export class RequestsService {
 
   async getCompletedForWorker(workerUserId: number) {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
+    await this.assertWorkerCanTakeJobs(workerUserId);
     const requests = await this.repairRequestsRepo.find({
       where: { assignedWorkerUserId: workerUserId, status: 'completed', archivedAt: Not(IsNull()) },
       relations: ['client'],
@@ -474,15 +478,20 @@ export class RequestsService {
     if (['completed', 'canceled', 'archived'].includes(req.status) || req.archivedAt) {
       throw new BadRequestException('Request is closed');
     }
-    if (Number(req.assignedWorkerUserId) === Number(workerUserId)) {
-      throw new BadRequestException('Cannot withdraw after the client selected you');
+    const isSelectedWorker =
+      Number(req.assignedWorkerUserId) === Number(workerUserId) &&
+      ['worker_selected', 'assigned'].includes(req.status);
+    if (Number(req.assignedWorkerUserId) === Number(workerUserId) && !isSelectedWorker) {
+      throw new BadRequestException('Cannot withdraw after confirming the request');
     }
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.WITHDRAW_APPLICATION);
+    if (!isSelectedWorker) {
+      this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.WITHDRAW_APPLICATION);
+    }
 
     const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
     if (!application) throw new NotFoundException('Application not found');
-    if (application.status === 'assigned') {
-      throw new BadRequestException('Cannot withdraw after the client selected you');
+    if (application.status === 'assigned' && !isSelectedWorker) {
+      throw new BadRequestException('Cannot withdraw after confirming the request');
     }
     if (['withdrawn', 'rejected'].includes(application.status)) {
       return this.toDto(req, {
@@ -492,15 +501,33 @@ export class RequestsService {
     }
 
     application.status = 'withdrawn';
-    await this.applicationsRepo.save(application);
+    if (isSelectedWorker) req.assignedWorkerUserId = null;
 
-    if (!req.assignedWorkerUserId) {
-      const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
-      req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
-      await this.repairRequestsRepo.save(req);
+    const allApplications = await this.applicationsRepo.find({ where: { requestId } });
+    const nextApplications = allApplications.map((candidate) =>
+      Number(candidate.workerUserId) === Number(workerUserId) ? application : candidate,
+    );
+    req.status = nextApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status))
+      ? 'applied'
+      : 'published';
+    const withdrawalEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId: workerUserId,
+      eventType: isSelectedWorker ? 'worker.declined_selection' : 'application.withdrawn',
+      metadataJson: {},
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(application);
+      await manager.save(req);
+      await manager.save(withdrawalEvent);
+    });
+    if (isSelectedWorker) {
+      await this.notifySafely(req.clientUserId, {
+        type: 'worker_declined_request',
+        message: `The selected worker declined request #${requestId}.`,
+        requestId,
+      });
     }
-
-    await this.addEvent(requestId, workerUserId, 'application.withdrawn', {});
     return this.toDto(req, {
       viewerRole: 'worker',
       viewerUserId: workerUserId,
@@ -526,8 +553,9 @@ export class RequestsService {
 
     const allApplications = await this.applicationsRepo.find({ where: { requestId } });
     allApplications.forEach((candidate) => {
-      candidate.status =
-        Number(candidate.workerUserId) === Number(workerUserId) ? 'assigned' : 'rejected';
+      if (Number(candidate.workerUserId) === Number(workerUserId)) {
+        candidate.status = 'assigned';
+      }
     });
     const assignmentEvent = this.eventsRepo.create({
       requestId,
@@ -541,6 +569,11 @@ export class RequestsService {
       await manager.save(allApplications);
       await manager.save(assignmentEvent);
     });
+    await this.notifySafely(workerUserId, {
+      type: 'request_worker_selected',
+      message: `You were selected for request #${requestId}. Confirm or decline the request.`,
+      requestId,
+    });
 
     return this.toDto(req, {
       viewerRole: 'client',
@@ -549,15 +582,41 @@ export class RequestsService {
   }
 
   async workerConfirm(requestId: number, workerUserId: number) {
-    return this.workerTransition(
+    await this.assertWorkerCanTakeJobs(workerUserId);
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (!['worker_selected', 'assigned'].includes(req.status)) {
+      throw new BadRequestException(`Invalid request status transition from ${req.status} to worker_confirmed`);
+    }
+
+    const from = req.status;
+    req.status = 'worker_confirmed';
+    const applications = await this.applicationsRepo.find({ where: { requestId } });
+    applications.forEach((candidate) => {
+      if (Number(candidate.workerUserId) === Number(workerUserId)) {
+        candidate.status = 'assigned';
+      } else if (candidate.status !== 'withdrawn') {
+        candidate.status = 'rejected';
+      }
+    });
+    const confirmationEvent = this.eventsRepo.create({
       requestId,
-      workerUserId,
-      ['worker_selected', 'assigned'],
-      'worker_confirmed',
-      'worker.confirmed',
-      null,
-      REQUEST_LIFECYCLE_STATES.ASSIGNED,
-    );
+      actorUserId: workerUserId,
+      eventType: 'worker.confirmed',
+      metadataJson: { from, to: 'worker_confirmed' },
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(req);
+      await manager.save(applications);
+      await manager.save(confirmationEvent);
+    });
+    await this.notifySafely(req.clientUserId, {
+      type: 'worker_confirmed_request',
+      message: `The worker confirmed request #${requestId}.`,
+      requestId,
+    });
+    return this.toDto(req, { viewerRole: 'worker', viewerUserId: workerUserId });
   }
 
   async markWorkerOnSite(requestId: number, workerUserId: number) {
@@ -668,28 +727,36 @@ export class RequestsService {
     const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
     if (!req) throw new NotFoundException('Request not found');
     if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (req.status === 'completed') throw new BadRequestException('Already completed');
+    if (!['worker_selected', 'assigned'].includes(req.status)) {
+      throw new BadRequestException('The request is locked after worker confirmation');
+    }
     if (!req.assignedWorkerUserId) throw new BadRequestException('No assigned worker');
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.UNASSIGN);
 
     const assignedWorkerUserId = Number(req.assignedWorkerUserId);
     req.assignedWorkerUserId = null;
 
     const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
     req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
-    await this.repairRequestsRepo.save(req);
-
-    if (assignedWorkerUserId) {
-      const application = await this.applicationsRepo.findOne({
-        where: { requestId, workerUserId: assignedWorkerUserId },
-      });
-      if (application && application.status === 'assigned') {
-        application.status = 'applied';
-        await this.applicationsRepo.save(application);
-      }
-    }
-
-    await this.addEvent(requestId, clientUserId, 'request.unassigned', { assignedWorkerUserId });
+    const application = activeApplications.find(
+      (candidate) => Number(candidate.workerUserId) === assignedWorkerUserId,
+    );
+    if (application?.status === 'assigned') application.status = 'applied';
+    const unassignmentEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId: clientUserId,
+      eventType: 'request.unassigned',
+      metadataJson: { assignedWorkerUserId },
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      if (application) await manager.save(application);
+      await manager.save(req);
+      await manager.save(unassignmentEvent);
+    });
+    await this.notifySafely(assignedWorkerUserId, {
+      type: 'request_selection_canceled',
+      message: `The client canceled your selection for request #${requestId}.`,
+      requestId,
+    });
     return this.toDto(req, {
       viewerRole: 'client',
       viewerUserId: clientUserId,
@@ -812,6 +879,90 @@ export class RequestsService {
     return this.toDto(request, {
       includeUnapprovedMedia: true,
       viewerRole: 'admin',
+    });
+  }
+
+  async adminIntervene(
+    requestId: number,
+    actorUserId: number,
+    action: 'cancel' | 'reopen',
+    reason: string,
+  ) {
+    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    if (!req) throw new NotFoundException('Request not found');
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
+
+    const lockedStatuses: RepairRequestStatus[] = [
+      'worker_confirmed',
+      'worker_on_site',
+      'inspected',
+      'in_progress',
+      'work_finished',
+      'ready_for_client_confirmation',
+      'client_confirmed',
+      'reviewed',
+    ];
+    if (!req.assignedWorkerUserId || !lockedStatuses.includes(req.status)) {
+      throw new BadRequestException('Administrative intervention is only available for confirmed active requests');
+    }
+
+    const assignedWorkerUserId = Number(req.assignedWorkerUserId);
+    const previousStatus = req.status;
+    const applications = await this.applicationsRepo.find({ where: { requestId } });
+    if (action === 'cancel') {
+      req.status = 'canceled';
+      applications.forEach((candidate) => {
+        if (Number(candidate.workerUserId) === assignedWorkerUserId) candidate.status = 'withdrawn';
+      });
+    } else {
+      applications.forEach((candidate) => {
+        if (Number(candidate.workerUserId) === assignedWorkerUserId) {
+          candidate.status = 'withdrawn';
+        } else if (candidate.status === 'rejected') {
+          candidate.status = 'applied';
+        }
+      });
+      req.status = applications.some((candidate) =>
+        ['applied', 'shortlisted'].includes(candidate.status),
+      ) ? 'applied' : 'published';
+    }
+    req.assignedWorkerUserId = null;
+    req.completedAt = null;
+    req.clientConfirmedAt = null;
+    req.archivedAt = null;
+    req.archiveReason = null;
+    req.archiveSource = null;
+    req.archivedByUserId = null;
+
+    const interventionEvent = this.eventsRepo.create({
+      requestId,
+      actorUserId,
+      eventType: action === 'cancel' ? 'admin.request_canceled' : 'admin.request_reopened',
+      metadataJson: { reason: reason.trim(), previousStatus, assignedWorkerUserId },
+    });
+    await this.repairRequestsRepo.manager.transaction(async (manager) => {
+      await manager.save(req);
+      await manager.save(applications);
+      await manager.save(interventionEvent);
+    });
+
+    await Promise.all([
+      this.notifySafely(req.clientUserId, {
+        type: `request_admin_${action}`,
+        message: `Administrator ${action === 'cancel' ? 'canceled' : 'reopened'} request #${requestId}.`,
+        requestId,
+      }),
+      this.notifySafely(assignedWorkerUserId, {
+        type: `request_admin_${action}`,
+        message: `Administrator ${action === 'cancel' ? 'canceled' : 'reopened'} request #${requestId}.`,
+        requestId,
+      }),
+    ]);
+
+    return this.toDto(req, {
+      includeUnapprovedMedia: true,
+      viewerRole: 'admin',
+      viewerUserId: actorUserId,
     });
   }
 
@@ -943,8 +1094,28 @@ export class RequestsService {
       viewerRole === 'worker' &&
       viewerUserId > 0 &&
       Number(request.assignedWorkerUserId) === viewerUserId;
-    const canViewExactAddress = isAdmin || isClientOwner || isAssignedWorker;
+    const contactUnlockedStatuses: RepairRequestStatus[] = [
+      'worker_confirmed',
+      'worker_on_site',
+      'inspected',
+      'in_progress',
+      'work_finished',
+      'ready_for_client_confirmation',
+      'client_confirmed',
+      'reviewed',
+      'completed',
+    ];
+    const isConfirmedAssignedWorker =
+      isAssignedWorker && contactUnlockedStatuses.includes(request.status);
+    const canViewExactAddress = isAdmin || isClientOwner || isConfirmedAssignedWorker;
     const canViewClientName = isAdmin || isClientOwner || isAssignedWorker;
+    const canViewClientPhone = isAdmin || isClientOwner || isConfirmedAssignedWorker;
+    const clientProfile =
+      canViewClientPhone && typeof this.clientProfilesRepo?.findOne === 'function'
+        ? await Promise.resolve(
+            this.clientProfilesRepo.findOne({ where: { userId: request.clientUserId } }),
+          ).catch(() => null)
+        : null;
     const address = canViewExactAddress
       ? request.addressText
       : this.toRoughArea(request.addressText);
@@ -953,7 +1124,7 @@ export class RequestsService {
       id: request.id,
       clientName: canViewClientName ? request.client?.name || '' : 'Клиент',
       email: isAdmin ? request.client?.email || null : null,
-      phone: null,
+      phone: canViewClientPhone ? clientProfile?.phonePrivate || null : null,
       address,
       addressText: address,
       addressVisibility: request.addressVisibility,
@@ -979,7 +1150,7 @@ export class RequestsService {
       lifecycleStatusKey,
       statusLabel: this.lifecycle.label(lifecycleStatusKey),
       nextActor: this.lifecycle.nextActor(lifecycleStatusKey),
-      allowedActions: this.lifecycle.allowedActions(lifecycleStatusKey),
+      allowedActions: this.allowedActionsFor(request, applications, options),
       applications: applications.map((application) => ({
         id: application.id,
         workerUserId: application.workerUserId,
@@ -1010,6 +1181,63 @@ export class RequestsService {
 
     const [area] = value.split(',');
     return area?.trim() || null;
+  }
+
+  private allowedActionsFor(
+    request: RepairRequestEntity,
+    applications: RequestApplicationEntity[],
+    options: RequestDtoOptions,
+  ) {
+    const base = this.lifecycle.allowedActions(request.status);
+    const viewerUserId = Number(options.viewerUserId);
+    const isAdmin = options.viewerRole === 'admin' || options.viewerRole === 'super_admin';
+    if (isAdmin) return base;
+
+    if (options.viewerRole === 'client' && Number(request.clientUserId) === viewerUserId) {
+      if (['worker_selected', 'assigned'].includes(request.status)) return ['unassign'];
+      if ([
+        'worker_confirmed',
+        'worker_on_site',
+        'inspected',
+        'in_progress',
+        'work_finished',
+      ].includes(request.status)) return [];
+      return base.filter((action) =>
+        ['assign', 'confirm_completion', 'leave_review', 'cancel'].includes(action),
+      );
+    }
+
+    if (options.viewerRole === 'worker') {
+      const assignedToViewer = Number(request.assignedWorkerUserId) === viewerUserId;
+      if (assignedToViewer && ['worker_selected', 'assigned'].includes(request.status)) {
+        return ['withdraw_application', 'mark_arrived'];
+      }
+      if (assignedToViewer) {
+        return base.filter((action) =>
+          ['mark_arrived', 'start_work', 'mark_ready', 'close'].includes(action),
+        );
+      }
+      const application = applications.find(
+        (candidate) => Number(candidate.workerUserId) === viewerUserId,
+      );
+      return base.filter((action) =>
+        action === 'apply' ||
+        (action === 'withdraw_application' &&
+          Boolean(application) &&
+          !['withdrawn', 'rejected'].includes(application!.status)),
+      );
+    }
+
+    return [];
+  }
+
+  private async notifySafely(
+    userId: number,
+    payload: { type: string; message: string; requestId: number },
+  ) {
+    if (!Number(userId)) return;
+    if (typeof this.notifications?.create !== 'function') return;
+    await Promise.resolve(this.notifications.create(Number(userId), payload)).catch(() => null);
   }
 
   private toRoughCoordinate(value: string | number | null) {
