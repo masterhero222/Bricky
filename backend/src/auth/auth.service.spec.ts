@@ -9,12 +9,23 @@ describe('AuthService registration', () => {
   let dataSource: any;
   let mail: any;
   let passwordResetTokens: any;
+  let emailVerificationTokens: any;
   let service: AuthService;
 
   beforeEach(() => {
     users = {
       findByEmail: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({ id: 42, email: 'new@bricky.bg', role: 'client' }),
+      findOne: jest.fn().mockResolvedValue({
+        id: 42,
+        email: 'new@bricky.bg',
+        name: 'Нов потребител',
+        role: 'client',
+        status: 'active',
+        emailVerifiedAt: null,
+      }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ id: 42, email: 'new@bricky.bg', role: 'client' }),
       createClientProfile: jest.fn().mockResolvedValue({ userId: 42 }),
     };
     workers = {
@@ -25,14 +36,34 @@ describe('AuthService registration', () => {
       attachRegistration: jest.fn().mockResolvedValue(null),
     };
     dataSource = {
-      transaction: jest.fn(async (callback: (transactionManager: any) => Promise<any>) => callback(manager)),
+      transaction: jest.fn(
+        async (callback: (transactionManager: any) => Promise<any>) =>
+          callback(manager),
+      ),
     };
-    mail = { sendPasswordResetLink: jest.fn().mockResolvedValue(undefined) };
+    mail = {
+      sendPasswordResetLink: jest.fn().mockResolvedValue(undefined),
+      sendEmailVerificationLink: jest.fn().mockResolvedValue(undefined),
+    };
     passwordResetTokens = {
       findOne: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({ affected: 0 }),
       create: jest.fn((value) => value),
-      save: jest.fn(async (value) => ({ id: 1, ...value, createdAt: new Date() })),
+      save: jest.fn(async (value) => ({
+        id: 1,
+        ...value,
+        createdAt: new Date(),
+      })),
+    };
+    emailVerificationTokens = {
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => ({
+        id: 1,
+        ...value,
+        createdAt: new Date(),
+      })),
     };
     service = new AuthService(
       users,
@@ -42,6 +73,7 @@ describe('AuthService registration', () => {
       dataSource,
       mail,
       passwordResetTokens,
+      emailVerificationTokens,
     );
   });
 
@@ -63,12 +95,21 @@ describe('AuthService registration', () => {
       expect.objectContaining({ userId: 42, displayName: 'Нов клиент' }),
       manager,
     );
-    expect(referrals.attachRegistration).toHaveBeenCalledWith('BRCLIENT', 42, 'client', manager);
+    expect(referrals.attachRegistration).toHaveBeenCalledWith(
+      'BRCLIENT',
+      42,
+      'client',
+      manager,
+    );
     expect(result.user.id).toBe(42);
   });
 
   it('creates a worker and skills in the same transaction', async () => {
-    users.create.mockResolvedValue({ id: 77, email: 'worker@bricky.bg', role: 'worker' });
+    users.create.mockResolvedValue({
+      id: 77,
+      email: 'worker@bricky.bg',
+      role: 'worker',
+    });
 
     const result = await service.register({
       role: 'worker',
@@ -84,16 +125,27 @@ describe('AuthService registration', () => {
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(workers.createWorkerProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 77, publicName: 'Нов майстор', skills: ['ВиК', 'Плочки'] }),
+      expect.objectContaining({
+        userId: 77,
+        publicName: 'Нов майстор',
+        skills: ['ВиК', 'Плочки'],
+      }),
       manager,
     );
-    expect(referrals.attachRegistration).toHaveBeenCalledWith('BRWORKER', 77, 'worker', manager);
+    expect(referrals.attachRegistration).toHaveBeenCalledWith(
+      'BRWORKER',
+      77,
+      'worker',
+      manager,
+    );
     expect(users.createClientProfile).not.toHaveBeenCalled();
     expect(result.user.id).toBe(77);
   });
 
   it('does not attach a referral when profile creation fails', async () => {
-    users.createClientProfile.mockRejectedValue(new Error('profile insert failed'));
+    users.createClientProfile.mockRejectedValue(
+      new Error('profile insert failed'),
+    );
 
     await expect(
       service.register({
@@ -125,6 +177,29 @@ describe('AuthService registration', () => {
     expect(users.create).not.toHaveBeenCalled();
   });
 
+  it('never exposes password fields after registration', async () => {
+    users.create.mockResolvedValue({
+      id: 42,
+      email: 'new@bricky.bg',
+      name: 'Нов клиент',
+      role: 'client',
+      status: 'active',
+      password: 'hash',
+      passwordHash: 'hash',
+    });
+
+    const result = await service.register({
+      role: 'client',
+      email: 'new@bricky.bg',
+      password: 'password123',
+      profile: { displayName: 'Нов клиент' },
+    } as any);
+
+    expect(result.user).not.toHaveProperty('password');
+    expect(result.user).not.toHaveProperty('passwordHash');
+    expect(mail.sendEmailVerificationLink).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the same reset response for unknown accounts without sending email', async () => {
     users.findByEmail.mockResolvedValue(null);
 
@@ -153,8 +228,79 @@ describe('AuthService registration', () => {
     );
     const resetUrl = mail.sendPasswordResetLink.mock.calls[0][0].resetUrl;
     expect(resetUrl).toMatch(/\/reset-password\?token=[a-f0-9]{64}$/);
-    expect(resetUrl).not.toContain(passwordResetTokens.save.mock.calls[0][0].tokenHash);
+    expect(resetUrl).not.toContain(
+      passwordResetTokens.save.mock.calls[0][0].tokenHash,
+    );
   });
+
+  it('confirms an email and consumes all active verification tokens transactionally', async () => {
+    const rawToken = 'b'.repeat(64);
+    const tokenRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        userId: 42,
+        tokenHash: expect.any(String),
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 42, status: 'active' }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    dataSource.transaction.mockImplementation(async (callback) =>
+      callback({
+        getRepository: jest.fn((entity) =>
+          entity.name === 'EmailVerificationTokenEntity' ? tokenRepo : userRepo,
+        ),
+      }),
+    );
+
+    await expect(service.confirmEmail(rawToken)).resolves.toEqual(
+      expect.objectContaining({ ok: true }),
+    );
+    expect(userRepo.update).toHaveBeenCalledWith(
+      { id: 42 },
+      { emailVerifiedAt: expect.any(Date) },
+    );
+    expect(tokenRepo.update).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 42 }),
+      { consumedAt: expect.any(Date) },
+    );
+  });
+
+  it.each([
+    ['expired', null, new Date(Date.now() - 60_000)],
+    ['already used', new Date(), new Date(Date.now() + 60_000)],
+  ])(
+    'rejects an %s email verification token',
+    async (_label, consumedAt, expiresAt) => {
+      const tokenRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          userId: 42,
+          consumedAt,
+          expiresAt,
+        }),
+        update: jest.fn(),
+      };
+      const userRepo = { findOne: jest.fn(), update: jest.fn() };
+      dataSource.transaction.mockImplementation(async (callback) =>
+        callback({
+          getRepository: jest.fn((entity) =>
+            entity.name === 'EmailVerificationTokenEntity'
+              ? tokenRepo
+              : userRepo,
+          ),
+        }),
+      );
+
+      await expect(service.confirmEmail('c'.repeat(64))).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(userRepo.update).not.toHaveBeenCalled();
+      expect(tokenRepo.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('consumes the token and updates both password columns transactionally', async () => {
     const rawToken = 'a'.repeat(64);
@@ -185,17 +331,24 @@ describe('AuthService registration', () => {
       }),
     );
 
-    await expect(service.resetPassword(rawToken, 'new-password')).resolves.toEqual(
-      expect.objectContaining({ ok: true }),
-    );
+    await expect(
+      service.resetPassword(rawToken, 'new-password'),
+    ).resolves.toEqual(expect.objectContaining({ ok: true }));
     expect(userRepo.update).toHaveBeenCalledWith(
       { id: 42 },
-      expect.objectContaining({ password: expect.any(String), passwordHash: expect.any(String) }),
+      expect.objectContaining({
+        password: expect.any(String),
+        passwordHash: expect.any(String),
+      }),
     );
     expect(tokenRepo.update).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 42 }),
       expect.objectContaining({ consumedAt: expect.any(Date) }),
     );
-    expect(userRepo.increment).toHaveBeenCalledWith({ id: 42 }, 'authVersion', 1);
+    expect(userRepo.increment).toHaveBeenCalledWith(
+      { id: 42 },
+      'authVersion',
+      1,
+    );
   });
 });

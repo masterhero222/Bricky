@@ -32,6 +32,9 @@ export class UserEntity {
   @Column({ name: 'auth_version', type: 'int', default: 0 })
   authVersion: number;
 
+  @Column({ name: 'email_verified_at', type: 'datetime', nullable: true })
+  emailVerifiedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', nullable: true })
   createdAt: Date;
 

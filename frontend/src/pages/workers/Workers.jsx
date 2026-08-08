@@ -1,14 +1,22 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowRight, BadgeCheck, MapPin, UserPlus } from "lucide-react";
-import { apiGet } from "../../services/api";
-import { mediaUrl } from "../../utils/mediaUrls";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, BadgeCheck, MapPin, UserPlus } from 'lucide-react';
+import { apiGet } from '../../services/api';
+import { mediaUrl } from '../../utils/mediaUrls';
+import useDocumentMeta from '../../hooks/useDocumentMeta';
 
 export default function Workers() {
   const navigate = useNavigate();
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
+
+  useDocumentMeta({
+    title: 'Майстори | Bricky',
+    description:
+      'Разгледайте одобрени публични профили на майстори, техните специалности, обекти и реални отзиви.',
+    canonicalPath: '/workers',
+  });
 
   useEffect(() => {
     loadWorkers();
@@ -17,17 +25,17 @@ export default function Workers() {
   async function loadWorkers() {
     try {
       setLoading(true);
-      setError("");
+      setError('');
 
-      const res = await apiGet("/workers");
+      const res = await apiGet('/workers');
 
       const data = Array.isArray(res?.data) ? res.data : [];
       setWorkers(data);
 
-      console.log("WORKERS API RESPONSE:", res?.data);
+      console.log('WORKERS API RESPONSE:', res?.data);
     } catch (err) {
-      console.error("Workers load error:", err?.response?.data || err);
-      setError("Не успях да заредя майсторите.");
+      console.error('Workers load error:', err?.response?.data || err);
+      setError('Не успях да заредя майсторите.');
       setWorkers([]);
     } finally {
       setLoading(false);
@@ -37,14 +45,23 @@ export default function Workers() {
   const cards = useMemo(() => {
     return workers.map((w) => {
       const id = w.userId || w.id;
-      const name = w.fullName || w.name || `Майстор #${id || "?"}`;
-      const city = w.city || "—";
+      const name = w.fullName || w.name || `Майстор #${id || '?'}`;
+      const city = w.city || '—';
       const skill =
-        Array.isArray(w.skills) && w.skills.length > 0 ? w.skills[0] : "Майстор";
-      const description = w.description || "Няма описание.";
-      const avatar = w.avatarThumbnailUrl || w.avatarUrl ? mediaUrl(w.avatarThumbnailUrl || w.avatarUrl) : "/media_files/Snejan.jpg";
-      const completedJobs = Array.isArray(w.completedJobs) ? w.completedJobs : [];
-      const jobTypes = Array.from(new Set(completedJobs.map((job) => job.category).filter(Boolean))).slice(0, 3);
+        Array.isArray(w.skills) && w.skills.length > 0
+          ? w.skills[0]
+          : 'Майстор';
+      const description = w.description || 'Няма описание.';
+      const avatar =
+        w.avatarThumbnailUrl || w.avatarUrl
+          ? mediaUrl(w.avatarThumbnailUrl || w.avatarUrl)
+          : '/media_files/Snejan.jpg';
+      const completedJobs = Array.isArray(w.completedJobs)
+        ? w.completedJobs
+        : [];
+      const jobTypes = Array.from(
+        new Set(completedJobs.map((job) => job.category).filter(Boolean)),
+      ).slice(0, 3);
 
       return {
         ...w,
@@ -66,11 +83,13 @@ export default function Workers() {
         <div className="mb-12 flex flex-col justify-between gap-7 md:flex-row md:items-end">
           <div>
             <h1 className="bricky-page-title">Майстори</h1>
-            <p className="bricky-page-subtitle">Доверени специалисти за вашия дом.</p>
+            <p className="bricky-page-subtitle">
+              Доверени специалисти за вашия дом.
+            </p>
           </div>
 
           <button
-            onClick={() => navigate("/auth/register?role=worker")}
+            onClick={() => navigate('/auth/register?role=worker')}
             className="bricky-button-primary self-start md:self-auto"
           >
             <UserPlus size={21} />
@@ -103,25 +122,29 @@ export default function Workers() {
                 className="group bricky-card min-h-[390px] rounded-[20px] p-7 text-left transition duration-200 hover:-translate-y-1 hover:border-slate-300/30 hover:bg-[#16263e]/95"
               >
                 <div className="flex items-center gap-5">
-                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-[3px] border-white/90 bg-slate-700 shadow-xl shadow-black/30">
-                      <img
-                        src={w._avatar}
-                        alt={w._name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = "/media_files/Snejan.jpg";
-                        }}
-                      />
-                    </div>
+                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-[3px] border-white/90 bg-slate-700 shadow-xl shadow-black/30">
+                    <img
+                      src={w._avatar}
+                      alt={w._name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = '/media_files/Snejan.jpg';
+                      }}
+                    />
+                  </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xl font-extrabold leading-tight text-slate-50">{w._name}</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-400">{w._skill}</div>
-                      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-400/10 px-3 py-1.5 text-xs font-bold text-green-300">
-                        <BadgeCheck size={16} />
-                        {w._completedCount} обекта през Bricky
-                      </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xl font-extrabold leading-tight text-slate-50">
+                      {w._name}
                     </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-400">
+                      {w._skill}
+                    </div>
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-400/10 px-3 py-1.5 text-xs font-bold text-green-300">
+                      <BadgeCheck size={16} />
+                      {w._completedCount} обекта през Bricky
+                    </div>
+                  </div>
                 </div>
 
                 <div className="my-7 h-px bg-slate-400/15" />
@@ -130,23 +153,23 @@ export default function Workers() {
                   <MapPin size={18} className="text-slate-400" /> {w._city}
                 </div>
 
-                  {w._jobTypes.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {w._jobTypes.map((type) => (
-                        <span key={type} className="bricky-chip">
-                          {type}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-5 line-clamp-3 min-h-[42px] text-sm leading-6 text-slate-400">
-                    {w._description}
+                {w._jobTypes.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {w._jobTypes.map((type) => (
+                      <span key={type} className="bricky-chip">
+                        {type}
+                      </span>
+                    ))}
                   </div>
+                )}
 
-                  <div className="mt-6 flex items-center gap-2 text-sm font-bold text-green-300 transition group-hover:gap-3 group-hover:text-green-200">
-                    Виж профил <ArrowRight size={18} />
-                  </div>
+                <div className="mt-5 line-clamp-3 min-h-[42px] text-sm leading-6 text-slate-400">
+                  {w._description}
+                </div>
+
+                <div className="mt-6 flex items-center gap-2 text-sm font-bold text-green-300 transition group-hover:gap-3 group-hover:text-green-200">
+                  Виж профил <ArrowRight size={18} />
+                </div>
               </button>
             ))}
           </div>

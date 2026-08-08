@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminService } from './admin.service';
 
@@ -14,9 +24,18 @@ export class AdminController {
   }
 
   @Post('users/:userId/status')
-  setUserStatus(@Req() req: any, @Param('userId') userId: string, @Body() body: any) {
+  setUserStatus(
+    @Req() req: any,
+    @Param('userId') userId: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.setUserStatus(Number(req.user.id), Number(userId), body?.status, body?.reason);
+    return this.admin.setUserStatus(
+      Number(req.user.id),
+      Number(userId),
+      body?.status,
+      body?.reason,
+    );
   }
 
   @Get('workers')
@@ -26,13 +45,26 @@ export class AdminController {
   }
 
   @Post('workers/:workerUserId/approval')
-  setWorkerApproval(@Req() req: any, @Param('workerUserId') workerUserId: string, @Body() body: any) {
+  setWorkerApproval(
+    @Req() req: any,
+    @Param('workerUserId') workerUserId: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.setWorkerApproval(Number(req.user.id), Number(workerUserId), body?.approvalStatus, body?.reason);
+    return this.admin.setWorkerApproval(
+      Number(req.user.id),
+      Number(workerUserId),
+      body?.approvalStatus,
+      body?.reason,
+    );
   }
 
   @Post('workers/:workerUserId/wall-visibility')
-  setWorkerWallVisibility(@Req() req: any, @Param('workerUserId') workerUserId: string, @Body() body: any) {
+  setWorkerWallVisibility(
+    @Req() req: any,
+    @Param('workerUserId') workerUserId: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
     return this.admin.setWorkerWallVisibility(
       Number(req.user.id),
@@ -55,13 +87,26 @@ export class AdminController {
   }
 
   @Post('requests/:requestId/status')
-  setRequestStatus(@Req() req: any, @Param('requestId') requestId: string, @Body() body: any) {
+  setRequestStatus(
+    @Req() req: any,
+    @Param('requestId') requestId: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.setRequestStatus(Number(req.user.id), Number(requestId), body?.status, body?.reason);
+    return this.admin.setRequestStatus(
+      Number(req.user.id),
+      Number(requestId),
+      body?.status,
+      body?.reason,
+    );
   }
 
   @Post('requests/:requestId/intervention')
-  interveneRequest(@Req() req: any, @Param('requestId') requestId: string, @Body() body: any) {
+  interveneRequest(
+    @Req() req: any,
+    @Param('requestId') requestId: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
     return this.admin.interveneRequest(
       Number(req.user.id),
@@ -84,9 +129,18 @@ export class AdminController {
   }
 
   @Post('categories/:categoryKey')
-  upsertCategory(@Req() req: any, @Param('categoryKey') categoryKey: string, @Body() body: any) {
+  upsertCategory(
+    @Req() req: any,
+    @Param('categoryKey') categoryKey: string,
+    @Body() body: any,
+  ) {
     this.assertSuperAdmin(req.user);
-    return this.admin.upsertCategory(Number(req.user.id), categoryKey, body, body?.reason);
+    return this.admin.upsertCategory(
+      Number(req.user.id),
+      categoryKey,
+      body,
+      body?.reason,
+    );
   }
 
   @Post('categories/:categoryKey/activities/:activityKey')
@@ -97,7 +151,13 @@ export class AdminController {
     @Body() body: any,
   ) {
     this.assertSuperAdmin(req.user);
-    return this.admin.upsertActivity(Number(req.user.id), categoryKey, activityKey, body, body?.reason);
+    return this.admin.upsertActivity(
+      Number(req.user.id),
+      categoryKey,
+      activityKey,
+      body,
+      body?.reason,
+    );
   }
 
   @Get('pricing')
@@ -109,37 +169,94 @@ export class AdminController {
   @Post('pricing')
   createPricing(@Req() req: any, @Body() body: any) {
     this.assertAdmin(req.user);
-    return this.admin.createPricingRule(Number(req.user.id), body, body?.reason);
+    return this.admin.createPricingRule(
+      Number(req.user.id),
+      body,
+      body?.reason,
+    );
   }
 
   @Post('pricing/:id/status')
-  setPricingStatus(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  setPricingStatus(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.setPricingRuleActive(Number(req.user.id), Number(id), Boolean(body?.isActive), body?.reason);
+    return this.admin.setPricingRuleActive(
+      Number(req.user.id),
+      Number(id),
+      Boolean(body?.isActive),
+      body?.reason,
+    );
   }
 
   @Post('media/:id/moderation')
-  setMediaModeration(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  setMediaModeration(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.setMediaModeration(Number(req.user.id), Number(id), body?.moderationStatus, body?.reason);
+    return this.admin.setMediaModeration(
+      Number(req.user.id),
+      Number(id),
+      body?.moderationStatus,
+      body?.reason,
+    );
   }
 
   @Post('workers/:workerUserId/credits')
-  adjustCredits(@Req() req: any, @Param('workerUserId') workerUserId: string, @Body() body: any) {
+  adjustCredits(
+    @Req() req: any,
+    @Param('workerUserId') workerUserId: string,
+    @Body() body: any,
+  ) {
     this.assertSuperAdmin(req.user);
-    return this.admin.adjustCredits(Number(req.user.id), Number(workerUserId), Number(body?.amount), body?.reason);
+    return this.admin.adjustCredits(
+      Number(req.user.id),
+      Number(workerUserId),
+      Number(body?.amount),
+      body?.reason,
+    );
   }
 
   @Post('workers/:workerUserId/plan')
-  setPlan(@Req() req: any, @Param('workerUserId') workerUserId: string, @Body() body: any) {
+  setPlan(
+    @Req() req: any,
+    @Param('workerUserId') workerUserId: string,
+    @Body() body: any,
+  ) {
     this.assertSuperAdmin(req.user);
-    return this.admin.setPlan(Number(req.user.id), Number(workerUserId), body?.planKey, body?.reason);
+    return this.admin.setPlan(
+      Number(req.user.id),
+      Number(workerUserId),
+      body?.planKey,
+      body?.reason,
+    );
   }
 
   @Get('audit')
   audit(@Req() req: any) {
     this.assertAdmin(req.user);
     return this.admin.listAudit();
+  }
+
+  @Get('reports')
+  reports(@Req() req: any, @Query('status') status?: string) {
+    this.assertAdmin(req.user);
+    return this.admin.listReports(status);
+  }
+
+  @Post('reports/:id/status')
+  resolveReport(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    this.assertAdmin(req.user);
+    return this.admin.resolveReport(
+      Number(req.user.id),
+      Number(id),
+      body?.status,
+      body?.note,
+    );
   }
 
   @Get('referrals')
@@ -157,19 +274,39 @@ export class AdminController {
   @Post('referrals/:id/reject')
   rejectReferral(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     this.assertAdmin(req.user);
-    return this.admin.rejectReferral(Number(req.user.id), Number(id), body?.reason);
+    return this.admin.rejectReferral(
+      Number(req.user.id),
+      Number(id),
+      body?.reason,
+    );
   }
 
   @Post('referrals/:id/revoke-reward')
-  revokeReferralReward(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  revokeReferralReward(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.revokeReferralReward(Number(req.user.id), Number(id), body?.reason);
+    return this.admin.revokeReferralReward(
+      Number(req.user.id),
+      Number(id),
+      body?.reason,
+    );
   }
 
   @Post('referrals/:id/restore-reward')
-  restoreReferralReward(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  restoreReferralReward(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.restoreReferralReward(Number(req.user.id), Number(id), body?.reason);
+    return this.admin.restoreReferralReward(
+      Number(req.user.id),
+      Number(id),
+      body?.reason,
+    );
   }
 
   private assertAdmin(user: any) {
@@ -179,6 +316,7 @@ export class AdminController {
   }
 
   private assertSuperAdmin(user: any) {
-    if (String(user?.role || '') !== 'super_admin') throw new ForbiddenException('Super admin only');
+    if (String(user?.role || '') !== 'super_admin')
+      throw new ForbiddenException('Super admin only');
   }
 }

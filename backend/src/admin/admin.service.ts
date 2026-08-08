@@ -15,6 +15,7 @@ import {
   CatalogService,
   PricingRuleInput,
 } from '../catalog/catalog.service';
+import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class AdminService {
@@ -28,6 +29,7 @@ export class AdminService {
     private readonly billing: BillingService,
     private readonly referrals: ReferralsService,
     private readonly catalog: CatalogService,
+    private readonly reports: ReportsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -50,6 +52,7 @@ export class AdminService {
       ['active', 'pending', 'blocked', 'deleted'],
       'Invalid user status',
     );
+    if (['blocked', 'deleted'].includes(status)) this.requireReason(reason);
     const user = await this.users.updateStatus(userId, status);
     await this.log(actorUserId, 'user.status_changed', 'user', userId, reason, {
       status,
@@ -72,6 +75,9 @@ export class AdminService {
       ['pending', 'approved', 'rejected', 'suspended'],
       'Invalid worker approval status',
     );
+    if (['rejected', 'suspended'].includes(approvalStatus)) {
+      this.requireReason(reason);
+    }
     return this.dataSource.transaction(async (manager) => {
       if (approvalStatus === 'approved') {
         await this.users.updateStatus(workerUserId, 'active', manager);
@@ -98,6 +104,37 @@ export class AdminService {
       );
       return worker;
     });
+  }
+
+  listReports(status?: string) {
+    return this.reports.list(status);
+  }
+
+  async resolveReport(
+    actorUserId: number,
+    reportId: number,
+    status: string,
+    note: string,
+  ) {
+    const report = await this.reports.resolve(
+      reportId,
+      actorUserId,
+      status,
+      note,
+    );
+    await this.log(
+      actorUserId,
+      'content_report.status_changed',
+      'content_report',
+      reportId,
+      note,
+      {
+        status,
+        targetType: report.targetType,
+        targetId: report.targetId,
+      },
+    );
+    return report;
   }
 
   async setWorkerWallVisibility(
@@ -155,6 +192,7 @@ export class AdminService {
       ],
       'Invalid request status',
     );
+    if (['canceled', 'archived'].includes(status)) this.requireReason(reason);
     const request = await this.requests.adminSetStatus(
       requestId,
       status,
@@ -178,7 +216,11 @@ export class AdminService {
     action: 'cancel' | 'reopen',
     reason?: string,
   ) {
-    this.assertOneOf(action, ['cancel', 'reopen'], 'Invalid intervention action');
+    this.assertOneOf(
+      action,
+      ['cancel', 'reopen'],
+      'Invalid intervention action',
+    );
     if (!reason?.trim()) throw new BadRequestException('Reason is required');
     const request = await this.requests.adminIntervene(
       requestId,
@@ -316,6 +358,7 @@ export class AdminService {
       ['pending', 'approved', 'rejected'],
       'Invalid moderation status',
     );
+    if (moderationStatus === 'rejected') this.requireReason(reason);
     const media = await this.media.setModerationStatus(id, moderationStatus);
     await this.log(
       actorUserId,
@@ -434,5 +477,9 @@ export class AdminService {
   private assertOneOf(value: string, allowed: string[], message: string) {
     if (!allowed.includes(String(value)))
       throw new BadRequestException(message);
+  }
+
+  private requireReason(reason?: string) {
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
   }
 }

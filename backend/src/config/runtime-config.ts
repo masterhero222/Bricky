@@ -66,6 +66,15 @@ export function validateRuntimeConfig(
     return;
   }
 
+  if (
+    env.EMAIL_VERIFICATION_MODE &&
+    !['transitional', 'required'].includes(env.EMAIL_VERIFICATION_MODE)
+  ) {
+    throw new Error(
+      'EMAIL_VERIFICATION_MODE must be transitional or required.',
+    );
+  }
+
   const required = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASS', 'DB_NAME'];
   const missing = required.filter((key) => !env[key]?.trim());
 

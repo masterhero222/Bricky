@@ -10,6 +10,7 @@ import { MediaModule } from '../media/media.module';
 import { BillingModule } from '../billing/billing.module';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { CatalogModule } from '../catalog/catalog.module';
+import { ReportsModule } from '../reports/reports.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { CatalogModule } from '../catalog/catalog.module';
     BillingModule,
     ReferralsModule,
     CatalogModule,
+    ReportsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -1415,6 +1415,49 @@ export async function mockRequest(method, url, data) {
     writeDb(db);
     return mockRequest("get", "/account/me");
   }
+  if (method === "get" && path === "/account/export") {
+    return response({
+      exportedAt: nowIso(),
+      account: (await mockRequest("get", "/account/me")).data,
+      requests: db.requests.filter(
+        (item) =>
+          Number(item.clientUserId) === userId ||
+          Number(item.assignedWorkerUserId) === userId,
+      ),
+      applications:
+        role === "worker"
+          ? db.requests.flatMap((item) =>
+              (item.applications || []).filter(
+                (entry) => Number(entry.workerUserId) === userId,
+              ),
+            )
+          : [],
+      reviews: (db.reviews || []).filter(
+        (item) =>
+          Number(item.clientUserId) === userId ||
+          Number(item.workerUserId) === userId,
+      ),
+      media: (db.media || []).filter(
+        (item) => Number(item.ownerUserId) === userId,
+      ),
+      notifications: [],
+    });
+  }
+  if (method === "post" && path === "/account/deactivate") {
+    const active = db.requests.some(
+      (item) =>
+        (Number(item.clientUserId) === userId ||
+          Number(item.assignedWorkerUserId) === userId) &&
+        !["completed", "canceled", "archived"].includes(requestStatusKey(item)),
+    );
+    if (active) return fail("Имате активна поръчка", 400);
+    if (String(data?.currentPassword || "").length < 8)
+      return fail("Текущата парола е грешна", 403);
+    user.status = "deleted";
+    if (role === "worker") user.visibilityStatus = "private";
+    writeDb(db);
+    return response({ deactivated: true, message: "Профилът е деактивиран" });
+  }
   if (method === "post" && path === "/auth/password-reset/request") {
     return response({ message: "Ако имейлът е регистриран, ще получите защитен линк за смяна на паролата." });
   }

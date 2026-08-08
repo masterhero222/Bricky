@@ -1,23 +1,29 @@
-import { Link, useParams } from "react-router-dom";
-import BlogArticleHeader from "../../components/blog/BlogArticleHeader";
-import BlogCalculatorCta from "../../components/blog/BlogCalculatorCta";
-import BlogContentRenderer from "../../components/blog/BlogContentRenderer";
-import BlogRelatedArticles from "../../components/blog/BlogRelatedArticles";
-import BlogTableOfContents from "../../components/blog/BlogTableOfContents";
-import { BLOG_FALLBACK_COVER } from "../../data/blogArticles";
-import useDocumentMeta from "../../hooks/useDocumentMeta";
-import { getArticleCover, getBlogArticleBySlug, getRelatedBlogArticles } from "../../utils/blog";
-import BlogNotFound from "./BlogNotFound";
-import "./Blog.css";
+import { Link, useParams } from 'react-router-dom';
+import BlogArticleHeader from '../../components/blog/BlogArticleHeader';
+import BlogCalculatorCta from '../../components/blog/BlogCalculatorCta';
+import BlogContentRenderer from '../../components/blog/BlogContentRenderer';
+import BlogRelatedArticles from '../../components/blog/BlogRelatedArticles';
+import BlogTableOfContents from '../../components/blog/BlogTableOfContents';
+import { BLOG_FALLBACK_COVER } from '../../data/blogArticles';
+import useDocumentMeta from '../../hooks/useDocumentMeta';
+import {
+  getArticleCover,
+  getBlogArticleBySlug,
+  getRelatedBlogArticles,
+} from '../../utils/blog';
+import BlogNotFound from './BlogNotFound';
+import './Blog.css';
 
 export default function BlogArticle() {
   const { slug } = useParams();
   const article = getBlogArticleBySlug(slug);
 
   useDocumentMeta({
-    title: article?.metaTitle || "Статията не е намерена | Bricky",
-    description: article?.metaDescription || "Тази Bricky статия не беше намерена.",
-    canonicalPath: article ? `/blog/${article.slug}` : "/blog",
+    title: article?.metaTitle || 'Статията не е намерена | Bricky',
+    description:
+      article?.metaDescription || 'Тази Bricky статия не беше намерена.',
+    canonicalPath: article ? `/blog/${article.slug}` : '/blog',
+    robots: 'noindex,follow',
   });
 
   if (!article) return <BlogNotFound />;
@@ -44,7 +50,10 @@ export default function BlogArticle() {
           <BlogTableOfContents sections={article.sections} />
           <main className="blog-reading-column">
             <BlogContentRenderer sections={article.sections} />
-            <BlogCalculatorCta categoryKey={article.calculatorCategoryKey} variant="inline" />
+            <BlogCalculatorCta
+              categoryKey={article.calculatorCategoryKey}
+              variant="inline"
+            />
 
             {article.faq?.length > 0 && (
               <section className="blog-faq">
@@ -61,7 +70,10 @@ export default function BlogArticle() {
         </div>
 
         <BlogRelatedArticles articles={relatedArticles} />
-        <BlogCalculatorCta categoryKey={article.calculatorCategoryKey} variant="wide" />
+        <BlogCalculatorCta
+          categoryKey={article.calculatorCategoryKey}
+          variant="wide"
+        />
 
         <div className="blog-bottom-link">
           <Link to="/blog">Назад към всички Bricky съвети</Link>

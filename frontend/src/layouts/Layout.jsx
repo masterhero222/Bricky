@@ -1,8 +1,9 @@
 ﻿// src/layouts/Layout.jsx
-import React from "react";
-import { Outlet } from "react-router-dom";
-import Navbar from "../components/UI/Navbar";
-import DevTestPanel from "../components/DevTestPanel";
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import Navbar from '../components/UI/Navbar';
+import SiteFooter from '../components/UI/SiteFooter';
+import DevTestPanel from '../components/DevTestPanel';
 
 export default function Layout() {
   return (
@@ -13,9 +14,7 @@ export default function Layout() {
         <Outlet />
         <DevTestPanel />
       </main>
+      <SiteFooter />
     </div>
   );
 }
-
-
-

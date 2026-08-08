@@ -7,8 +7,12 @@ const readMigration = (name: string) =>
 describe('Sprint 3 SQL migrations', () => {
   const core = readMigration('20260718_sprint3_v2_data_core.sql');
   const alignment = readMigration('20260719_sprint3_v2_schema_alignment.sql');
-  const accountSettings = readMigration('20260808_account_profile_settings.sql');
+  const accountSettings = readMigration(
+    '20260808_account_profile_settings.sql',
+  );
   const passwordReset = readMigration('20260808_password_reset_tokens.sql');
+  const emailVerification = readMigration('20260808_email_verification.sql');
+  const contentReports = readMigration('20260808_content_reports.sql');
   const integrityVerifier = readFileSync(
     resolve(__dirname, '../../scripts/verify-sprint3-integrity.mjs'),
     'utf8',
@@ -45,11 +49,11 @@ describe('Sprint 3 SQL migrations', () => {
   it('keeps the v2 request timeline separate from legacy request_events', () => {
     const sql = `${core}\n${alignment}`;
 
-    expect(core).toContain(
-      'CREATE TABLE IF NOT EXISTS repair_request_events',
-    );
+    expect(core).toContain('CREATE TABLE IF NOT EXISTS repair_request_events');
     expect(alignment).toContain('ALTER TABLE repair_request_events');
-    expect(sql).not.toMatch(/(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?request_events\b/);
+    expect(sql).not.toMatch(
+      /(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?request_events\b/,
+    );
   });
 
   it.each([
@@ -62,9 +66,7 @@ describe('Sprint 3 SQL migrations', () => {
 
     expect(core).toContain(`CREATE TABLE IF NOT EXISTS ${canonical}`);
     expect(sql).not.toMatch(
-      new RegExp(
-        `(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?${legacy}\\b`,
-      ),
+      new RegExp(`(?:CREATE|ALTER) TABLE (?:IF NOT EXISTS )?${legacy}\\b`),
     );
   });
 
@@ -117,9 +119,7 @@ describe('Sprint 3 SQL migrations', () => {
 
   it('adds the worker profile banner used by the public profile editor', () => {
     expect(core).toContain('profile_banner_key varchar(64)');
-    expect(alignment).toContain(
-      'ADD COLUMN profile_banner_key varchar(64)',
-    );
+    expect(alignment).toContain('ADD COLUMN profile_banner_key varchar(64)');
   });
 
   it('adds private worker contact fields without exposing them in the public profile schema', () => {
@@ -138,6 +138,35 @@ describe('Sprint 3 SQL migrations', () => {
     expect(passwordReset).not.toMatch(/\btoken\s+varchar/i);
   });
 
+  it('stores only hashed, expiring and single-use email verification tokens', () => {
+    expect(emailVerification).toContain('email_verification_tokens');
+    expect(emailVerification).toContain('token_hash CHAR(64)');
+    expect(emailVerification).toContain('expires_at DATETIME NOT NULL');
+    expect(emailVerification).toContain('consumed_at DATETIME NULL');
+    expect(emailVerification).toContain('information_schema.columns');
+    expect(emailVerification).not.toMatch(/\btoken\s+varchar/i);
+  });
+
+  it('trusts legacy email addresses only when the verification column is first added', () => {
+    expect(emailVerification).toContain('@email_verified_at_exists');
+    expect(emailVerification).toContain(
+      'UPDATE users SET email_verified_at = COALESCE(created_at, NOW())',
+    );
+    expect(emailVerification).toMatch(
+      /IF\(\s*@email_verified_at_exists,\s*'SELECT 1'/,
+    );
+  });
+
+  it('adds traceable content reports without polymorphic destructive cascades', () => {
+    expect(contentReports).toContain(
+      'CREATE TABLE IF NOT EXISTS content_reports',
+    );
+    expect(contentReports).toContain('reporter_user_id INT NOT NULL');
+    expect(contentReports).toContain('resolved_by_user_id INT NULL');
+    expect(contentReports).toContain('ON DELETE RESTRICT');
+    expect(contentReports).toContain('ON DELETE SET NULL');
+  });
+
   it.each([
     'moderationStatus',
     'moderationReason',
@@ -149,7 +178,7 @@ describe('Sprint 3 SQL migrations', () => {
   });
 
   it('uses MySQL-compatible idempotent column guards', () => {
-    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}`;
+    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}\n${emailVerification}\n${contentReports}`;
 
     expect(sql).not.toMatch(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS/i);
     expect(sql).toContain('information_schema.columns');
@@ -176,7 +205,7 @@ describe('Sprint 3 SQL migrations', () => {
   });
 
   it('does not contain destructive schema or data operations', () => {
-    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}`;
+    const sql = `${core}\n${alignment}\n${accountSettings}\n${passwordReset}\n${emailVerification}\n${contentReports}`;
 
     expect(sql).not.toMatch(/\bDROP\s+(TABLE|DATABASE)\b/i);
     expect(sql).not.toMatch(/\bTRUNCATE\b/i);

@@ -1,16 +1,18 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { apiGet, apiPost } from "../../services/api";
-import { mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
-import WorkerPreviewPremium from "../../components/workers/WorkerPreviewPremium";
-import { bannerKeyForCategory } from "../../constants/workerBannerCatalog";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { apiGet, apiPost } from '../../services/api';
+import { mediaUrl, photoMediaUrl } from '../../utils/mediaUrls';
+import WorkerPreviewPremium from '../../components/workers/WorkerPreviewPremium';
+import { bannerKeyForCategory } from '../../constants/workerBannerCatalog';
+import ReportContentButton from '../../components/ReportContentButton';
+import useDocumentMeta from '../../hooks/useDocumentMeta';
 
 export default function WorkerPreview() {
   const params = useParams();
   const [sp] = useSearchParams();
-  const requestId = Number(sp.get("requestId") || 0);
-  const userId = Number(params.id || params.userId || sp.get("userId") || 0);
+  const requestId = Number(sp.get('requestId') || 0);
+  const userId = Number(params.id || params.userId || sp.get('userId') || 0);
 
   const [worker, setWorker] = useState(null);
   const [completedJobs, setCompletedJobs] = useState([]);
@@ -18,9 +20,31 @@ export default function WorkerPreview() {
   const [albumViewer, setAlbumViewer] = useState(null);
 
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState('');
   const [selecting, setSelecting] = useState(false);
-  const [selectError, setSelectError] = useState("");
+  const [selectError, setSelectError] = useState('');
+
+  const publicName = worker?.fullName || worker?.name || 'Профил на майстор';
+  const publicDescription =
+    worker?.description || `Разгледайте профила на ${publicName} в Bricky.`;
+  useDocumentMeta({
+    title: `${publicName} | Майстор в Bricky`,
+    description: publicDescription,
+    canonicalPath: userId ? `/worker/${userId}` : '/workers',
+    image: worker?.avatarUrl || worker?.avatarThumbnailUrl,
+    robots: worker ? 'index,follow' : 'noindex,follow',
+    structuredData: worker
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Person',
+          name: publicName,
+          description: publicDescription,
+          homeLocation: worker.city || undefined,
+          image: worker.avatarUrl || worker.avatarThumbnailUrl || undefined,
+          url: `${window.location.origin}/worker/${userId}`,
+        }
+      : undefined,
+  });
 
   useEffect(() => {
     load();
@@ -29,11 +53,11 @@ export default function WorkerPreview() {
 
   async function load() {
     try {
-      setErr("");
+      setErr('');
       setLoading(true);
 
       if (!userId) {
-        setErr("Липсва userId в URL.");
+        setErr('Липсва userId в URL.');
         setWorker(null);
         setCompletedJobs([]);
         setRatingInfo({ total: 0, average: 0 });
@@ -43,7 +67,9 @@ export default function WorkerPreview() {
       const [wRes, hRes, rRes] = await Promise.all([
         apiGet(`/workers/${userId}`),
         apiGet(`/workers/${userId}/history`).catch(() => ({ data: [] })),
-        apiGet(`/reviews/worker/${userId}`).catch(() => ({ data: { total: 0, average: 0 } })),
+        apiGet(`/reviews/worker/${userId}`).catch(() => ({
+          data: { total: 0, average: 0 },
+        })),
       ]);
 
       setWorker(wRes.data || null);
@@ -60,7 +86,7 @@ export default function WorkerPreview() {
       });
     } catch (e) {
       console.error(e);
-      setErr("Не успях да заредя профила на майстора.");
+      setErr('Не успях да заредя профила на майстора.');
       setWorker(null);
       setCompletedJobs([]);
       setRatingInfo({ total: 0, average: 0 });
@@ -71,24 +97,24 @@ export default function WorkerPreview() {
 
   async function assign() {
     try {
-      setSelectError("");
+      setSelectError('');
       if (!requestId) {
-        setSelectError("Липсва requestId в URL.");
+        setSelectError('Липсва requestId в URL.');
         return;
       }
       if (!userId) {
-        setSelectError("Липсва userId в URL.");
+        setSelectError('Липсва userId в URL.');
         return;
       }
 
       setSelecting(true);
       await apiPost(`/requests/${requestId}/assign`, { workerUserId: userId });
-      window.location.href = "/client/profile";
+      window.location.href = '/client/profile';
     } catch (e) {
       console.error(e?.response?.data || e);
       setSelectError(
         e?.response?.data?.message ||
-          "Грешка при назначаване. Провери дали си логнат като client и дали майсторът е кандидатствал."
+          'Грешка при назначаване. Провери дали си логнат като client и дали майсторът е кандидатствал.',
       );
     } finally {
       setSelecting(false);
@@ -96,12 +122,12 @@ export default function WorkerPreview() {
   }
 
   function cancel() {
-    window.location.href = "/client/profile";
+    window.location.href = '/client/profile';
   }
 
   const avatarSrc = useMemo(() => {
-    const url = worker?.avatarUrl ? mediaUrl(worker.avatarUrl) : "";
-    return url || "/media_files/Snejan.jpg";
+    const url = worker?.avatarUrl ? mediaUrl(worker.avatarUrl) : '';
+    return url || '/media_files/Snejan.jpg';
   }, [worker]);
 
   const bannerKey = useMemo(() => {
@@ -114,7 +140,7 @@ export default function WorkerPreview() {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
         .map((photo) => ({
-          ...(typeof photo === "object" && photo ? photo : {}),
+          ...(typeof photo === 'object' && photo ? photo : {}),
           url: photoMediaUrl(photo),
         }))
         .filter((photo) => !!photo.url);
@@ -128,9 +154,9 @@ export default function WorkerPreview() {
 
         return {
           id: `job-${id}`,
-          type: "job",
-          title: job.category || "Ремонт",
-          subtitle: job.address || "Завършен обект през Bricky",
+          type: 'job',
+          title: job.category || 'Ремонт',
+          subtitle: job.address || 'Завършен обект през Bricky',
           meta: `${job.durationDays || 1} дни`,
           date: job.completedAt || job.created_at || job.createdAt,
           photos,
@@ -143,7 +169,9 @@ export default function WorkerPreview() {
   }, [completedJobs]);
 
   const activeAlbum =
-    albumViewer && workerAlbums[albumViewer.albumIndex] ? workerAlbums[albumViewer.albumIndex] : null;
+    albumViewer && workerAlbums[albumViewer.albumIndex]
+      ? workerAlbums[albumViewer.albumIndex]
+      : null;
   const activePhoto =
     activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
       ? activeAlbum.photos[albumViewer?.photoIndex || 0]
@@ -164,7 +192,9 @@ export default function WorkerPreview() {
       if (!album?.photos?.length) return viewer;
       return {
         ...viewer,
-        photoIndex: (viewer.photoIndex + delta + album.photos.length) % album.photos.length,
+        photoIndex:
+          (viewer.photoIndex + delta + album.photos.length) %
+          album.photos.length,
       };
     });
   }
@@ -184,7 +214,7 @@ export default function WorkerPreview() {
           <div className="text-red-400 font-bold">{err}</div>
           <button
             className="mt-6 bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-            onClick={() => (window.location.href = "/client/profile")}
+            onClick={() => (window.location.href = '/client/profile')}
           >
             Назад
           </button>
@@ -209,13 +239,17 @@ export default function WorkerPreview() {
         bannerKey={bannerKey}
         ratingInfo={ratingInfo}
         completedProjects={workerAlbums}
-        mode={requestId ? "candidateSelection" : "public"}
+        mode={requestId ? 'candidateSelection' : 'public'}
         isSubmitting={selecting}
         error={selectError}
         onBack={cancel}
         onSelect={assign}
         onOpenProject={openAlbum}
       />
+
+      <div className="mx-auto -mt-10 mb-10 flex max-w-7xl justify-end px-6">
+        <ReportContentButton targetType="worker_profile" targetId={userId} />
+      </div>
 
       {activeAlbum && activePhoto && (
         <div className="fixed inset-0 z-[80] bg-black/85 px-4 py-6 flex items-center justify-center">
@@ -224,10 +258,15 @@ export default function WorkerPreview() {
               <div>
                 <div className="font-bold">{activeAlbum.title}</div>
                 <div className="text-sm text-gray-300">
-                  {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
+                  {(albumViewer?.photoIndex || 0) + 1} /{' '}
+                  {activeAlbum.photos.length} • {activeAlbum.subtitle}
                 </div>
               </div>
-              <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
+              <button
+                type="button"
+                onClick={closeAlbum}
+                className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold"
+              >
                 Затвори
               </button>
             </div>
@@ -238,7 +277,7 @@ export default function WorkerPreview() {
                 alt={activePhoto.name || activeAlbum.title}
                 className="max-h-[72vh] w-full object-contain"
                 onError={(e) => {
-                  e.currentTarget.style.display = "none";
+                  e.currentTarget.style.display = 'none';
                 }}
               />
 
@@ -268,11 +307,16 @@ export default function WorkerPreview() {
                   <button
                     key={photo.id || photo.url || idx}
                     type="button"
-                    onClick={() => setAlbumViewer((viewer) => ({ ...viewer, photoIndex: idx }))}
+                    onClick={() =>
+                      setAlbumViewer((viewer) => ({
+                        ...viewer,
+                        photoIndex: idx,
+                      }))
+                    }
                     className={
                       idx === albumViewer.photoIndex
-                        ? "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-red-500"
-                        : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
+                        ? 'h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-red-500'
+                        : 'h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100'
                     }
                   >
                     <img
@@ -280,7 +324,7 @@ export default function WorkerPreview() {
                       alt={photo.name || activeAlbum.title}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.style.display = "none";
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                   </button>

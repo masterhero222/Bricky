@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { HealthModule } from './health/health.module';
 import { resolveTypeOrmSynchronize } from './config/database-policy';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -48,7 +49,7 @@ import { resolveTypeOrmSynchronize } from './config/database-policy';
     RequestsModule,
     WorkersModule,
     HealthModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}
-

@@ -13,6 +13,7 @@ import { getUploadsRoot } from './common/storage-paths';
 async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
 
   const uploadsDir = getUploadsRoot();
   if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });

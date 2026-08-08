@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 function GalleryViewer({
   album,
   photo,
@@ -9,6 +11,12 @@ function GalleryViewer({
   onStep,
   onSelectPhoto,
 }) {
+  const [deleteArmed, setDeleteArmed] = useState(false);
+
+  useEffect(() => {
+    setDeleteArmed(false);
+  }, [photo?.id]);
+
   if (!album || !photo) return null;
 
   return (
@@ -25,7 +33,10 @@ function GalleryViewer({
             {canDelete ? (
               <button
                 type="button"
-                onClick={onDelete}
+                onClick={() => {
+                  if (deleteArmed) onDelete();
+                  else setDeleteArmed(true);
+                }}
                 disabled={deletingId === photo.id}
                 className={
                   deletingId === photo.id
@@ -35,6 +46,20 @@ function GalleryViewer({
               >
                 {deletingId === photo.id ? "Трия..." : "Изтрий снимката"}
               </button>
+            ) : null}
+            {deleteArmed && deletingId !== photo.id ? (
+              <>
+                <span className="text-sm font-bold text-red-200">
+                  Натиснете отново за потвърждение
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDeleteArmed(false)}
+                  className="rounded-lg border border-gray-600 px-3 py-2 font-bold text-gray-200 hover:bg-gray-800"
+                >
+                  Отказ
+                </button>
+              </>
             ) : null}
             <button
               type="button"

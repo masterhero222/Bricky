@@ -1,0 +1,16 @@
+pkg update
+pkg install openssh
+ssh root@94.72.143.22
+cd /var/www/Bricky-sprint3-release
+pwd
+git status
+pm2 status
+pm2 show bricky-backend
+curl -s https://bricky.bg/api/health/ready
+pm2 logs bricky-backend --lines 100 --nostream
+awk -v d="$(date -u +%d/%b/%Y)" '$4 ~ d {print $1}' /var/log/nginx/access.log | sort -u | wc -l
+awk -v d="$(date -u +%d/%b/%Y)" '$4 ~ d {print $1}' /var/log/nginx/access.log | sort | uniq -c | sort -nr | head -20
+nginx -t
+systemctl status nginx --no-pager
+df -h
+exit

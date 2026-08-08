@@ -1,17 +1,24 @@
 // src/users/users.service.ts
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
+import { EntityManager, In, Not, Repository } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { UserEntity } from './user.entity';
 import { ClientProfileEntity } from './client-profile.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 import { NotificationEntity } from '../notifications/notification.entity';
 import { WorkerPlanEntity } from '../billing/worker-plan.entity';
 import { UpdateAccountProfileDto } from './dto/update-account-profile.dto';
+import { DeactivateAccountDto } from './dto/deactivate-account.dto';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
+import { RequestApplicationEntity } from '../requests/entities/request-application.entity';
+import { ReviewEntity } from '../reviews/entities/review.entity';
+import { MediaAssetEntity } from '../media/media-asset.entity';
 
 @Injectable()
 export class UsersService {
@@ -74,7 +81,8 @@ export class UsersService {
     },
     manager?: EntityManager,
   ) {
-    const repo = manager?.getRepository(ClientProfileEntity) ?? this.clientProfilesRepo;
+    const repo =
+      manager?.getRepository(ClientProfileEntity) ?? this.clientProfilesRepo;
     const profile = repo.create({
       userId: data.userId,
       displayName: data.displayName,
@@ -92,7 +100,10 @@ export class UsersService {
   }
 
   async searchUsers(query = '') {
-    const qb = this.repo.createQueryBuilder('user').orderBy('user.created_at', 'DESC').take(100);
+    const qb = this.repo
+      .createQueryBuilder('user')
+      .orderBy('user.created_at', 'DESC')
+      .take(100);
     const q = query.trim();
     if (q) {
       qb.where('user.email LIKE :q OR user.name LIKE :q', { q: `%${q}%` });
@@ -104,7 +115,13 @@ export class UsersService {
     const user = await this.repo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Account not found');
 
-    const [clientProfile, workerProfile, notifications, unreadCount, workerPlan] = await Promise.all([
+    const [
+      clientProfile,
+      workerProfile,
+      notifications,
+      unreadCount,
+      workerPlan,
+    ] = await Promise.all([
       user.role === 'client'
         ? this.clientProfilesRepo.findOne({ where: { userId } })
         : Promise.resolve(null),
@@ -142,6 +159,11 @@ export class UsersService {
       role: user.role,
       status: user.status,
       email: user.email,
+      emailVerified: Boolean(user.emailVerifiedAt),
+      emailVerificationMode:
+        process.env.EMAIL_VERIFICATION_MODE === 'required'
+          ? 'required'
+          : 'transitional',
       profile,
       subscription:
         user.role === 'worker'
@@ -164,7 +186,8 @@ export class UsersService {
     if (!user) throw new NotFoundException('Account not found');
 
     const email = data.email?.trim().toLowerCase();
-    if (email && email !== user.email.toLowerCase()) {
+    const emailChanged = Boolean(email && email !== user.email.toLowerCase());
+    if (emailChanged) {
       const duplicate = await this.repo.findOne({ where: { email } });
       if (duplicate && duplicate.id !== userId) {
         throw new BadRequestException('Имейлът вече се използва');
@@ -177,7 +200,7 @@ export class UsersService {
       await users.update(
         { id: userId },
         {
-          ...(email ? { email } : {}),
+          ...(emailChanged ? { email, emailVerifiedAt: null } : {}),
           ...(name ? { name } : {}),
         },
       );
@@ -187,21 +210,140 @@ export class UsersService {
         const profile = await profiles.findOne({ where: { userId } });
         if (!profile) throw new NotFoundException('Client profile not found');
         if (name) profile.displayName = name;
-        if (data.phone !== undefined) profile.phonePrivate = this.cleanOptional(data.phone);
-        if (data.address !== undefined) profile.defaultAddress = this.cleanOptional(data.address);
+        if (data.phone !== undefined)
+          profile.phonePrivate = this.cleanOptional(data.phone);
+        if (data.address !== undefined)
+          profile.defaultAddress = this.cleanOptional(data.address);
         await profiles.save(profile);
       } else if (user.role === 'worker') {
         const profiles = manager.getRepository(WorkerProfileEntity);
         const profile = await profiles.findOne({ where: { userId } });
         if (!profile) throw new NotFoundException('Worker profile not found');
         if (name) profile.publicName = name;
-        if (data.phone !== undefined) profile.phonePrivate = this.cleanOptional(data.phone);
-        if (data.address !== undefined) profile.defaultAddress = this.cleanOptional(data.address);
+        if (data.phone !== undefined)
+          profile.phonePrivate = this.cleanOptional(data.phone);
+        if (data.address !== undefined)
+          profile.defaultAddress = this.cleanOptional(data.address);
         await profiles.save(profile);
       }
     });
 
     return this.getAccount(userId);
+  }
+
+  async exportAccountData(userId: number) {
+    const user = await this.repo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Account not found');
+
+    const manager = this.repo.manager;
+    const requestRepo = manager.getRepository(RepairRequestEntity);
+    const applicationRepo = manager.getRepository(RequestApplicationEntity);
+    const reviewRepo = manager.getRepository(ReviewEntity);
+    const mediaRepo = manager.getRepository(MediaAssetEntity);
+
+    const [account, requests, applications, reviews, media, notifications] =
+      await Promise.all([
+        this.getAccount(userId),
+        requestRepo.find({
+          where: [
+            { clientUserId: userId },
+            { assignedWorkerUserId: userId },
+          ],
+          order: { createdAt: 'DESC' },
+        }),
+        applicationRepo.find({
+          where: { workerUserId: userId },
+          order: { created_at: 'DESC' },
+        }),
+        reviewRepo.find({
+          where: [{ clientUserId: userId }, { workerUserId: userId }],
+          order: { created_at: 'DESC' },
+        }),
+        mediaRepo.find({
+          where: { ownerUserId: userId },
+          order: { createdAt: 'DESC' },
+        }),
+        this.notificationsRepo.find({
+          where: { userId },
+          order: { createdAt: 'DESC' },
+        }),
+      ]);
+
+    return {
+      exportedAt: new Date().toISOString(),
+      account,
+      requests,
+      applications,
+      reviews,
+      media: media.map((asset) => ({
+        id: asset.id,
+        requestId: asset.requestId,
+        workerUserId: asset.workerUserId,
+        kind: asset.kind,
+        publicUrl: asset.publicUrl,
+        mimeType: asset.mimeType,
+        sizeBytes: asset.sizeBytes,
+        width: asset.width,
+        height: asset.height,
+        moderationStatus: asset.moderationStatus,
+        createdAt: asset.createdAt,
+      })),
+      notifications,
+    };
+  }
+
+  async deactivateAccount(userId: number, data: DeactivateAccountDto) {
+    const user = await this.repo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Account not found');
+
+    const validPassword = await bcrypt.compare(
+      data.currentPassword,
+      user.passwordHash || user.password,
+    );
+    if (!validPassword) {
+      throw new ForbiddenException('Текущата парола е грешна');
+    }
+
+    const requestRepo = this.repo.manager.getRepository(RepairRequestEntity);
+    const activeRequestCount = await requestRepo.count({
+      where: [
+        {
+          clientUserId: userId,
+          status: Not(In(['completed', 'canceled', 'archived'])),
+        },
+        {
+          assignedWorkerUserId: userId,
+          status: Not(In(['completed', 'canceled', 'archived'])),
+        },
+      ],
+    });
+    if (activeRequestCount > 0) {
+      throw new BadRequestException(
+        'Профилът не може да бъде деактивиран, докато има активна поръчка',
+      );
+    }
+
+    await this.repo.manager.transaction(async (manager) => {
+      await manager.getRepository(UserEntity).update(
+        { id: userId },
+        {
+          status: 'deleted',
+          authVersion: Number(user.authVersion || 0) + 1,
+        },
+      );
+
+      if (user.role === 'worker') {
+        await manager.getRepository(WorkerProfileEntity).update(
+          { userId },
+          { visibilityStatus: 'private' },
+        );
+      }
+    });
+
+    return {
+      deactivated: true,
+      message: 'Профилът е деактивиран',
+    };
   }
 
   private cleanOptional(value: string | null) {

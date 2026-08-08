@@ -1,0 +1,14 @@
+[Unit]
+Description=Back up Bricky production database and uploads
+After=mysql.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/bricky/backup.env
+ExecStart=/usr/local/sbin/bricky-backup
+User=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+

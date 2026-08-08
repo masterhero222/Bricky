@@ -1,24 +1,34 @@
-import { lazy, Suspense } from "react";
-import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
-import Layout from "./layouts/Layout";
+import { lazy, Suspense } from 'react';
+import {
+  BrowserRouter as Router,
+  Navigate,
+  Route,
+  Routes,
+} from 'react-router-dom';
+import Layout from './layouts/Layout';
 
-const Home = lazy(() => import("./pages/Home"));
-const AboutUs = lazy(() => import("./pages/AboutUs"));
-const BlogIndex = lazy(() => import("./pages/blog/BlogIndex"));
-const BlogArticle = lazy(() => import("./pages/blog/BlogArticle"));
-const AuthGate = lazy(() => import("./pages/AuthGate"));
-const Login = lazy(() => import("./pages/Login"));
-const Register = lazy(() => import("./pages/Register"));
-const ClientProfile = lazy(() => import("./pages/ClientProfile"));
-const RepairMap = lazy(() => import("./pages/RepairMap"));
-const WorkerLogin = lazy(() => import("./pages/workers/WorkerLogin"));
-const WorkersRegister = lazy(() => import("./pages/workers/WorkersRegister"));
-const WorkerProfile = lazy(() => import("./pages/workers/WorkerProfile"));
-const WorkerPreview = lazy(() => import("./pages/workers/WorkerPreview"));
-const Workers = lazy(() => import("./pages/workers/Workers"));
-const Requests = lazy(() => import("./pages/Requests"));
-const AdminBackoffice = lazy(() => import("./pages/AdminBackoffice"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Home = lazy(() => import('./pages/Home'));
+const AboutUs = lazy(() => import('./pages/AboutUs'));
+const BlogIndex = lazy(() => import('./pages/blog/BlogIndex'));
+const BlogArticle = lazy(() => import('./pages/blog/BlogArticle'));
+const BlogUnavailable = lazy(() => import('./pages/blog/BlogUnavailable'));
+const AuthGate = lazy(() => import('./pages/AuthGate'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const ClientProfile = lazy(() => import('./pages/ClientProfile'));
+const RepairMap = lazy(() => import('./pages/RepairMap'));
+const WorkerLogin = lazy(() => import('./pages/workers/WorkerLogin'));
+const WorkersRegister = lazy(() => import('./pages/workers/WorkersRegister'));
+const WorkerProfile = lazy(() => import('./pages/workers/WorkerProfile'));
+const WorkerPreview = lazy(() => import('./pages/workers/WorkerPreview'));
+const Workers = lazy(() => import('./pages/workers/Workers'));
+const Requests = lazy(() => import('./pages/Requests'));
+const AdminBackoffice = lazy(() => import('./pages/AdminBackoffice'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
+const BLOG_ENABLED = import.meta.env.VITE_ENABLE_BLOG === 'true';
 
 export default function App() {
   return (
@@ -32,9 +42,23 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<AboutUs />} />
-            <Route path="/blog" element={<BlogIndex />} />
-            <Route path="/blog/:slug" element={<BlogArticle />} />
+            <Route path="/terms" element={<LegalPage pageKey="terms" />} />
+            <Route path="/privacy" element={<LegalPage pageKey="privacy" />} />
+            <Route
+              path="/moderation-rules"
+              element={<LegalPage pageKey="moderation-rules" />}
+            />
+            <Route path="/support" element={<LegalPage pageKey="support" />} />
+            <Route
+              path="/blog"
+              element={BLOG_ENABLED ? <BlogIndex /> : <BlogUnavailable />}
+            />
+            <Route
+              path="/blog/:slug"
+              element={BLOG_ENABLED ? <BlogArticle /> : <BlogUnavailable />}
+            />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route
               path="/repair-map"
               element={
@@ -74,6 +98,7 @@ export default function App() {
             />
             <Route path="/worker/:userId" element={<WorkerPreview />} />
             <Route path="/workers/:id" element={<WorkerPreview />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </Suspense>
@@ -94,19 +119,25 @@ function RouteLoading() {
 }
 
 function RequireClient({ children }) {
-  return localStorage.getItem("role") === "client"
-    ? children
-    : <Navigate to="/auth" replace />;
+  return localStorage.getItem('role') === 'client' ? (
+    children
+  ) : (
+    <Navigate to="/auth" replace />
+  );
 }
 
 function RequireWorker({ children }) {
-  return localStorage.getItem("role") === "worker"
-    ? children
-    : <Navigate to="/auth" replace />;
+  return localStorage.getItem('role') === 'worker' ? (
+    children
+  ) : (
+    <Navigate to="/auth" replace />
+  );
 }
 
 function RequireAdmin({ children }) {
-  return ["admin", "super_admin"].includes(localStorage.getItem("role"))
-    ? children
-    : <Navigate to="/auth" replace />;
+  return ['admin', 'super_admin'].includes(localStorage.getItem('role')) ? (
+    children
+  ) : (
+    <Navigate to="/auth" replace />
+  );
 }

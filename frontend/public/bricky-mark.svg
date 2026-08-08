@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bricky">
+  <rect width="64" height="64" rx="14" fill="#06251f"/>
+  <path d="M32 9 50 19v26L32 55 14 45V19L32 9Z" fill="none" stroke="#38e58c" stroke-width="4"/>
+  <path d="m22 24 10-6 10 6v16l-10 6-10-6V24Zm0 0 10 6 10-6M32 30v16" fill="none" stroke="#d9fff0" stroke-width="3" stroke-linejoin="round"/>
+</svg>

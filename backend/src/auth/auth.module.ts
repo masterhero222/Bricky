@@ -14,6 +14,8 @@ import { getJwtSecret } from '../config/runtime-config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PasswordResetTokenEntity } from './password-reset-token.entity';
 import { MailModule } from '../mail/mail.module';
+import { AuthRateLimitService } from './auth-rate-limit.service';
+import { EmailVerificationTokenEntity } from './email-verification-token.entity';
 
 @Module({
   imports: [
@@ -21,7 +23,10 @@ import { MailModule } from '../mail/mail.module';
     WorkersModule,
     ReferralsModule,
     MailModule,
-    TypeOrmModule.forFeature([PasswordResetTokenEntity]),
+    TypeOrmModule.forFeature([
+      PasswordResetTokenEntity,
+      EmailVerificationTokenEntity,
+    ]),
     ConfigModule,
     PassportModule,
     JwtModule.registerAsync({
@@ -37,7 +42,7 @@ import { MailModule } from '../mail/mail.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, AuthRateLimitService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

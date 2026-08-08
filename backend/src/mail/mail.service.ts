@@ -12,6 +12,7 @@ export class MailService {
   private readonly from: string;
   private readonly confirmationTemplate: Handlebars.TemplateDelegate;
   private readonly passwordResetTemplate: Handlebars.TemplateDelegate;
+  private readonly emailVerificationTemplate: Handlebars.TemplateDelegate;
 
   constructor(config: ConfigService) {
     const port = config.get<number>('MAIL_PORT') || 587;
@@ -37,6 +38,13 @@ export class MailService {
     );
     this.passwordResetTemplate = Handlebars.compile(
       readFileSync(join(__dirname, 'templates', 'password-reset.hbs'), 'utf8'),
+      { strict: true },
+    );
+    this.emailVerificationTemplate = Handlebars.compile(
+      readFileSync(
+        join(__dirname, 'templates', 'email-verification.hbs'),
+        'utf8',
+      ),
       { strict: true },
     );
   }
@@ -90,9 +98,39 @@ export class MailService {
         }),
       });
       this.logger.log(`Password reset email sent to ${request.email}`);
+      return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Password reset email failed for ${request.email}: ${message}`);
+      this.logger.error(
+        `Password reset email failed for ${request.email}: ${message}`,
+      );
+      return false;
+    }
+  }
+
+  async sendEmailVerificationLink(request: {
+    email: string;
+    name: string;
+    verificationUrl: string;
+  }) {
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: request.email,
+        subject: 'Потвърдете имейла си - Bricky',
+        html: this.emailVerificationTemplate({
+          name: request.name || 'потребител',
+          verificationUrl: request.verificationUrl,
+        }),
+      });
+      this.logger.log(`Email verification sent to ${request.email}`);
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Email verification failed for ${request.email}: ${message}`,
+      );
+      return false;
     }
   }
 }

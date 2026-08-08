@@ -1,8 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { ClientProfileEntity } from './client-profile.entity';
 import { UserEntity } from './user.entity';
 import { UsersService } from './users.service';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
+import { RequestApplicationEntity } from '../requests/entities/request-application.entity';
+import { ReviewEntity } from '../reviews/entities/review.entity';
+import { MediaAssetEntity } from '../media/media-asset.entity';
 
 describe('UsersService account settings', () => {
   function setup(role: 'client' | 'worker' = 'client') {
@@ -45,6 +50,7 @@ describe('UsersService account settings', () => {
     const workerRepo = {
       findOne: jest.fn().mockResolvedValue(workerProfile),
       save: jest.fn(async (value) => value),
+      update: jest.fn(),
     };
     const notificationsRepo = {
       find: jest.fn().mockResolvedValue([
@@ -59,15 +65,33 @@ describe('UsersService account settings', () => {
           : null,
       ),
     };
+    const requestRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    };
+    const applicationRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const reviewRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const mediaRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
     const manager = {
       getRepository: jest.fn((entity) => {
         if (entity === UserEntity) return userRepo;
         if (entity === ClientProfileEntity) return clientRepo;
         if (entity === WorkerProfileEntity) return workerRepo;
+        if (entity === RepairRequestEntity) return requestRepo;
+        if (entity === RequestApplicationEntity) return applicationRepo;
+        if (entity === ReviewEntity) return reviewRepo;
+        if (entity === MediaAssetEntity) return mediaRepo;
         throw new Error('Unexpected repository');
       }),
     };
     userRepo.manager = {
+      getRepository: manager.getRepository,
       transaction: jest.fn(async (callback) => callback(manager)),
     };
 
@@ -78,7 +102,18 @@ describe('UsersService account settings', () => {
       notificationsRepo as any,
       plansRepo as any,
     );
-    return { service, user, userRepo, clientRepo, workerRepo, notificationsRepo };
+    return {
+      service,
+      user,
+      userRepo,
+      clientRepo,
+      workerRepo,
+      notificationsRepo,
+      requestRepo,
+      applicationRepo,
+      reviewRepo,
+      mediaRepo,
+    };
   }
 
   it('returns normalized client contact and unread notification count', async () => {
@@ -127,6 +162,59 @@ describe('UsersService account settings', () => {
       service.updateAccountProfile(12, { email: 'taken@bricky.test' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(clientRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('exports account data without password or internal storage keys', async () => {
+    const { service, mediaRepo } = setup('client');
+    mediaRepo.find.mockResolvedValue([
+      {
+        id: 7,
+        ownerUserId: 12,
+        kind: 'request_before',
+        storageKey: '/private/server/path/photo.jpg',
+        publicUrl: '/uploads/requests/7/photo.jpg',
+        moderationStatus: 'approved',
+        createdAt: new Date('2026-08-08T10:00:00Z'),
+      },
+    ]);
+
+    const exported = await service.exportAccountData(12);
+
+    expect(exported.account).not.toHaveProperty('password');
+    expect(exported.account).not.toHaveProperty('passwordHash');
+    expect(exported.media[0]).not.toHaveProperty('storageKey');
+    expect(exported.media[0]).toEqual(
+      expect.objectContaining({ publicUrl: '/uploads/requests/7/photo.jpg' }),
+    );
+  });
+
+  it('blocks deactivation while the user has an active request', async () => {
+    const { service, user, requestRepo } = setup('client');
+    user.passwordHash = await bcrypt.hash('current-password', 4);
+    requestRepo.count.mockResolvedValue(1);
+
+    await expect(
+      service.deactivateAccount(12, { currentPassword: 'current-password' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('deactivates a worker, invalidates sessions and hides the profile', async () => {
+    const { service, user, userRepo, workerRepo } = setup('worker');
+    user.passwordHash = await bcrypt.hash('current-password', 4);
+    user.authVersion = 3;
+
+    await expect(
+      service.deactivateAccount(12, { currentPassword: 'current-password' }),
+    ).resolves.toEqual(expect.objectContaining({ deactivated: true }));
+
+    expect(userRepo.update).toHaveBeenCalledWith(
+      { id: 12 },
+      { status: 'deleted', authVersion: 4 },
+    );
+    expect(workerRepo.update).toHaveBeenCalledWith(
+      { userId: 12 },
+      { visibilityStatus: 'private' },
+    );
   });
 
 });

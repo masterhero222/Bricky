@@ -62,6 +62,7 @@ describe('AdminService media moderation referral trigger', () => {
       billing as never,
       referrals as never,
       {} as never,
+      {} as never,
       dataSource as never,
     );
     return {
@@ -86,12 +87,31 @@ describe('AdminService media moderation referral trigger', () => {
 
   it('does not recheck qualification for rejected media or profile-only media', async () => {
     const rejected = setup({ id: 9, requestId: 55 });
-    await rejected.service.setMediaModeration(1, 9, 'rejected');
+    await rejected.service.setMediaModeration(
+      1,
+      9,
+      'rejected',
+      'not relevant',
+    );
     expect(rejected.referrals.processCompletedRequest).not.toHaveBeenCalled();
 
     const avatar = setup({ id: 10, requestId: null });
     await avatar.service.setMediaModeration(1, 10, 'approved');
     expect(avatar.referrals.processCompletedRequest).not.toHaveBeenCalled();
+  });
+
+  it('requires an audit reason for destructive moderation actions', async () => {
+    const { service } = setup({ id: 9, requestId: 55 });
+
+    await expect(service.setMediaModeration(1, 9, 'rejected')).rejects.toThrow(
+      'Reason is required',
+    );
+    await expect(service.setUserStatus(1, 201, 'blocked')).rejects.toThrow(
+      'Reason is required',
+    );
+    await expect(
+      service.setWorkerApproval(1, 201, 'suspended'),
+    ).rejects.toThrow('Reason is required');
   });
 
   it('commits credit adjustment and audit entry in one transaction', async () => {
@@ -128,7 +148,8 @@ describe('AdminService media moderation referral trigger', () => {
   });
 
   it('activates a worker without automatically placing them on the wall', async () => {
-    const { service, users, workers, manager, transactionalAuditRepo } = setup(null);
+    const { service, users, workers, manager, transactionalAuditRepo } =
+      setup(null);
 
     await service.setWorkerApproval(1, 201, 'approved', 'profile verified');
 
