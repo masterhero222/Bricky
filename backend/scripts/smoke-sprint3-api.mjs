@@ -191,6 +191,17 @@ async function main() {
 
   const connection = await mysql.createConnection(dbConfig);
   try {
+    await connection.execute(
+      `UPDATE users
+       SET email_verified_at = COALESCE(email_verified_at, NOW())
+       WHERE id IN (?, ?, ?, ?)`,
+      [
+        adminUser.id,
+        clientUser.id,
+        workerUser.id,
+        restrictedWorkerUser.id,
+      ],
+    );
     await connection.execute("UPDATE users SET role = 'admin' WHERE id = ?", [
       adminUser.id,
     ]);
