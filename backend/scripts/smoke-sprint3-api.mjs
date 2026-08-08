@@ -226,6 +226,14 @@ async function main() {
       reason: 'Sprint 3 API smoke',
     },
   });
+  await api(`/admin/workers/${workerUser.id}/wall-visibility`, {
+    method: 'POST',
+    token: admin.token,
+    body: {
+      listed: true,
+      reason: 'Sprint 3 API smoke public listing',
+    },
+  });
 
   const publicWorkers = (await api('/workers')).data;
   assert.ok(Array.isArray(publicWorkers));
