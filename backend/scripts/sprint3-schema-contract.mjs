@@ -10,6 +10,8 @@ export const migrationNames = [
   '20260719_sprint3_v2_schema_alignment.sql',
   '20260808_account_profile_settings.sql',
   '20260808_password_reset_tokens.sql',
+  '20260808_email_verification.sql',
+  '20260808_content_reports.sql',
 ];
 
 export const migrations = migrationNames.map((name) => ({
@@ -40,6 +42,8 @@ const expectedTables = [
   'referral_qualifications',
   'referral_rewards',
   'password_reset_tokens',
+  'email_verification_tokens',
+  'content_reports',
 ];
 
 const expectedIndexes = [
@@ -54,6 +58,8 @@ const expectedIndexes = [
   ['referrals', 'uq_referrals_code'],
   ['worker_plans', 'uq_worker_plan_worker'],
   ['worker_credit_wallets', 'uq_worker_credit_wallet'],
+  ['email_verification_tokens', 'uq_email_verification_token_hash'],
+  ['content_reports', 'idx_content_reports_status'],
 ];
 
 const expectedChecks = [

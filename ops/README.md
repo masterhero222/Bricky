@@ -3,20 +3,11 @@
 These files are installed during the Final Sprint release, after a successful
 backup and restore rehearsal.
 
-## Required private environment files
+## Private configuration
 
-`/etc/bricky/backup.env` must be root-owned with mode `0600` and contain:
-
-```text
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=bricky_backup
-DB_PASS=replace-me
-DB_NAME=bricky
-BRICKY_UPLOADS_DIR=/var/www/Bricky-production-uploads
-BRICKY_BACKUP_ROOT=/var/backups/bricky
-BRICKY_BACKUP_RETENTION_DAYS=14
-```
+The backup service resolves the database configuration from the running
+`bricky-backend` PM2 process. This avoids maintaining a second password file.
+`BRICKY_PM2_PROCESS_NAME` can override the default process name.
 
 `/etc/bricky/monitor.env` may configure `BRICKY_ALERT_WEBHOOK_URL`,
 `BRICKY_DISK_LIMIT`, and the public URLs. It must never be committed with a
@@ -24,7 +15,8 @@ real webhook secret.
 
 ## Release activation
 
-1. Install both scripts in `/usr/local/sbin` as root-owned executable files.
+1. Install the backup, backup wrapper, restore rehearsal, and health scripts in
+   `/usr/local/sbin` as root-owned executable files.
 2. Install the four units in `/etc/systemd/system`.
 3. Run both services manually and inspect their journal output.
 4. Verify the newest backup with `gzip -t`, `tar -tzf`, checksums, and a restore
