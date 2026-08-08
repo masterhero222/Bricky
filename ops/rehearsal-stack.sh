@@ -60,10 +60,11 @@ stop_process() {
   pid="$(cat "$pid_file")"
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
     command_line="$(ps -p "$pid" -o args=)"
-    [[ "$command_line" == *"$BUILDER_ROOT"* ]] || {
+    process_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
+    if [[ "$command_line" != *"$BUILDER_ROOT"* && "$process_cwd" != "$BUILDER_ROOT"/* ]]; then
       echo "Refusing to stop unexpected process $pid: $command_line" >&2
       exit 1
-    }
+    fi
     kill "$pid"
     for _ in {1..20}; do
       kill -0 "$pid" 2>/dev/null || break
