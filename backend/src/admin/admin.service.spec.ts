@@ -45,6 +45,11 @@ describe('AdminService media moderation referral trigger', () => {
       setApprovalStatus: jest.fn().mockResolvedValue({
         userId: 201,
         approvalStatus: 'approved',
+        visibilityStatus: 'private',
+      }),
+      setWallVisibility: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
         visibilityStatus: 'public',
       }),
     };
@@ -122,7 +127,7 @@ describe('AdminService media moderation referral trigger', () => {
     expect(billing.setPlan).toHaveBeenCalledWith(201, 'pro', manager);
   });
 
-  it('activates and publishes a worker in the approval transaction', async () => {
+  it('activates a worker without automatically placing them on the wall', async () => {
     const { service, users, workers, manager, transactionalAuditRepo } = setup(null);
 
     await service.setWorkerApproval(1, 201, 'approved', 'profile verified');
@@ -141,9 +146,17 @@ describe('AdminService media moderation referral trigger', () => {
         metadataJson: expect.objectContaining({
           approvalStatus: 'approved',
           userStatus: 'active',
-          visibilityStatus: 'public',
+          visibilityStatus: 'private',
         }),
       }),
     );
+  });
+
+  it('manages public wall placement separately from approval', async () => {
+    const { service, workers } = setup(null);
+
+    await service.setWorkerWallVisibility(1, 201, true, 'manual listing');
+
+    expect(workers.setWallVisibility).toHaveBeenCalledWith(201, true);
   });
 });

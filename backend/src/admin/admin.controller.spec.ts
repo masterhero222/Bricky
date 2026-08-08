@@ -28,14 +28,16 @@ describe('AdminController catalog and timeline authorization', () => {
     expect(admin.getRequestTimeline).toHaveBeenCalledWith(7);
   });
 
-  it('blocks regular admins from catalog and pricing mutations', () => {
-    const { controller } = setup();
+  it('blocks regular admins from catalog mutations but allows pricing corrections', async () => {
+    const { controller, admin } = setup();
     const req = { user: { id: 10, role: 'admin' } };
 
     expect(() => controller.upsertCategory(req, 'vik', { isActive: false })).toThrow(ForbiddenException);
     expect(() => controller.upsertActivity(req, 'vik', 'general', { isActive: false })).toThrow(ForbiddenException);
-    expect(() => controller.createPricing(req, { version: '2026-q3' })).toThrow(ForbiddenException);
-    expect(() => controller.setPricingStatus(req, '1', { isActive: true })).toThrow(ForbiddenException);
+    await controller.createPricing(req, { version: '2026-q3' });
+    await controller.setPricingStatus(req, '1', { isActive: true });
+    expect(admin.createPricingRule).toHaveBeenCalled();
+    expect(admin.setPricingRuleActive).toHaveBeenCalled();
   });
 
   it('allows super admins to mutate catalog and pricing', async () => {

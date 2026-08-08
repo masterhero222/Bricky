@@ -168,7 +168,7 @@ describe('RequestsService v2 data core', () => {
       findOne: jest.fn().mockResolvedValue({
         userId: 201,
         approvalStatus: 'approved',
-        visibilityStatus: 'public',
+        visibilityStatus: 'private',
       }),
     });
     const media = {
@@ -421,7 +421,7 @@ describe('RequestsService v2 data core', () => {
       findOne: jest.fn().mockResolvedValue({
         userId: 201,
         approvalStatus: 'approved',
-        visibilityStatus: 'public',
+        visibilityStatus: 'private',
       }),
     });
     const repairRequestsRepo = repo({

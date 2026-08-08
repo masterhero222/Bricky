@@ -31,6 +31,17 @@ export class AdminController {
     return this.admin.setWorkerApproval(Number(req.user.id), Number(workerUserId), body?.approvalStatus, body?.reason);
   }
 
+  @Post('workers/:workerUserId/wall-visibility')
+  setWorkerWallVisibility(@Req() req: any, @Param('workerUserId') workerUserId: string, @Body() body: any) {
+    this.assertAdmin(req.user);
+    return this.admin.setWorkerWallVisibility(
+      Number(req.user.id),
+      Number(workerUserId),
+      Boolean(body?.listed),
+      body?.reason,
+    );
+  }
+
   @Get('requests')
   requests(@Req() req: any, @Query('queue') queue?: string) {
     this.assertAdmin(req.user);
@@ -86,13 +97,13 @@ export class AdminController {
 
   @Post('pricing')
   createPricing(@Req() req: any, @Body() body: any) {
-    this.assertSuperAdmin(req.user);
+    this.assertAdmin(req.user);
     return this.admin.createPricingRule(Number(req.user.id), body, body?.reason);
   }
 
   @Post('pricing/:id/status')
   setPricingStatus(@Req() req: any, @Param('id') id: string, @Body() body: any) {
-    this.assertSuperAdmin(req.user);
+    this.assertAdmin(req.user);
     return this.admin.setPricingRuleActive(Number(req.user.id), Number(id), Boolean(body?.isActive), body?.reason);
   }
 

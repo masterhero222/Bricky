@@ -362,6 +362,24 @@ export class WorkersService {
     ];
   }
 
+  async getAllForAdmin() {
+    const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
+    const users = await this.users.findByIds(profiles.map((profile) => Number(profile.userId)));
+    const usersById = new Map(users.map((user) => [Number(user.id), user]));
+
+    return Promise.all(
+      profiles.map(async (profile) => {
+        const summary = await this.withV2WorkerSummary(profile, { includeUnapprovedMedia: true });
+        const user = usersById.get(Number(profile.userId));
+        return {
+          ...summary,
+          userStatus: user?.status || 'missing',
+          email: user?.email || null,
+        };
+      }),
+    );
+  }
+
   // =========================
   // ✅ GALLERY
   // =========================
@@ -468,16 +486,37 @@ export class WorkersService {
     manager?: EntityManager,
   ) {
     const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    const nextVisibility = visibilityStatus || (
+      approvalStatus === 'suspended'
+        ? 'hidden'
+        : approvalStatus === 'approved'
+          ? profile.visibilityStatus === 'hidden' ? 'private' : profile.visibilityStatus
+          : 'private'
+    );
     await profilesRepo.update(
       { userId: workerUserId },
       {
         approvalStatus,
-        visibilityStatus:
-          visibilityStatus || (approvalStatus === 'approved' ? 'public' : approvalStatus === 'suspended' ? 'hidden' : 'private'),
+        visibilityStatus: nextVisibility,
       },
     );
     if (manager) return profilesRepo.findOne({ where: { userId: workerUserId } });
     return this.findByUserId(workerUserId);
+  }
+
+  async setWallVisibility(workerUserId: number, listed: boolean, manager?: EntityManager) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    if (listed && profile.approvalStatus !== 'approved') {
+      throw new BadRequestException('Approve the worker before adding them to the public wall');
+    }
+
+    profile.visibilityStatus = listed ? 'public' : 'private';
+    const saved = await profilesRepo.save(profile);
+    return manager ? saved : this.findByUserId(workerUserId, { includeUnapprovedMedia: true });
   }
 
   async getHistoryByUserId(userId: number) {

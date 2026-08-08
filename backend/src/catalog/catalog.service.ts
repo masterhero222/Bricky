@@ -120,6 +120,13 @@ export class CatalogService {
     });
   }
 
+  listActivePricingRules() {
+    return this.pricingRepo.find({
+      where: { isActive: true },
+      order: { categoryKey: 'ASC', activityKey: 'ASC' },
+    });
+  }
+
   async createPricingRule(input: PricingRuleInput) {
     const category = await this.requireCategory(input?.categoryKey);
     const activityKey = this.normalizeKey(input?.activityKey, 'activityKey', 120);

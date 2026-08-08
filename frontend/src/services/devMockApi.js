@@ -1430,6 +1430,9 @@ export async function mockRequest(method, url, data) {
         ...publicUser(worker, db),
         workerUserId: worker.userId,
         publicName: worker.fullName || worker.name,
+        approvalStatus: worker.approvalStatus || "pending",
+        visibilityStatus: worker.visibilityStatus || "private",
+        userStatus: worker.status || "active",
       })));
     }
     if (method === "get" && path === "/admin/requests") {
@@ -1491,9 +1494,23 @@ export async function mockRequest(method, url, data) {
       const worker = db.workers.find((item) => Number(item.userId) === targetId || Number(item.id) === targetId);
       if (!worker) return fail("Worker not found", 404);
       worker.approvalStatus = data?.approvalStatus || data?.status || "approved";
-      worker.visibilityStatus = worker.approvalStatus === "approved" ? "public" : "hidden";
+      worker.visibilityStatus = worker.approvalStatus === "approved"
+        ? (worker.visibilityStatus === "hidden" ? "private" : worker.visibilityStatus || "private")
+        : worker.approvalStatus === "suspended" ? "hidden" : "private";
       if (worker.approvalStatus === "approved") worker.status = "active";
       addAudit(db, "worker_approval_changed", "worker", worker.userId, worker.approvalStatus);
+      writeDb(db);
+      return response(publicUser(worker, db));
+    }
+
+    const workerWallMatch = path.match(/^\/admin\/workers\/(\d+)\/wall-visibility$/);
+    if (method === "post" && workerWallMatch) {
+      const targetId = Number(workerWallMatch[1]);
+      const worker = db.workers.find((item) => Number(item.userId) === targetId || Number(item.id) === targetId);
+      if (!worker) return fail("Worker not found", 404);
+      if (data?.listed && worker.approvalStatus !== "approved") return fail("Approve the worker first", 400);
+      worker.visibilityStatus = data?.listed ? "public" : "private";
+      addAudit(db, "worker_wall_visibility_changed", "worker", worker.userId, worker.visibilityStatus);
       writeDb(db);
       return response(publicUser(worker, db));
     }
@@ -1573,7 +1590,6 @@ export async function mockRequest(method, url, data) {
     }
 
     if (method === "post" && path === "/admin/pricing") {
-      if (role !== "super_admin") return fail("Super admin only", 403);
       const categoryKey = String(data?.categoryKey || "");
       const activityKey = String(data?.activityKey || "");
       const version = String(data?.version || "").trim();
@@ -1634,7 +1650,6 @@ export async function mockRequest(method, url, data) {
 
     const pricingStatusMatch = path.match(/^\/admin\/pricing\/(\d+)\/status$/);
     if (method === "post" && pricingStatusMatch) {
-      if (role !== "super_admin") return fail("Super admin only", 403);
       const rule = (db.pricingRules || []).find(
         (item) => Number(item.id) === Number(pricingStatusMatch[1]),
       );
@@ -1687,6 +1702,13 @@ export async function mockRequest(method, url, data) {
       writeDb(db);
       return response(referral);
     }
+  }
+
+  if (method === "get" && path === "/catalog") {
+    return response({
+      categories: mockAdminCategories(db).filter((category) => category.isActive !== false),
+      pricingRules: (db.pricingRules || []).filter((rule) => rule.isActive),
+    });
   }
 
   if (method === "put" && path === "/workers/me/appearance") {

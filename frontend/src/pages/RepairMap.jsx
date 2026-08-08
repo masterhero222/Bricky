@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../services/api";
+import WorkerProfileSidebar from "../components/workers/WorkerProfileSidebar";
 import { photoMediaUrl } from "../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 
@@ -278,6 +279,7 @@ function SofiaTileMap({ requests, activeId, expandedClusterId, onSelect, onClust
 }
 
 export default function RepairMap() {
+  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -344,8 +346,14 @@ export default function RepairMap() {
     : ["published", "applied"].includes(activeStatusKey);
   const activePhotos = Array.isArray(activeRequest?.photos) ? activeRequest.photos : [];
 
+  function selectWorkerTab(tab) {
+    if (tab !== "map") navigate(`/worker/profile?tab=${tab}`);
+  }
+
   return (
-    <div className="min-h-screen bg-[#07101d] text-white px-6 py-24">
+    <>
+    <WorkerProfileSidebar activeTab="map" onSelect={selectWorkerTab} />
+    <div className="min-h-screen bg-[#07101d] px-4 pb-20 pt-40 text-white sm:px-6 lg:ml-64 lg:px-10 lg:pt-24">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
           <div>
@@ -637,5 +645,6 @@ export default function RepairMap() {
         }
       `}</style>
     </div>
+    </>
   );
 }

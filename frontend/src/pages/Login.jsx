@@ -101,7 +101,7 @@ export default function Login() {
         {import.meta.env.DEV && (
           <div className="border-t border-gray-700 pt-4 space-y-2">
             <p className="text-sm text-gray-300 text-center">Локално тестване</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => devLogin("client")}
@@ -117,6 +117,14 @@ export default function Login() {
                 className="rounded bg-amber-700 px-3 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
               >
                 {devLoading === "worker" ? "Влизам..." : "Като майстор"}
+              </button>
+              <button
+                type="button"
+                onClick={() => devLogin("super_admin")}
+                disabled={Boolean(devLoading)}
+                className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold hover:bg-cyan-700 disabled:opacity-60"
+              >
+                {devLoading === "super_admin" ? "Влизам..." : "Като админ"}
               </button>
             </div>
           </div>

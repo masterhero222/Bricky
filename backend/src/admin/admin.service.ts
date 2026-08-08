@@ -58,7 +58,7 @@ export class AdminService {
   }
 
   listWorkers() {
-    return this.workers.getAll({ includeUnapprovedMedia: true });
+    return this.workers.getAllForAdmin();
   }
 
   async setWorkerApproval(
@@ -92,12 +92,30 @@ export class AdminService {
         {
           approvalStatus,
           userStatus: approvalStatus === 'approved' ? 'active' : undefined,
-          visibilityStatus: approvalStatus === 'approved' ? 'public' : undefined,
+          visibilityStatus: (worker as any)?.visibilityStatus,
         },
         manager,
       );
       return worker;
     });
+  }
+
+  async setWorkerWallVisibility(
+    actorUserId: number,
+    workerUserId: number,
+    listed: boolean,
+    reason?: string,
+  ) {
+    const worker = await this.workers.setWallVisibility(workerUserId, listed);
+    await this.log(
+      actorUserId,
+      'worker.wall_visibility_changed',
+      'worker',
+      workerUserId,
+      reason,
+      { listed, visibilityStatus: listed ? 'public' : 'private' },
+    );
+    return worker;
   }
 
   listRequests(queue?: string) {

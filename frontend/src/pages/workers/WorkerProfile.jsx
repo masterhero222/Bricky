@@ -4,7 +4,6 @@ import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiPut } from "../../services/api";
 import { isDevMockToken, saveDevWorkerProfile, updateDevWorkerAppearance, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
-import WorkerBannerSettings from "../../components/workers/WorkerBannerSettings";
 import WorkerCalculatorPanel from "../../components/workers/WorkerCalculatorPanel";
 import WorkerDashboardSummary from "../../components/workers/WorkerDashboardSummary";
 import WorkerGalleryPanel from "../../components/workers/WorkerGalleryPanel";
@@ -210,7 +209,7 @@ export default function WorkerProfile() {
 
       if (accessRestricted) {
         setReqError(
-          "Заявките ще бъдат достъпни, когато профилът ти е одобрен, активен и публичен.",
+          "Заявките ще бъдат достъпни, когато профилът ти е одобрен и активен.",
         );
       } else {
         console.error("Error loading requests:", err);
@@ -1426,14 +1425,11 @@ export default function WorkerProfile() {
         {activeTab === "calculator" && <WorkerCalculatorPanel />}
 
         {activeTab === "settings" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Настройки</h1>
-            <WorkerBannerSettings
-              worker={profile}
-              onSaved={(profileBannerKey) => {
-                setProfile((current) => ({ ...current, profileBannerKey }));
-              }}
-            />
+          <div className="mx-auto mt-10 max-w-3xl rounded-lg border border-cyan-400/15 bg-[#0b2033] p-6">
+            <h1 className="text-2xl font-bold">Настройки</h1>
+            <p className="mt-3 text-slate-300">
+              Банерът и публичният изглед се управляват само от секция „Профил“.
+            </p>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock3, Plus, RefreshCw, Save, X } from "lucide-react";
+import { Clock3, LogOut, Plus, RefreshCw, Save, X } from "lucide-react";
 import { apiGet, apiPost } from "../services/api";
 import { mediaUrl, photoMediaUrl } from "../utils/mediaUrls";
 
@@ -81,6 +81,14 @@ export default function AdminBackoffice() {
     setMediaPreview(media);
   }
 
+  function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userId");
+    window.location.assign("/auth");
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-100">
       <div className="mx-auto max-w-7xl">
@@ -89,10 +97,16 @@ export default function AdminBackoffice() {
             <h1 className="text-2xl font-bold">Bricky Backoffice</h1>
             <p className="mt-1 text-sm text-slate-400">Sprint 3 v2 data core operations</p>
           </div>
-          <button onClick={load} className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold">
-            <RefreshCw size={16} aria-hidden="true" />
-            Обнови
-          </button>
+          <div className="flex gap-2">
+            <button onClick={load} className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold">
+              <RefreshCw size={16} aria-hidden="true" />
+              Обнови
+            </button>
+            <button onClick={logout} className="inline-flex items-center gap-2 rounded-md border border-red-500/40 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-100">
+              <LogOut size={16} aria-hidden="true" />
+              Изход
+            </button>
+          </div>
         </div>
 
         <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-800 pb-3">
@@ -156,13 +170,14 @@ function UsersTable({ items, run }) {
 function WorkersTable({ items, run }) {
   return (
     <DataTable
-      columns={["User ID", "Име", "Град", "Approval", "Visibility", "Действия"]}
+      columns={["User ID", "Име", "Град", "Акаунт", "Одобрение", "Стена", "Действия"]}
       rows={items.map((worker) => [
         worker.workerUserId || worker.userId || worker.id,
         worker.publicName || worker.fullName || "-",
         worker.city || "-",
+        worker.userStatus || "-",
         worker.approvalStatus || (worker.isApproved ? "approved" : "pending"),
-        worker.visibilityStatus || "-",
+        worker.visibilityStatus === "public" ? "Показан" : "Скрит",
         <div className="flex flex-wrap gap-2" key={worker.workerUserId || worker.userId || worker.id}>
           <SmallButton
             onClick={() =>
@@ -185,6 +200,19 @@ function WorkersTable({ items, run }) {
             }
           >
             Suspend
+          </SmallButton>
+          <SmallButton
+            disabled={(worker.approvalStatus || "pending") !== "approved"}
+            onClick={() =>
+              run(() =>
+                apiPost(`/admin/workers/${worker.workerUserId || worker.userId || worker.id}/wall-visibility`, {
+                  listed: worker.visibilityStatus !== "public",
+                  reason: "manual_wall_management",
+                }),
+              )
+            }
+          >
+            {worker.visibilityStatus === "public" ? "Махни от стената" : "Добави на стената"}
           </SmallButton>
         </div>,
       ])}
@@ -341,6 +369,21 @@ function PricingTable({ items, run }) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function editRule(rule) {
+    const stamp = new Date().toISOString().replaceAll("-", "").replaceAll(":", "").replace("T", "").slice(0, 12);
+    setForm({
+      version: `admin-${stamp}`,
+      categoryKey: rule.categoryKey,
+      activityKey: rule.activityKey,
+      laborMin: String(rule.laborMin ?? ""),
+      laborMax: String(rule.laborMax ?? ""),
+      materialMin: rule.materialMin == null ? "" : String(rule.materialMin),
+      materialMax: rule.materialMax == null ? "" : String(rule.materialMax),
+      currency: rule.currency || "EUR",
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit(event) {
     event.preventDefault();
     const succeeded = await run(() =>
@@ -366,7 +409,7 @@ function PricingTable({ items, run }) {
       <form onSubmit={submit} className="border-b border-slate-800 pb-6">
         <div className="mb-4 flex items-center gap-2">
           <Plus size={18} className="text-cyan-400" aria-hidden="true" />
-          <h2 className="text-lg font-bold">Нова ценова версия</h2>
+          <h2 className="text-lg font-bold">Нова или коригирана ценова версия</h2>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           <AdminInput label="Версия" value={form.version} onChange={(value) => setField("version", value)} placeholder="2026-q3" required />
@@ -418,19 +461,21 @@ function PricingTable({ items, run }) {
           rule.materialMin == null ? "–" : `${rule.materialMin} – ${rule.materialMax}`,
           rule.currency,
           <StatusBadge key={`pricing-status-${rule.id}`} active={rule.isActive} />,
-          <SmallButton
-            key={`pricing-action-${rule.id}`}
-            onClick={() =>
-              run(() =>
-                apiPost(`/admin/pricing/${rule.id}/status`, {
-                  isActive: !rule.isActive,
-                  reason: "admin_pricing_status",
-                }),
-              )
-            }
-          >
-            {rule.isActive ? "Деактивирай" : "Активирай"}
-          </SmallButton>,
+          <div className="flex gap-2" key={`pricing-action-${rule.id}`}>
+            <SmallButton onClick={() => editRule(rule)}>Коригирай</SmallButton>
+            <SmallButton
+              onClick={() =>
+                run(() =>
+                  apiPost(`/admin/pricing/${rule.id}/status`, {
+                    isActive: !rule.isActive,
+                    reason: "admin_pricing_status",
+                  }),
+                )
+              }
+            >
+              {rule.isActive ? "Деактивирай" : "Активирай"}
+            </SmallButton>
+          </div>,
         ])}
       />
     </div>
