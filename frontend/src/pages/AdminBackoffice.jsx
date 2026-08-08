@@ -200,6 +200,10 @@ function RequestsTable({ items, run, onPreview, onTimeline }) {
         const status = request.statusKey || "-";
         const canModerate = ["draft", "pending_admin"].includes(status) && !request.archivedAt;
         const isCompleted = status === "completed" && Boolean(request.archivedAt || request.isArchived);
+        const requestPhotos = Array.isArray(request.beforePhotos) ? request.beforePhotos : request.photos || [];
+        const hasPendingPhotos = requestPhotos.some((photo) =>
+          !["approved", "rejected"].includes(String(photo.moderationStatus || "pending").toLowerCase()),
+        );
 
         return [
           request.id,
@@ -207,14 +211,18 @@ function RequestsTable({ items, run, onPreview, onTimeline }) {
           request.clientName || "-",
           status,
           request.assignedWorkerUserId || "-",
-          <RequestPhotoStrip request={request} key={`photos-${request.id}`} onPreview={onPreview} />,
+          <RequestPhotoStrip request={request} key={`photos-${request.id}`} onPreview={onPreview} run={run} />,
           <div className="flex flex-wrap gap-2" key={`actions-${request.id}`}>
             <SmallButton onClick={() => onTimeline?.(request.id)} icon={<Clock3 size={14} />}>
               Timeline
             </SmallButton>
             {canModerate ? (
               <>
-              <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}>
+              <SmallButton
+                disabled={hasPendingPhotos}
+                title={hasPendingPhotos ? "Review every photo before publishing the request" : undefined}
+                onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "published" }))}
+              >
                 Одобри
               </SmallButton>
               <SmallButton onClick={() => run(() => apiPost(`/admin/requests/${request.id}/status`, { status: "archived" }))}>
@@ -429,36 +437,61 @@ function PricingTable({ items, run }) {
   );
 }
 
-function RequestPhotoStrip({ request, onPreview }) {
+function RequestPhotoStrip({ request, onPreview, run }) {
   const photos = Array.isArray(request.beforePhotos) && request.beforePhotos.length ? request.beforePhotos : request.photos || [];
   if (!photos.length) return <span className="text-slate-500">няма</span>;
 
   return (
-    <div className="flex max-w-xs flex-wrap gap-2">
-      {photos.slice(0, 4).map((photo) => {
+    <div className="flex max-h-64 max-w-xs flex-wrap gap-2 overflow-y-auto pr-1">
+      {photos.map((photo) => {
         const url = photoMediaUrl(photo);
         if (!url) return null;
 
+        const moderationStatus = photo.moderationStatus || "pending";
+
         return (
-          <button
-            type="button"
-            onClick={() =>
-              onPreview?.({
-                url,
-                title: `Заявка #${request.id}`,
-                subtitle: request.categoryKey || request.category || "Снимка към заявка",
-                status: photo.moderationStatus || "pending",
-              })
-            }
-            className="block overflow-hidden rounded border border-slate-700 bg-slate-950"
-            key={photo.id || url}
-            title={photo.moderationStatus || "pending"}
-          >
-            <img src={url} alt="" className="h-12 w-16 object-cover" />
-          </button>
+          <div className="w-24 rounded border border-slate-700 bg-slate-950 p-1" key={photo.id || url}>
+            <button
+              type="button"
+              onClick={() =>
+                onPreview?.({
+                  url,
+                  title: `Заявка #${request.id}`,
+                  subtitle: request.categoryKey || request.category || "Снимка към заявка",
+                  status: moderationStatus,
+                })
+              }
+              className="block w-full overflow-hidden rounded"
+              title="Отвори снимката"
+            >
+              <img src={url} alt="" className="h-14 w-full object-cover" />
+            </button>
+            <div className="mt-1 truncate text-[10px] font-semibold uppercase text-slate-400" title={moderationStatus}>
+              {moderationStatus}
+            </div>
+            {photo.id && !["approved", "rejected"].includes(String(moderationStatus).toLowerCase()) && (
+              <div className="mt-1 grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => run(() => apiPost(`/admin/media/${photo.id}/moderation`, { moderationStatus: "approved" }))}
+                  className="rounded bg-emerald-700 px-1 py-1 text-[10px] font-bold text-white hover:bg-emerald-600"
+                  title="Одобри снимката"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => run(() => apiPost(`/admin/media/${photo.id}/moderation`, { moderationStatus: "rejected" }))}
+                  className="rounded bg-red-800 px-1 py-1 text-[10px] font-bold text-white hover:bg-red-700"
+                  title="Отхвърли снимката"
+                >
+                  X
+                </button>
+              </div>
+            )}
+          </div>
         );
       })}
-      {photos.length > 4 && <span className="self-center text-xs text-slate-400">+{photos.length - 4}</span>}
     </div>
   );
 }
@@ -756,9 +789,15 @@ function AdminSelect({ label, value, onChange, options }) {
   );
 }
 
-function SmallButton({ children, onClick, icon = null }) {
+function SmallButton({ children, onClick, icon = null, disabled = false, title }) {
   return (
-    <button onClick={onClick} className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-700">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-800"
+    >
       {icon}
       {children}
     </button>

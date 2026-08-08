@@ -3,13 +3,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiPut } from "../../services/api";
-import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
+import { isDevMockToken, saveDevWorkerProfile, updateDevWorkerAppearance, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
 import WorkerBannerSettings from "../../components/workers/WorkerBannerSettings";
 import WorkerCalculatorPanel from "../../components/workers/WorkerCalculatorPanel";
 import WorkerDashboardSummary from "../../components/workers/WorkerDashboardSummary";
 import WorkerGalleryPanel from "../../components/workers/WorkerGalleryPanel";
 import WorkerProfileSidebar from "../../components/workers/WorkerProfileSidebar";
 import WorkerReferralPanel from "../../components/workers/WorkerReferralPanel";
+import WorkerProfileEditorPremium from "../../components/workers/WorkerProfileEditorPremium";
 import { getApiBase, mediaUrl, photoMediaUrl } from "../../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
 import { DEFAULT_WORKER_BANNER_KEY } from "../../constants/workerBannerCatalog";
@@ -421,10 +422,6 @@ export default function WorkerProfile() {
     setProfile((p) => ({ ...p, avatar: file }));
   };
 
-  const handleChange = (e) => {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
-  };
-
   async function uploadAvatarIfNeeded() {
     const token = getToken();
     if (!token) throw new Error("No token");
@@ -468,7 +465,7 @@ export default function WorkerProfile() {
       const token = getToken();
       if (!token) {
         alert("Няма токен. Логни се пак.");
-        return;
+        return false;
       }
 
       let updated = null;
@@ -479,15 +476,17 @@ export default function WorkerProfile() {
           city: profile.city,
           description: profile.description,
           experience: profile.experience,
-          equipment: profile.equipment,
+          skills: profile.skills,
+          profileBannerKey: profile.profileBannerKey,
         });
+        await updateDevWorkerAppearance({ profileBannerKey: profile.profileBannerKey });
       } else {
         const res = await apiPut("/workers/me", {
           fullName: profile.fullName,
           city: profile.city,
           description: profile.description,
           experience: profile.experience,
-          equipment: profile.equipment,
+          skills: profile.skills,
         });
         updated = res.data || {};
       }
@@ -502,14 +501,18 @@ export default function WorkerProfile() {
         avatarUrl: updated?.avatarUrl || p.avatarUrl,
       }));
 
+      if (!isDevMockToken()) {
+        await apiPut("/workers/me/appearance", { profileBannerKey: profile.profileBannerKey });
+      }
+
       if (updated?.avatarUrl && !profile.avatar) setPreviewAvatar(absUrl(updated.avatarUrl));
       if (profile.avatar) await uploadAvatarIfNeeded();
       await loadMeProfile();
 
-      alert("Профилът е обновен!");
+      return true;
     } catch (err) {
       console.error(err);
-      alert("Грешка при запазването.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -913,7 +916,7 @@ export default function WorkerProfile() {
     <div className="flex min-h-screen bg-[#07101d] text-white">
       <WorkerProfileSidebar activeTab={activeTab} onSelect={selectWorkerTab} />
 
-      <main className="flex-1 ml-64 pt-24 px-10 pb-20 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)]">
+      <main className="flex-1 px-4 pb-20 pt-40 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)] sm:px-6 lg:ml-64 lg:px-10 lg:pt-24">
         {activeTab === "dashboard" && (
           <div className="max-w-6xl mx-auto rounded-2xl border border-cyan-400/15 bg-[#081827]/75 p-6 shadow-2xl shadow-cyan-950/20">
             <WorkerDashboardSummary
@@ -1364,114 +1367,19 @@ export default function WorkerProfile() {
         )}
 
         {activeTab === "profile" && (
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <h1 className="text-3xl font-bold">Моят профил</h1>
-
-              <button
-                onClick={loadMyReviews}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-              >
-                Обнови рейтинг
-              </button>
-            </div>
-
-            {/* ✅ Rating panel */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-gray-400 text-sm">Рейтинг</div>
-                  {ratingLoading ? (
-                    <div className="text-gray-400 mt-2">Зареждане...</div>
-                  ) : ratingError ? (
-                    <div className="text-red-400 mt-2">{ratingError}</div>
-                  ) : (
-                    <>
-                      <div className="text-3xl font-bold mt-1">{ratingInfo.average} ⭐</div>
-                      <div className="text-sm text-gray-400">{ratingInfo.total} отзива</div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {!ratingLoading && !ratingError && (ratingInfo.items || []).length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {(ratingInfo.items || []).slice(0, 5).map((it) => (
-                    <div key={it.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="font-bold">{it.rating} ⭐</div>
-                        <div className="text-xs text-gray-400">{formatBG(it.created_at)}</div>
-                      </div>
-                      {it.comment ? <div className="text-gray-200 mt-2">{it.comment}</div> : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold">Профилна снимка</h2>
-              <div className="flex items-center gap-6 mt-4">
-                <img
-                  src={avatarSrc}
-                  className="w-32 h-32 rounded-full border-4 border-red-500 object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = "/media_files/Snejan.jpg";
-                  }}
-                />
-                <input type="file" accept="image/*" onChange={handleAvatarUpload} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <input
-                name="fullName"
-                value={profile.fullName}
-                onChange={handleChange}
-                placeholder="Трите имена / фирма"
-                className="p-3 rounded bg-gray-800 w-full"
-              />
-              <input
-                name="city"
-                value={profile.city}
-                onChange={handleChange}
-                placeholder="Град"
-                className="p-3 rounded bg-gray-800 w-full"
-              />
-            </div>
-
-            <textarea
-              name="description"
-              value={profile.description}
-              onChange={handleChange}
-              placeholder="Кратко описание"
-              className="w-full p-3 bg-gray-800 rounded h-28"
-            />
-
-            <textarea
-              name="experience"
-              value={profile.experience}
-              onChange={handleChange}
-              placeholder="Опит / специализации"
-              className="mt-4 w-full p-3 bg-gray-800 rounded h-24"
-            />
-
-            <textarea
-              name="equipment"
-              value={profile.equipment}
-              onChange={handleChange}
-              placeholder="Оборудване и техника"
-              className="mt-4 w-full p-3 bg-gray-800 rounded h-24"
-            />
-
-            <button
-              onClick={saveProfile}
-              disabled={saving}
-              className="mt-6 bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg text-lg font-bold"
-            >
-              {saving ? "Запазване..." : "Запази промените"}
-            </button>
-          </div>
+          <WorkerProfileEditorPremium
+            profile={profile}
+            setProfile={setProfile}
+            avatarSrc={avatarSrc}
+            onAvatarChange={handleAvatarUpload}
+            onSave={saveProfile}
+            onPreview={() => myUserId && navigate(`/workers/${myUserId}`)}
+            saving={saving}
+            ratingInfo={ratingInfo}
+            ratingLoading={ratingLoading}
+            ratingError={ratingError}
+            completedCount={completedRequests.length}
+          />
         )}
 
         {activeTab === "referrals" && (

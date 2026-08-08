@@ -49,6 +49,7 @@ assert(setDevIdentity("client", 101), "Active client should be selectable");
 const created = await mockRequest("post", "/requests", {
   category: "ВиК ремонти",
   description: "Mock moderation contract request",
+  photos: [{ url: "/uploads/mock-pending-request.jpg" }],
   address: "София, тестов адрес 1",
 });
 assert(created.data.statusKey === "pending_admin", "New request must enter pending review");
@@ -59,11 +60,25 @@ let workerFeed = await mockRequest("get", "/requests/worker");
 assert(!workerFeed.data.some((request) => request.id === created.data.id), "Pending request leaked into worker feed");
 
 assert(setDevIdentity("super_admin", 1), "Admin should be selectable");
+await expectStatus(
+  mockRequest("post", `/admin/requests/${created.data.id}/status`, { status: "published" }),
+  400,
+  "Request was published with an unresolved photo",
+);
+const pendingRequestMedia = (await mockRequest("get", "/admin/media")).data.find(
+  (media) => Number(media.requestId) === Number(created.data.id) && media.kind === "request_before",
+);
+assert(pendingRequestMedia, "Pending request photo is missing from admin media");
+await mockRequest("post", `/admin/media/${pendingRequestMedia.id}/moderation`, {
+  moderationStatus: "rejected",
+});
 await mockRequest("post", `/admin/requests/${created.data.id}/status`, { status: "published" });
 
 assert(setDevIdentity("worker", 201), "Worker should remain active after request approval");
 workerFeed = await mockRequest("get", "/requests/worker");
-assert(workerFeed.data.some((request) => request.id === created.data.id), "Approved request is missing from worker feed");
+const publishedRequest = workerFeed.data.find((request) => request.id === created.data.id);
+assert(publishedRequest, "Approved request is missing from worker feed");
+assert(publishedRequest.beforePhotos.length === 0, "Rejected request photo leaked into worker feed");
 
 assert(setDevIdentity("super_admin", 1), "Admin should be selectable for rejection");
 await mockRequest("post", `/admin/requests/${created.data.id}/status`, {

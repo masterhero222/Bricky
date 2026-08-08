@@ -52,7 +52,7 @@ export default function Navbar() {
       </div>
 
       {open && (
-        <div className="border-t border-slate-400/15 bg-[#08111f]/98 px-5 py-5 shadow-2xl md:hidden">
+        <div className="border-t border-slate-400/20 bg-[#07101d] px-5 py-5 shadow-2xl shadow-black/60 md:hidden">
           <nav className="flex flex-col gap-1 font-bold text-slate-200">
             <Link to="/" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Начало</Link>
             <Link to="/workers" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">Майсторите</Link>

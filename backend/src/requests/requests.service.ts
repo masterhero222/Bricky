@@ -776,6 +776,19 @@ export class RequestsService {
   async adminSetStatus(requestId: number, status: RepairRequestStatus, actorUserId: number, reason?: string) {
     const request = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Request not found');
+
+    if (status === 'published') {
+      const requestMedia = await this.media.findByRequest(requestId);
+      const unresolvedPhotos = requestMedia.filter(
+        (row) =>
+          row.kind === 'request_before' &&
+          !['approved', 'rejected'].includes(String(row.moderationStatus || '').toLowerCase()),
+      );
+      if (unresolvedPhotos.length) {
+        throw new BadRequestException('Review every request photo before publishing the request');
+      }
+    }
+
     request.status = status;
     if (status !== 'completed') {
       request.completedAt = null;
@@ -795,11 +808,6 @@ export class RequestsService {
       request.archivedByUserId = request.archivedByUserId || actorUserId;
     }
     await this.repairRequestsRepo.save(request);
-    if (status === 'published') {
-      await this.media.setRequestMediaModeration(requestId, 'request_before', 'approved');
-    } else if (status === 'archived') {
-      await this.media.setRequestMediaModeration(requestId, 'request_before', 'rejected');
-    }
     await this.addEvent(requestId, actorUserId, 'admin.status_changed', { status, reason: reason || null });
     return this.toDto(request, {
       includeUnapprovedMedia: true,
@@ -904,9 +912,19 @@ export class RequestsService {
       this.applicationsRepo.find({ where: { requestId: request.id } }).catch(() => [] as RequestApplicationEntity[]),
     ]);
 
-    const visibleMediaRows = options.includeUnapprovedMedia
-      ? mediaRows
-      : mediaRows.filter((row) => row.moderationStatus === 'approved');
+    const visibleMediaRows = mediaRows.filter((row) => {
+      if (row.moderationStatus === 'approved') return true;
+      if (!options.includeUnapprovedMedia) return false;
+
+      if (options.viewerRole === 'worker') {
+        return (
+          row.kind === 'request_after' &&
+          Number(row.ownerUserId) === Number(options.viewerUserId)
+        );
+      }
+
+      return true;
+    });
     const beforePhotos = this.mediaToPhotos(
       visibleMediaRows.filter((row) => row.kind === 'request_before'),
     );

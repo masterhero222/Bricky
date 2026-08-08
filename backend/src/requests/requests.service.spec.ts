@@ -147,6 +147,48 @@ describe('RequestsService v2 data core', () => {
     ]);
   });
 
+  it('hides unapproved client photos from the assigned worker but keeps their own pending after photos', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'vik',
+      title: 'VIK',
+      status: 'worker_selected',
+      assignedWorkerUserId: 201,
+      archivedAt: null,
+      createdAt: new Date('2026-07-19T08:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T08:00:00.000Z'),
+      client: {},
+    };
+    const repairRequestsRepo = repo({ find: jest.fn().mockResolvedValue([request]) });
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/approved-before.jpg', moderationStatus: 'approved' },
+        { id: 2, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/rejected-before.jpg', moderationStatus: 'rejected' },
+        { id: 3, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/pending-before.jpg', moderationStatus: 'pending' },
+        { id: 4, ownerUserId: 201, kind: 'request_after', publicUrl: '/uploads/pending-after.jpg', moderationStatus: 'pending' },
+      ]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, usersRepo, workerProfilesRepo, media });
+
+    const [result] = await service.getForWorkersFeed(201);
+
+    expect(result.beforePhotos.map((photo) => photo.url)).toEqual(['/uploads/approved-before.jpg']);
+    expect(result.afterPhotos.map((photo) => photo.url)).toEqual(['/uploads/pending-after.jpg']);
+  });
+
   it('hides client contact details and exact location until the worker is assigned', async () => {
     const request: any = {
       id: 1,
@@ -500,7 +542,7 @@ describe('RequestsService v2 data core', () => {
     );
   });
 
-  it('approves request photos when admin publishes a request', async () => {
+  it('keeps individual photo moderation decisions when admin publishes a request', async () => {
     const repairRequestsRepo = repo({
       findOne: jest.fn().mockResolvedValue({
         id: 1,
@@ -511,7 +553,10 @@ describe('RequestsService v2 data core', () => {
     });
     const media = {
       createAsset: jest.fn(),
-      findByRequest: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'approved' },
+        { id: 2, kind: 'request_before', moderationStatus: 'rejected' },
+      ]),
       setRequestMediaModeration: jest.fn().mockResolvedValue([]),
     };
 
@@ -520,7 +565,27 @@ describe('RequestsService v2 data core', () => {
     const updated = await service.adminSetStatus(1, 'published', 1, 'ok');
 
     expect(updated.statusKey).toBe('published');
-    expect(media.setRequestMediaModeration).toHaveBeenCalledWith(1, 'request_before', 'approved');
+    expect(media.setRequestMediaModeration).not.toHaveBeenCalled();
+  });
+
+  it('blocks request publishing until every request photo is moderated', async () => {
+    const request = { id: 1, status: 'pending_admin', completedAt: null };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'pending' },
+      ]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    await expect(service.adminSetStatus(1, 'published', 1, 'ok')).rejects.toBeInstanceOf(BadRequestException);
+    expect(repairRequestsRepo.save).not.toHaveBeenCalled();
+    expect(request.status).toBe('pending_admin');
   });
 
   it('returns an immutable admin timeline in chronological order', async () => {

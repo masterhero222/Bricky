@@ -38,10 +38,20 @@ describe('AdminService media moderation referral trigger', () => {
           callback(manager),
       ),
     };
+    const users = {
+      updateStatus: jest.fn().mockResolvedValue({ id: 201, status: 'active' }),
+    };
+    const workers = {
+      setApprovalStatus: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    };
     const service = new AdminService(
       auditRepo as never,
-      {} as never,
-      {} as never,
+      users as never,
+      workers as never,
       {} as never,
       media as never,
       billing as never,
@@ -56,6 +66,8 @@ describe('AdminService media moderation referral trigger', () => {
       dataSource,
       manager,
       transactionalAuditRepo,
+      users,
+      workers,
     };
   }
 
@@ -108,5 +120,30 @@ describe('AdminService media moderation referral trigger', () => {
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(billing.setPlan).toHaveBeenCalledWith(201, 'pro', manager);
+  });
+
+  it('activates and publishes a worker in the approval transaction', async () => {
+    const { service, users, workers, manager, transactionalAuditRepo } = setup(null);
+
+    await service.setWorkerApproval(1, 201, 'approved', 'profile verified');
+
+    expect(users.updateStatus).toHaveBeenCalledWith(201, 'active', manager);
+    expect(workers.setApprovalStatus).toHaveBeenCalledWith(
+      201,
+      'approved',
+      undefined,
+      manager,
+    );
+    expect(transactionalAuditRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'worker.approval_changed',
+        targetId: '201',
+        metadataJson: expect.objectContaining({
+          approvalStatus: 'approved',
+          userStatus: 'active',
+          visibilityStatus: 'public',
+        }),
+      }),
+    );
   });
 });

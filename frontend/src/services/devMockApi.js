@@ -523,6 +523,7 @@ export function saveDevWorkerProfile(data = {}) {
     description: data.description ?? worker.description,
     experience: data.experience ?? worker.experience,
     equipment: data.equipment ?? worker.equipment,
+    skills: Array.isArray(data.skills) ? data.skills : worker.skills,
   });
 
   writeDb(db);
@@ -762,15 +763,6 @@ function completedJobsForWorker(db, worker, includeUnapproved = false) {
     }));
 
   return sortNewest([...canonical, ...legacy]);
-}
-
-function setRequestMediaModeration(db, requestId, kind, moderationStatus) {
-  db.media = Array.isArray(db.media) ? db.media : [];
-  db.media.forEach((media) => {
-    if (Number(media.requestId) === Number(requestId) && media.kind === kind) {
-      media.moderationStatus = moderationStatus;
-    }
-  });
 }
 
 function approvedWorkerAvatarUrl(db, worker) {
@@ -1124,12 +1116,45 @@ function roughRequestCoordinate(value) {
   return Number(coordinate.toFixed(2));
 }
 
-function workerRequestView(request, workerUserId) {
+function workerVisibleRequestPhotos(db, request, kind, workerUserId) {
+  const mediaRows = (Array.isArray(db.media) ? db.media : []).filter(
+    (media) => Number(media.requestId) === Number(request.id) && media.kind === kind,
+  );
+  if (mediaRows.length) {
+    return mediaRows
+      .filter(
+        (media) =>
+          media.moderationStatus === "approved" ||
+          (kind === "request_after" && Number(media.ownerUserId) === Number(workerUserId)),
+      )
+      .map((media) => ({
+        id: media.id,
+        name: media.fileName || media.name || `media-${media.id}`,
+        url: media.publicUrl || media.url,
+        publicUrl: media.publicUrl || media.url,
+        storageKey: media.storageKey,
+        moderationStatus: media.moderationStatus,
+        created_at: media.createdAt || media.created_at || nowIso(),
+      }));
+  }
+
+  const fallback = kind === "request_before" ? request.beforePhotos || request.photos : request.afterPhotos;
+  return normalizePhotos(fallback).filter(
+    (photo) => !photo.moderationStatus || photo.moderationStatus === "approved",
+  );
+}
+
+function workerRequestView(request, workerUserId, db) {
   const isAssigned =
     Number(request.assignedWorkerUserId) === Number(workerUserId);
+  const beforePhotos = workerVisibleRequestPhotos(db, request, "request_before", workerUserId);
+  const afterPhotos = workerVisibleRequestPhotos(db, request, "request_after", workerUserId);
 
   return {
     ...request,
+    photos: beforePhotos,
+    beforePhotos,
+    afterPhotos,
     clientName: isAssigned ? request.clientName : "Клиент",
     email: null,
     phone: null,
@@ -1467,6 +1492,7 @@ export async function mockRequest(method, url, data) {
       if (!worker) return fail("Worker not found", 404);
       worker.approvalStatus = data?.approvalStatus || data?.status || "approved";
       worker.visibilityStatus = worker.approvalStatus === "approved" ? "public" : "hidden";
+      if (worker.approvalStatus === "approved") worker.status = "active";
       addAudit(db, "worker_approval_changed", "worker", worker.userId, worker.approvalStatus);
       writeDb(db);
       return response(publicUser(worker, db));
@@ -1477,9 +1503,16 @@ export async function mockRequest(method, url, data) {
       const request = db.requests.find((item) => Number(item.id) === Number(requestStatusMatch[1]));
       if (!request) return fail("Request not found", 404);
       const nextStatus = data?.status || requestStatusKey(request);
+      if (nextStatus === "published") {
+        const unresolvedPhotos = (Array.isArray(db.media) ? db.media : []).filter(
+          (media) =>
+            Number(media.requestId) === Number(request.id) &&
+            media.kind === "request_before" &&
+            !["approved", "rejected"].includes(String(media.moderationStatus || "").toLowerCase()),
+        );
+        if (unresolvedPhotos.length) return fail("Review every request photo before publishing the request", 400);
+      }
       setMockRequestStatus(request, nextStatus);
-      if (nextStatus === "published") setRequestMediaModeration(db, request.id, "request_before", "approved");
-      if (nextStatus === "archived") setRequestMediaModeration(db, request.id, "request_before", "rejected");
       addMockRequestEvent(db, request.id, "admin.status_changed", {
         status: nextStatus,
         reason: data?.reason || null,
@@ -1729,12 +1762,19 @@ export async function mockRequest(method, url, data) {
 
   if (method === "get" && path === "/requests/map") {
     if (role !== "worker") return fail("Worker only", 403);
-    const items = sortNewest(db.requests);
-    return response(
-      role === "worker"
-        ? items.map((request) => workerRequestView(request, userId))
-        : items,
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+    const items = sortNewest(
+      db.requests.filter((request) => {
+        const assigned = Number(request.assignedWorkerUserId || 0);
+        const status = requestStatusKey(request);
+        if (request.archivedAt) return false;
+        if (["draft", "pending_admin", "canceled", "archived", "completed"].includes(status)) return false;
+        if (!assigned) return ["published", "applied"].includes(status);
+        return assigned === userId;
+      }),
     );
+    return response(items.map((request) => workerRequestView(request, userId, db)));
   }
 
   if (method === "get" && path === "/requests/worker") {
@@ -1745,7 +1785,7 @@ export async function mockRequest(method, url, data) {
       return response(
         sortNewest(
           db.requests.filter((r) => Number(r.assignedWorkerUserId) === userId && requestStatusKey(r) === "completed" && Boolean(r.archivedAt)),
-        ).map((request) => workerRequestView(request, userId)),
+        ).map((request) => workerRequestView(request, userId, db)),
       );
     }
 
@@ -1758,7 +1798,7 @@ export async function mockRequest(method, url, data) {
       return assigned === userId;
     });
     return response(
-      sortNewest(items).map((request) => workerRequestView(request, userId)),
+      sortNewest(items).map((request) => workerRequestView(request, userId, db)),
     );
   }
 

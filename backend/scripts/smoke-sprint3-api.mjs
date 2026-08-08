@@ -301,6 +301,16 @@ async function main() {
     /invalid (?:request|lifecycle) transition/i,
   );
 
+  const pendingBeforeMedia = (await api('/admin/media', { token: admin.token })).data.find(
+    (media) => Number(media.requestId) === requestId && media.kind === 'request_before',
+  );
+  assert.ok(pendingBeforeMedia, 'Pending request photo is missing from admin media');
+  await api(`/admin/media/${pendingBeforeMedia.id}/moderation`, {
+    method: 'POST',
+    token: admin.token,
+    body: { moderationStatus: 'approved' },
+  });
+
   await api(`/admin/requests/${requestId}/status`, {
     method: 'POST',
     token: admin.token,

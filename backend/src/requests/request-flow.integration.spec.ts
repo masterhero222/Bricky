@@ -204,9 +204,11 @@ describe('Sprint 3 canonical request flow', () => {
     expect(created.statusKey).toBe('pending_admin');
     expect(mediaRows[0].moderationStatus).toBe('pending');
 
+    mediaRows[0].moderationStatus = 'approved';
     await requestService.adminSetStatus(created.id, 'published', 900, 'approved');
     expect(requests[0].status).toBe('published');
     expect(mediaRows[0].moderationStatus).toBe('approved');
+    expect(media.setRequestMediaModeration).not.toHaveBeenCalled();
 
     await requestService.applyToRequest(created.id, 201);
     expect(requests[0].status).toBe('applied');

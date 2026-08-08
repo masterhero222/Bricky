@@ -71,9 +71,10 @@ export class UsersService {
     return repo.save(profile);
   }
 
-  async updateStatus(userId: number, status: string) {
-    await this.repo.update({ id: userId }, { status });
-    return this.findOne(userId);
+  async updateStatus(userId: number, status: string, manager?: EntityManager) {
+    const repo = manager?.getRepository(UserEntity) ?? this.repo;
+    await repo.update({ id: userId }, { status });
+    return repo.findOne({ where: { id: userId } });
   }
 
   async searchUsers(query = '') {

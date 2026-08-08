@@ -72,19 +72,32 @@ export class AdminService {
       ['pending', 'approved', 'rejected', 'suspended'],
       'Invalid worker approval status',
     );
-    const worker = await this.workers.setApprovalStatus(
-      workerUserId,
-      approvalStatus,
-    );
-    await this.log(
-      actorUserId,
-      'worker.approval_changed',
-      'worker',
-      workerUserId,
-      reason,
-      { approvalStatus },
-    );
-    return worker;
+    return this.dataSource.transaction(async (manager) => {
+      if (approvalStatus === 'approved') {
+        await this.users.updateStatus(workerUserId, 'active', manager);
+      }
+
+      const worker = await this.workers.setApprovalStatus(
+        workerUserId,
+        approvalStatus,
+        undefined,
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'worker.approval_changed',
+        'worker',
+        workerUserId,
+        reason,
+        {
+          approvalStatus,
+          userStatus: approvalStatus === 'approved' ? 'active' : undefined,
+          visibilityStatus: approvalStatus === 'approved' ? 'public' : undefined,
+        },
+        manager,
+      );
+      return worker;
+    });
   }
 
   listRequests(queue?: string) {

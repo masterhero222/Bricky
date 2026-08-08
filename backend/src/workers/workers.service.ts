@@ -461,8 +461,14 @@ export class WorkersService {
     return { ok: true };
   }
 
-  async setApprovalStatus(workerUserId: number, approvalStatus: string, visibilityStatus?: string) {
-    await this.workerProfilesRepo.update(
+  async setApprovalStatus(
+    workerUserId: number,
+    approvalStatus: string,
+    visibilityStatus?: string,
+    manager?: EntityManager,
+  ) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    await profilesRepo.update(
       { userId: workerUserId },
       {
         approvalStatus,
@@ -470,6 +476,7 @@ export class WorkersService {
           visibilityStatus || (approvalStatus === 'approved' ? 'public' : approvalStatus === 'suspended' ? 'hidden' : 'private'),
       },
     );
+    if (manager) return profilesRepo.findOne({ where: { userId: workerUserId } });
     return this.findByUserId(workerUserId);
   }
 
