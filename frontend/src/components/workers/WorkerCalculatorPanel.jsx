@@ -45,7 +45,8 @@ export default function WorkerCalculatorPanel() {
     () => catalog?.categories?.find((category) => category.categoryKey === categoryKey),
     [catalog, categoryKey],
   );
-  const activities = liveCategory?.activities?.filter((activity) => activity.isActive) || staticCategory?.activities || [];
+  const liveActivities = liveCategory?.activities?.filter((activity) => activity.isActive) || [];
+  const activities = liveActivities.length ? liveActivities : staticCategory?.activities || [];
   const selectedActivity = activities.find((activity) => (activity.activityKey || activity.key) === activityKey);
   const unitType = selectedActivity?.unitType || selectedActivity?.unit_type || "item";
   const quantityLabel = UNIT_LABELS[unitType] || "Брой услуги";
