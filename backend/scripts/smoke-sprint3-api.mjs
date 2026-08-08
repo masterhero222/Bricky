@@ -479,7 +479,7 @@ async function main() {
   });
   assert.match(
     String(unassignAfterStart.data?.message || ''),
-    /invalid (?:request|lifecycle) transition/i,
+    /locked after worker confirmation/i,
   );
 
   const afterUpload = (
