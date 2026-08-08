@@ -61,7 +61,7 @@ stop_process() {
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
     command_line="$(ps -p "$pid" -o args=)"
     process_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
-    if [[ "$command_line" != *"$BUILDER_ROOT"* && "$process_cwd" != "$BUILDER_ROOT"/* ]]; then
+    if [[ "$command_line" != *"$BUILDER_ROOT"* && "$process_cwd" != "$BUILDER_ROOT" && "$process_cwd" != "$BUILDER_ROOT"/* ]]; then
       echo "Refusing to stop unexpected process $pid: $command_line" >&2
       exit 1
     fi
