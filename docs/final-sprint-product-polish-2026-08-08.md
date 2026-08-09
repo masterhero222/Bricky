@@ -1,10 +1,35 @@
 # Bricky Final Sprint - Product Polish и безплатно публично пускане
 
-Последна актуализация: 08.08.2026 г.
+Последна актуализация: 09.08.2026 г.
 
 Работен branch: `codex/sprint-3-integration`
 
-Live baseline: `a124a38`
+Live release: `9a16713e4dc5114e1b9b479dad84f0b9d670b950`
+
+## Release acceptance - 09.08.2026
+
+Статус: **приет и активиран в production**.
+
+- Backend: 33 test suites, 211 tests passed.
+- Frontend: lint и production build passed.
+- Dependency audit: 0 production vulnerabilities за backend и frontend.
+- Migration, backup restore, rollback, API и browser rehearsal: passed.
+- Production health: database `ok`, storage `ok`, commit `9a16713`.
+- Production browser smoke: public routes, authentication, role access, privacy и media passed.
+- Автоматични health checks и ежедневни database/uploads backups са активни.
+- PM2 и systemd логовете са с ограничение и ротация.
+- Безплатен период: 09.08.2026 - 08.09.2026 (30 дни, UTC граници в release отчета).
+- Billing и automatic charging остават изключени до отделния Payment Sprint.
+
+Release evidence:
+
+- `/var/backups/bricky-final-release/20260808T233643Z/manifest.json`
+- `/var/tmp/bricky-final-release-rehearsal-9a16713/rehearsal-certificate.json`
+- `/var/backups/bricky-final-release/20260808T233643Z/post-deploy-report.json`
+- `/var/backups/bricky-final-release/20260808T233643Z/free-launch-window.json`
+- `/var/backups/bricky-final-release/20260808T233643Z/launch-metrics-baseline.json`
+
+Неприложените P2 подобрения и допълнителната ръчна cross-browser матрица остават backlog за наблюдавания безплатен период; те не блокират приетия production release.
 
 ## Цел
 

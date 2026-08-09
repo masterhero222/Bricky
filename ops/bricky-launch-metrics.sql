@@ -20,7 +20,7 @@ GROUP BY status
 ORDER BY status;
 
 SELECT event_type, COUNT(*) AS events
-FROM request_events
+FROM repair_request_events
 WHERE created_at >= @from_date
 GROUP BY event_type
 ORDER BY events DESC;
@@ -37,7 +37,7 @@ FROM repair_request_reviews
 WHERE created_at >= @from_date;
 
 SELECT action, COUNT(*) AS admin_actions
-FROM admin_audit_logs
+FROM admin_action_audit_logs
 WHERE created_at >= @from_date
 GROUP BY action
 ORDER BY admin_actions DESC;
