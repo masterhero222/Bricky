@@ -227,6 +227,8 @@ function SofiaTileMap({ requests, activeId, expandedClusterId, onSelect, onClust
             src={tile.url}
             alt=""
             draggable={false}
+            loading="lazy"
+            decoding="async"
             className="absolute select-none repair-map-tile"
             style={{ left: tile.left, top: tile.top, width: TILE_SIZE, height: TILE_SIZE }}
           />
@@ -470,7 +472,7 @@ export default function RepairMap() {
                     <div className="grid grid-cols-2 gap-3">
                       {activePhotos.slice(0, 4).map((photo) => (
                         <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                          <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover hover:scale-105 transition-transform" />
+                          <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} loading="lazy" decoding="async" className="h-24 w-full object-cover hover:scale-105 transition-transform" />
                         </a>
                       ))}
                     </div>

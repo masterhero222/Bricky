@@ -15,6 +15,7 @@ type CreateMediaAssetInput = {
   width?: number | null;
   height?: number | null;
   moderationStatus?: string;
+  displayOrder?: number | null;
 };
 
 @Injectable()
@@ -43,22 +44,25 @@ export class MediaService {
         width: input.width ?? null,
         height: input.height ?? null,
         moderationStatus: input.moderationStatus ?? 'pending',
+        displayOrder: input.displayOrder ?? null,
       }),
     );
   }
 
   async findByRequest(requestId: number) {
-    return this.mediaRepo.find({
+    const rows = await this.mediaRepo.find({
       where: { requestId },
       order: { createdAt: 'ASC' },
     });
+    return this.sortByDisplayOrder(rows, 'ASC');
   }
 
   async findByWorker(workerUserId: number) {
-    return this.mediaRepo.find({
+    const rows = await this.mediaRepo.find({
       where: { workerUserId },
       order: { createdAt: 'DESC' },
     });
+    return this.sortByDisplayOrder(rows, 'DESC');
   }
 
   async listAll() {
@@ -105,7 +109,28 @@ export class MediaService {
     return { ok: true };
   }
 
+  async setDisplayOrder(assetIds: number[]) {
+    await this.mediaRepo.manager.transaction(async (manager) => {
+      for (const [displayOrder, id] of assetIds.entries()) {
+        await manager.update(MediaAssetEntity, { id }, { displayOrder });
+      }
+    });
+
+    return { ok: true };
+  }
+
   private isInlineDataUrl(value: any) {
     return /^data:/i.test(String(value || '').trim());
+  }
+
+  private sortByDisplayOrder(rows: MediaAssetEntity[], fallbackDirection: 'ASC' | 'DESC') {
+    return rows.sort((left, right) => {
+      const leftOrder = left.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+      const delta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      return fallbackDirection === 'ASC' ? delta : -delta;
+    });
   }
 }

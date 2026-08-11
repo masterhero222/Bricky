@@ -42,7 +42,14 @@ export default function RequestPhotoCarousel({ photos, getUrl }) {
       <div ref={trackRef} onScroll={updateArrows} className="flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {photos.map((photo, index) => (
           <a key={photo.id || `${getUrl(photo)}-${index}`} href={getUrl(photo)} target="_blank" rel="noreferrer" className="block h-32 w-44 shrink-0 snap-start overflow-hidden rounded-[14px] border border-slate-400/15 bg-slate-950/40 shadow-xl shadow-black/20">
-            <img src={getUrl(photo)} alt={photo.name || `Снимка ${index + 1} към заявката`} className="h-full w-full object-cover transition duration-200 hover:scale-105" />
+            <img
+              src={getUrl(photo)}
+              alt={photo.name || `Снимка ${index + 1} към заявката`}
+              loading="lazy"
+              fetchPriority="low"
+              decoding="async"
+              className="h-full w-full object-cover transition duration-200 hover:scale-105"
+            />
           </a>
         ))}
       </div>

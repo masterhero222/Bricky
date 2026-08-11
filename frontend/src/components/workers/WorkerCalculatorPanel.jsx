@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calculator, Check, RefreshCw } from "lucide-react";
 import { REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
-import { getPricingCategory } from "../../constants/repairPricingConfig";
 import { apiGet } from "../../services/api";
 import { calculateRepairEstimate } from "../../utils/repairPriceCalculator";
+import { calculateCatalogEstimate, catalogActivities } from "../../utils/pricingCatalogAdapter";
 
 const PRICING_MODES = [
   ["labor_only", "Само труд"],
@@ -17,12 +17,6 @@ const UNIT_LABELS = {
   room: "Брой помещения",
   hour: "Работни часове",
 };
-
-const SCALABLE_UNITS = new Set(Object.keys(UNIT_LABELS));
-
-function roundPrice(value) {
-  return Math.ceil(Math.max(0, Number(value) || 0));
-}
 
 export default function WorkerCalculatorPanel() {
   const [categoryKey, setCategoryKey] = useState(REPAIR_CATEGORY_OPTIONS[0]?.key || "vik");
@@ -40,52 +34,14 @@ export default function WorkerCalculatorPanel() {
     return () => { active = false; };
   }, []);
 
-  const staticCategory = useMemo(() => getPricingCategory(categoryKey), [categoryKey]);
-  const liveCategory = useMemo(
-    () => catalog?.categories?.find((category) => category.categoryKey === categoryKey),
-    [catalog, categoryKey],
-  );
-  const liveActivities = liveCategory?.activities?.filter((activity) => activity.isActive) || [];
-  const activities = liveActivities.length ? liveActivities : staticCategory?.activities || [];
+  const activities = useMemo(() => catalogActivities(catalog, categoryKey), [catalog, categoryKey]);
   const selectedActivity = activities.find((activity) => (activity.activityKey || activity.key) === activityKey);
   const unitType = selectedActivity?.unitType || selectedActivity?.unit_type || "item";
   const quantityLabel = UNIT_LABELS[unitType] || "Брой услуги";
   const numericQuantity = Math.max(0, Number(quantity) || 0);
 
-  const liveRule = useMemo(
-    () => catalog?.pricingRules?.find(
-      (rule) => rule.categoryKey === categoryKey && rule.activityKey === activityKey && rule.isActive,
-    ),
-    [activityKey, catalog, categoryKey],
-  );
-
   const estimate = useMemo(() => {
     if (!activityKey || numericQuantity <= 0) return null;
-    if (liveRule) {
-      const scale = SCALABLE_UNITS.has(unitType) ? numericQuantity : 1;
-      const laborMin = roundPrice(Number(liveRule.laborMin) * scale);
-      const laborMax = roundPrice(Number(liveRule.laborMax) * scale);
-      const includeMaterials = pricingMode === "labor_plus_materials";
-      const materialMin = includeMaterials && liveRule.materialMin != null
-        ? roundPrice(Number(liveRule.materialMin) * scale)
-        : 0;
-      const materialMax = includeMaterials && liveRule.materialMax != null
-        ? roundPrice(Number(liveRule.materialMax) * scale)
-        : 0;
-      return {
-        expectedMin: laborMin + materialMin,
-        expectedMax: laborMax + materialMax,
-        laborMin,
-        laborMax,
-        materialMin,
-        materialMax,
-        currency: liveRule.currency || "EUR",
-        pricingVersion: liveRule.version,
-        pricingMode,
-        source: "live",
-      };
-    }
-
     const fallbackEstimate = calculateRepairEstimate({
         categoryKey,
         selectedActivities: [activityKey],
@@ -95,13 +51,20 @@ export default function WorkerCalculatorPanel() {
         location: "sofia_regular",
       });
 
-    return {
-      ...fallbackEstimate,
-      expectedMin: fallbackEstimate.totalMin,
-      expectedMax: fallbackEstimate.totalMax,
-      source: "fallback",
-    };
-  }, [activityKey, categoryKey, liveRule, numericQuantity, pricingMode, unitType]);
+    return calculateCatalogEstimate({
+      catalog,
+      categoryKey,
+      selectedActivities: [activityKey],
+      quantity: numericQuantity,
+      exactAreaM2: unitType === "m2" ? numericQuantity : null,
+      pricingMode,
+      fallbackEstimate: {
+        ...fallbackEstimate,
+        expectedMin: fallbackEstimate.totalMin,
+        expectedMax: fallbackEstimate.totalMax,
+      },
+    });
+  }, [activityKey, catalog, categoryKey, numericQuantity, pricingMode, unitType]);
 
   function changeCategory(nextCategoryKey) {
     setCategoryKey(nextCategoryKey);

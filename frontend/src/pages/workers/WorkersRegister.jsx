@@ -1,5 +1,11 @@
 import { useState } from 'react';
 import { apiPost } from '../../services/api';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS,
+  passwordPolicyError,
+} from '../../utils/passwordPolicy';
 
 import { REPAIR_CATEGORY_OPTIONS } from '../../constants/repairCatalog';
 
@@ -43,6 +49,13 @@ export default function WorkersRegister() {
 
     if (form.password !== form.confirmPassword) {
       setError('Паролите не съвпадат.');
+      return;
+    }
+
+
+    const passwordError = passwordPolicyError(form.password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -108,15 +121,24 @@ export default function WorkersRegister() {
           value={form.fullName}
           placeholder="Трите имена"
           onChange={handleChange}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
+          aria-describedby="worker-password-requirements"
           className="w-full p-3 rounded bg-gray-700"
           required
         />
+
+        <p id="worker-password-requirements" className="text-sm text-gray-400">
+          {PASSWORD_REQUIREMENTS}
+        </p>
 
         <input
           name="email"
           value={form.email}
           placeholder="Имейл"
           onChange={handleChange}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
           className="w-full p-3 rounded bg-gray-700"
           required
         />

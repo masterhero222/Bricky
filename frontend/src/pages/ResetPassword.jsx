@@ -2,6 +2,12 @@ import { useState } from "react";
 import { CheckCircle2, KeyRound, Mail } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiPost } from "../services/api";
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS,
+  passwordPolicyError,
+} from "../utils/passwordPolicy";
 
 function errorMessage(error, fallback) {
   const message = error?.response?.data?.message;
@@ -40,6 +46,11 @@ export default function ResetPassword() {
     setMessage("");
     if (password !== confirmation) {
       setError("Паролите не съвпадат.");
+      return;
+    }
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     setLoading(true);
@@ -81,6 +92,7 @@ export default function ResetPassword() {
         ) : token ? (
           <form onSubmit={confirmPassword} className="mt-7 space-y-5">
             <PasswordField label="Нова парола" value={password} onChange={setPassword} />
+            <p className="text-sm text-slate-400">{PASSWORD_REQUIREMENTS}</p>
             <PasswordField label="Повтори паролата" value={confirmation} onChange={setConfirmation} />
             <button disabled={loading} className="bricky-button-primary w-full justify-center">
               <KeyRound size={18} /> {loading ? "Запазване..." : "Задай новата парола"}
@@ -111,7 +123,7 @@ function PasswordField({ label, value, onChange }) {
       <span className="mb-2 block text-sm font-bold text-slate-300">{label}</span>
       <span className="flex items-center gap-3 rounded-lg border border-slate-400/20 bg-slate-950/35 px-4 focus-within:border-cyan-300/60">
         <KeyRound size={18} className="text-slate-500" />
-        <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-slate-100 outline-none" />
+        <input required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} type="password" autoComplete="new-password" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-slate-100 outline-none" />
       </span>
     </label>
   );

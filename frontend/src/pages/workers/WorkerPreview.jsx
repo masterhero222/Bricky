@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost } from '../../services/api';
 import { mediaUrl, photoMediaUrl } from '../../utils/mediaUrls';
@@ -16,13 +16,15 @@ export default function WorkerPreview() {
 
   const [worker, setWorker] = useState(null);
   const [completedJobs, setCompletedJobs] = useState([]);
-  const [ratingInfo, setRatingInfo] = useState({ total: 0, average: 0 });
+  const [ratingInfo, setRatingInfo] = useState({ total: 0, average: 0, items: [] });
   const [albumViewer, setAlbumViewer] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(true);
   const [err, setErr] = useState('');
   const [selecting, setSelecting] = useState(false);
   const [selectError, setSelectError] = useState('');
+  const loadSequence = useRef(0);
 
   const publicName = worker?.fullName || worker?.name || 'Профил на майстор';
   const publicDescription =
@@ -52,46 +54,63 @@ export default function WorkerPreview() {
   }, [requestId, userId]);
 
   async function load() {
+    const sequence = ++loadSequence.current;
+    let profileLoaded = false;
     try {
       setErr('');
       setLoading(true);
+      setDetailsLoading(true);
 
       if (!userId) {
         setErr('Липсва userId в URL.');
         setWorker(null);
         setCompletedJobs([]);
-        setRatingInfo({ total: 0, average: 0 });
+        setRatingInfo({ total: 0, average: 0, items: [] });
         return;
       }
 
-      const [wRes, hRes, rRes] = await Promise.all([
-        apiGet(`/workers/${userId}`),
+      const wRes = await apiGet(`/workers/${userId}`);
+      if (sequence !== loadSequence.current) return;
+      setWorker(wRes.data || null);
+      profileLoaded = true;
+    } catch (e) {
+      if (sequence !== loadSequence.current) return;
+      console.error(e);
+      setErr('Не успях да заредя профила на майстора.');
+      setWorker(null);
+      setCompletedJobs([]);
+      setRatingInfo({ total: 0, average: 0, items: [] });
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false);
+    }
+
+    if (sequence !== loadSequence.current) return;
+    if (!profileLoaded) {
+      setDetailsLoading(false);
+      return;
+    }
+
+    try {
+      const [hRes, rRes] = await Promise.all([
         apiGet(`/workers/${userId}/history`).catch(() => ({ data: [] })),
         apiGet(`/reviews/worker/${userId}`).catch(() => ({
           data: { total: 0, average: 0 },
         })),
       ]);
 
-      setWorker(wRes.data || null);
-
+      if (sequence !== loadSequence.current) return;
       setCompletedJobs(Array.isArray(hRes.data) ? hRes.data : []);
 
       const info = rRes?.data || {};
       const total = Number(info.total);
       const average = Number(info.average);
-
       setRatingInfo({
         total: Number.isFinite(total) ? total : 0,
         average: Number.isFinite(average) ? average : 0,
+        items: Array.isArray(info.items) ? info.items : [],
       });
-    } catch (e) {
-      console.error(e);
-      setErr('Не успях да заредя профила на майстора.');
-      setWorker(null);
-      setCompletedJobs([]);
-      setRatingInfo({ total: 0, average: 0 });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setDetailsLoading(false);
     }
   }
 
@@ -147,9 +166,10 @@ export default function WorkerPreview() {
 
     const jobAlbums = (Array.isArray(completedJobs) ? completedJobs : [])
       .map((job) => {
+        const ordered = cleanPhotos(job.portfolioPhotos);
         const before = cleanPhotos(job.beforePhotos || job.photos);
         const after = cleanPhotos(job.afterPhotos);
-        const photos = [...after, ...before];
+        const photos = ordered.length > 0 ? ordered : [...after, ...before];
         const id = job.requestId || job.id;
 
         return {
@@ -238,6 +258,7 @@ export default function WorkerPreview() {
         avatarSrc={avatarSrc}
         bannerKey={bannerKey}
         ratingInfo={ratingInfo}
+        detailsLoading={detailsLoading}
         completedProjects={workerAlbums}
         mode={requestId ? 'candidateSelection' : 'public'}
         isSubmitting={selecting}
@@ -275,6 +296,7 @@ export default function WorkerPreview() {
               <img
                 src={activePhoto.url}
                 alt={activePhoto.name || activeAlbum.title}
+                decoding="async"
                 className="max-h-[72vh] w-full object-contain"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -322,6 +344,9 @@ export default function WorkerPreview() {
                     <img
                       src={photo.url}
                       alt={photo.name || activeAlbum.title}
+                      loading="lazy"
+                      fetchPriority="low"
+                      decoding="async"
                       className="h-full w-full object-cover"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';

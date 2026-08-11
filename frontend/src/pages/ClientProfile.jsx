@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
-import LogoutButton from "../components/LogoutButton";
+import ClientProfileSidebar from "../components/client/ClientProfileSidebar";
 import { photoMediaUrl } from "../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 import { RequestFlow } from "./Requests";
@@ -321,36 +321,9 @@ export default function ClientProfile() {
 
   return (
     <div className="flex min-h-[calc(100vh-78px)] text-white">
-      <aside className="fixed bottom-0 top-[78px] z-30 hidden w-64 border-r border-slate-400/15 bg-[#0d1728]/92 pt-12 backdrop-blur-xl lg:block">
-        <nav className="flex flex-col gap-2 px-5 text-sm">
-          {[
-            ["requests", "Моите заявки"],
-            ["history", "История"],
-            ["create", "Направи заявка"],
-            ["profile", "Профил"],
-            ["settings", "Настройки"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`rounded-xl px-4 py-3 text-left font-bold transition ${activeTab === key ? "border border-green-400/20 bg-green-400/10 text-green-300" : "text-slate-300 hover:bg-slate-400/10 hover:text-white"}`}
-            >
-              {label}
-            </button>
-          ))}
+      <ClientProfileSidebar activeTab={activeTab} onSelect={setActiveTab} />
 
-          <div className="mt-4">
-            <LogoutButton />
-          </div>
-        </nav>
-      </aside>
-
-      <main className="min-w-0 flex-1 px-4 pb-20 pt-12 sm:px-7 lg:ml-64 lg:px-10">
-        <div className="mb-8 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
-          {[["requests", "Моите заявки"], ["history", "История"], ["create", "Направи заявка"], ["profile", "Профил"], ["settings", "Настройки"]].map(([key, label]) => (
-            <button key={key} onClick={() => setActiveTab(key)} className={`shrink-0 rounded-xl px-4 py-3 text-sm font-bold ${activeTab === key ? "bg-green-500/15 text-green-300" : "bg-slate-800/70 text-slate-300"}`}>{label}</button>
-          ))}
-        </div>
+      <main className="min-w-0 flex-1 px-4 pb-20 pt-24 sm:px-7 lg:ml-64 lg:px-10 lg:pt-12">
         {["requests", "history"].includes(activeTab) && (
           <div className="mx-auto max-w-7xl">
             <div className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">

@@ -46,6 +46,9 @@ export class MediaAssetEntity {
   @Column({ name: 'moderation_status', default: 'pending' })
   moderationStatus: string;
 
+  @Column({ name: 'display_order', type: 'int', nullable: true })
+  displayOrder: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

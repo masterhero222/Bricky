@@ -33,6 +33,7 @@ function shouldUseMock(url) {
       path === "/auth/register" ||
       path === "/repair-categories" ||
       path === "/workers" ||
+      path.startsWith("/workers/me") ||
       path.startsWith("/admin/") ||
       path.startsWith("/account/") ||
       path.startsWith("/notifications/") ||

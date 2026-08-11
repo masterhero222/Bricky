@@ -29,7 +29,15 @@ function FeaturedProject({ project, onOpen }) {
   return (
     <article className="wpp-project-card">
       <button className="wpp-project-cover" type="button" onClick={onOpen}>
-        {cover?.url ? <img src={cover.url} alt={project.title} loading="lazy" /> : <span />}
+        {cover?.url ? (
+          <img
+            src={cover.url}
+            alt={project.title}
+            loading="lazy"
+            fetchPriority="low"
+            decoding="async"
+          />
+        ) : <span />}
       </button>
 
       <div className="wpp-project-copy">
@@ -48,7 +56,14 @@ function FeaturedProject({ project, onOpen }) {
 
       <div className="wpp-project-thumbs" aria-hidden="true">
         {thumbs.map((image, index) => (
-          <img key={image.id || image.url || index} src={image.url} alt="" loading="lazy" />
+          <img
+            key={image.id || image.url || index}
+            src={image.url}
+            alt=""
+            loading="lazy"
+            fetchPriority="low"
+            decoding="async"
+          />
         ))}
       </div>
     </article>
@@ -60,6 +75,7 @@ export default function WorkerPreviewPremium({
   avatarSrc,
   bannerKey,
   ratingInfo,
+  detailsLoading = false,
   completedProjects = [],
   mode = "public",
   isSubmitting = false,
@@ -72,6 +88,7 @@ export default function WorkerPreviewPremium({
   const project = completedProjects[0] || null;
   const rating = Number(ratingInfo?.average || 0);
   const reviewCount = Number(ratingInfo?.total || 0);
+  const reviews = Array.isArray(ratingInfo?.items) ? ratingInfo.items : [];
   const approved = worker?.approvalStatus === "approved" || worker?.isApproved === true || worker?.visibilityStatus === "public";
   const name = worker?.fullName || worker?.name || "Майстор";
   const skillLabels = Array.isArray(worker?.skills) ? worker.skills.filter(Boolean).slice(0, 4) : [];
@@ -82,11 +99,6 @@ export default function WorkerPreviewPremium({
     <main className="wpp-page worker-profile-premium">
       <article className="wpp-shell">
         <header className="wpp-header">
-          <div className="wpp-brand" aria-label="Bricky">
-            <span className="wpp-brand-logo-text">Bricky</span>
-            <span className="wpp-brand-tagline">ремонти с доверие</span>
-          </div>
-
           <WorkerBlueprintBanner bannerKey={bannerKey} />
 
           <div className="wpp-verified">
@@ -102,6 +114,11 @@ export default function WorkerPreviewPremium({
                 className="wpp-avatar"
                 src={avatarSrc}
                 alt={name}
+                width="216"
+                height="216"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 onError={(event) => {
                   event.currentTarget.src = "/media_files/Snejan.jpg";
                 }}
@@ -116,10 +133,10 @@ export default function WorkerPreviewPremium({
 
             <div className="wpp-divider" />
 
-            <div className="wpp-rating-row" aria-label={`${rating.toFixed(1)} от 5`}>
-              <strong>{rating.toFixed(1)}</strong>
-              <Stars value={rating} />
-              <span>{reviewCount} {reviewCount === 1 ? "отзив" : "отзива"}</span>
+            <div className="wpp-rating-row" aria-label={detailsLoading ? "Рейтингът се зарежда" : `${rating.toFixed(1)} от 5`}>
+              <strong>{detailsLoading ? "—" : rating.toFixed(1)}</strong>
+              <Stars value={detailsLoading ? 0 : rating} />
+              <span>{detailsLoading ? "Зарежда се..." : `${reviewCount} ${reviewCount === 1 ? "отзив" : "отзива"}`}</span>
             </div>
 
             <div className="wpp-trust-list">
@@ -129,7 +146,7 @@ export default function WorkerPreviewPremium({
               </div>
               <div className="wpp-trust-row">
                 <BriefcaseBusiness aria-hidden="true" />
-                <span>{completedProjects.length} завършени обекта</span>
+                <span>{detailsLoading ? "Обектите се зареждат..." : `${completedProjects.length} завършени обекта`}</span>
               </div>
             </div>
 
@@ -151,7 +168,12 @@ export default function WorkerPreviewPremium({
               <h2>Реални обекти през Bricky</h2>
             </div>
 
-            {project ? (
+            {detailsLoading ? (
+              <div className="wpp-project-skeleton" role="status" aria-label="Зареждане на обектите">
+                <span className="wpp-skeleton-cover" />
+                <span className="wpp-skeleton-copy" />
+              </div>
+            ) : project ? (
               <FeaturedProject project={project} onOpen={() => onOpenProject?.(0)} />
             ) : (
               <div className="wpp-empty-projects">Все още няма публични завършени обекти през Bricky.</div>
@@ -164,6 +186,33 @@ export default function WorkerPreviewPremium({
               </div>
               <p>{bio}</p>
             </section>
+
+            {!detailsLoading && reviews.length > 0 && (
+              <section className="wpp-reviews-card">
+                <div className="wpp-reviews-heading">
+                  <Star aria-hidden="true" />
+                  <h2>Отзиви от клиенти</h2>
+                </div>
+                <div className="wpp-reviews-list">
+                  {reviews.map((review) => (
+                    <article className="wpp-review" key={review.id}>
+                      <div className="wpp-review-meta">
+                        <div>
+                          <strong>Клиент на Bricky</strong>
+                          <Stars value={review.rating} />
+                        </div>
+                        <time dateTime={review.createdAt || undefined}>
+                          {review.createdAt
+                            ? new Date(review.createdAt).toLocaleDateString('bg-BG')
+                            : ''}
+                        </time>
+                      </div>
+                      {review.comment ? <p>{review.comment}</p> : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
         </div>
 

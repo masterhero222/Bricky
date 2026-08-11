@@ -130,6 +130,7 @@ const WORKERS = [
     "id": 1,
     "userId": 201,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 1 - Георги ВиК",
     "name": "Майстор 1 - Георги ВиК",
     "email": "worker1@bricky.dev",
@@ -154,6 +155,7 @@ const WORKERS = [
     "id": 2,
     "userId": 202,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 2 - Елена Електро",
     "name": "Майстор 2 - Елена Електро",
     "email": "worker2@bricky.dev",
@@ -181,6 +183,7 @@ const WORKERS = [
     "id": 3,
     "userId": 203,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 3 - Никола Плочки",
     "name": "Майстор 3 - Никола Плочки",
     "email": "worker3@bricky.dev",
@@ -715,6 +718,12 @@ function requestMediaPhotos(db, requestId, kind, includeUnapproved = false) {
   return (Array.isArray(db.media) ? db.media : [])
     .filter((media) => Number(media.requestId) === Number(requestId) && media.kind === kind)
     .filter((media) => includeUnapproved || media.moderationStatus === "approved")
+    .sort(
+      (a, b) =>
+        Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+          Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+        new Date(a.createdAt || a.created_at || 0) - new Date(b.createdAt || b.created_at || 0),
+    )
     .map((media) => ({
       id: media.id,
       name: media.fileName || media.name || `media-${media.id}`,
@@ -722,6 +731,7 @@ function requestMediaPhotos(db, requestId, kind, includeUnapproved = false) {
       publicUrl: media.publicUrl || media.url,
       storageKey: media.storageKey,
       moderationStatus: media.moderationStatus,
+      displayOrder: media.displayOrder ?? null,
       created_at: media.createdAt || media.created_at || nowIso(),
     }));
 }
@@ -735,20 +745,30 @@ function completedJobsForWorker(db, worker, includeUnapproved = false) {
         requestStatusKey(req) === "completed" &&
         Boolean(req.archivedAt),
     )
-    .map((req) => ({
-      id: req.id,
-      requestId: req.id,
-      category: req.category,
-      categoryKey: req.categoryKey,
-      address: req.addressVisibility === "rough_area" ? req.address : null,
-      description: req.description,
-      startedAt: req.created_at,
-      completedAt: req.completedAt,
-      durationDays: req.durationDays,
-      beforePhotos: requestMediaPhotos(db, req.id, "request_before", includeUnapproved),
-      afterPhotos: requestMediaPhotos(db, req.id, "request_after", includeUnapproved),
-      created_at: req.created_at,
-    }));
+    .map((req) => {
+      const beforePhotos = requestMediaPhotos(db, req.id, "request_before", includeUnapproved);
+      const afterPhotos = requestMediaPhotos(db, req.id, "request_after", includeUnapproved);
+      const portfolioPhotos = [...afterPhotos, ...beforePhotos].sort(
+        (a, b) =>
+          Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+          Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER),
+      );
+      return {
+        id: req.id,
+        requestId: req.id,
+        category: req.category,
+        categoryKey: req.categoryKey,
+        address: req.addressVisibility === "rough_area" ? req.address : null,
+        description: req.description,
+        startedAt: req.created_at,
+        completedAt: req.completedAt,
+        durationDays: req.durationDays,
+        beforePhotos,
+        afterPhotos,
+        portfolioPhotos,
+        created_at: req.created_at,
+      };
+    });
   const canonicalIds = new Set(canonical.map((job) => Number(job.requestId)));
   const legacy = (Array.isArray(worker?.completedJobs) ? worker.completedJobs : [])
     .filter((job) => !canonicalIds.has(Number(job.requestId)))
@@ -798,6 +818,7 @@ function workerGallery(db, worker, includeUnapproved = false) {
       publicUrl: media.publicUrl || media.url,
       storageKey: media.storageKey,
       moderationStatus: media.moderationStatus || "pending",
+      displayOrder: media.displayOrder ?? null,
       created_at: media.created_at || media.createdAt || nowIso(),
       createdAt: media.createdAt || media.created_at || nowIso(),
     }));
@@ -808,7 +829,10 @@ function workerGallery(db, worker, includeUnapproved = false) {
   }));
 
   return [...mediaPhotos, ...legacyPhotos].sort(
-    (a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0),
+    (a, b) =>
+      Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+        Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+      new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0),
   );
 }
 
@@ -1828,6 +1852,18 @@ export async function mockRequest(method, url, data) {
   if (method === "get" && path === "/workers/me/gallery") {
     const worker = currentWorker(db);
     return response(worker ? workerGallery(db, worker, true) : []);
+  }
+
+  if (method === "post" && path === "/workers/me/gallery/reorder") {
+    const ids = Array.isArray(data?.mediaIds) ? data.mediaIds.map(Number) : [];
+    ids.forEach((id, displayOrder) => {
+      const media = (Array.isArray(db.media) ? db.media : []).find(
+        (item) => Number(item.id) === id,
+      );
+      if (media) media.displayOrder = displayOrder;
+    });
+    writeDb(db);
+    return response({ ok: true, mediaIds: ids });
   }
 
   if (method === "get" && path === "/workers/me/history") {

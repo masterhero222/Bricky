@@ -51,41 +51,12 @@
   position: relative;
   min-height: 128px;
   display: grid;
-  grid-template-columns: 288px minmax(420px, 1fr) 238px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  padding: 12px 68px 16px 74px;
+  padding: 12px 68px 16px;
   isolation: isolate;
   overflow: hidden;
-}
-
-.wpp-brand {
-  position: relative;
-  z-index: 3;
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-}
-
-.wpp-brand-logo-text {
-  display: block;
-  color: #fff;
-  font-size: 42px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.wpp-brand-logo-text::first-letter {
-  color: #ef2b2f;
-}
-
-.wpp-brand-tagline {
-  margin-top: 6px;
-  display: block;
-  color: var(--wpp-muted);
-  font-size: 14px;
-  letter-spacing: 0.055em;
 }
 
 .wpp-banner {
@@ -142,7 +113,7 @@
 .wpp-verified {
   position: relative;
   z-index: 3;
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   justify-self: end;
   align-self: end;
@@ -591,6 +562,36 @@
   text-align: center;
 }
 
+.wpp-project-skeleton {
+  min-height: 308px;
+  display: grid;
+  grid-template-columns: minmax(360px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 18px;
+  margin-top: 22px;
+  padding: 14px;
+  border: 1px solid var(--wpp-border-soft);
+  border-radius: 14px;
+  background: rgba(7, 22, 38, 0.9);
+}
+
+.wpp-skeleton-cover,
+.wpp-skeleton-copy {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgba(35, 59, 80, 0.72) 8%, rgba(52, 82, 106, 0.84) 18%, rgba(35, 59, 80, 0.72) 33%);
+  background-size: 220% 100%;
+  animation: wpp-skeleton 1.25s linear infinite;
+}
+
+.wpp-skeleton-copy {
+  height: 62%;
+  align-self: center;
+}
+
+@keyframes wpp-skeleton {
+  to { background-position-x: -220%; }
+}
+
 .wpp-bio-card {
   min-height: 198px;
   margin-top: 18px;
@@ -605,6 +606,75 @@
   color: var(--wpp-text-soft);
   font-size: 18px;
   line-height: 1.65;
+}
+
+.wpp-reviews-card {
+  margin-top: 18px;
+  padding: 24px 28px;
+  border: 1px solid var(--wpp-border-soft);
+  border-radius: 14px;
+  background: rgba(7, 24, 41, 0.92);
+}
+
+.wpp-reviews-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wpp-reviews-heading > svg {
+  width: 27px;
+  height: 27px;
+  color: var(--wpp-gold);
+  fill: var(--wpp-gold);
+}
+
+.wpp-reviews-heading h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.wpp-reviews-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.wpp-review {
+  padding: 16px 18px;
+  border: 1px solid rgba(64, 100, 129, 0.4);
+  border-radius: 8px;
+  background: rgba(12, 33, 54, 0.82);
+}
+
+.wpp-review-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wpp-review-meta strong {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.wpp-review-meta .wpp-stars svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wpp-review-meta time {
+  color: var(--wpp-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.wpp-review p {
+  margin: 12px 0 0;
+  color: var(--wpp-text-soft);
+  line-height: 1.55;
 }
 
 .wpp-inline-error {
@@ -684,7 +754,7 @@
 
 @media (max-width: 1180px) {
   .wpp-header {
-    grid-template-columns: 210px minmax(320px, 1fr) 190px;
+    grid-template-columns: minmax(0, 1fr) auto;
     padding-inline: 28px;
   }
 
@@ -712,15 +782,8 @@
 
   .wpp-header {
     grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "brand verified"
-      "banner banner";
     gap: 12px 20px;
     padding: 20px 22px;
-  }
-
-  .wpp-brand {
-    grid-area: brand;
   }
 
   .wpp-banner {
@@ -729,11 +792,15 @@
   }
 
   .wpp-verified {
-    grid-area: verified;
+    grid-column: 2;
   }
 
   .wpp-main-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wpp-project-skeleton {
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 0.8fr);
   }
 
   .wpp-identity-card,
@@ -755,14 +822,6 @@
 
   .wpp-header {
     padding: 15px 10px;
-  }
-
-  .wpp-brand-logo-text {
-    font-size: 32px;
-  }
-
-  .wpp-brand-tagline {
-    font-size: 11px;
   }
 
   .wpp-verified {
@@ -815,6 +874,15 @@
     gap: 14px;
   }
 
+  .wpp-project-skeleton {
+    min-height: 300px;
+    grid-template-columns: 1fr;
+  }
+
+  .wpp-skeleton-copy {
+    height: 78px;
+  }
+
   .wpp-project-cover img {
     min-height: 210px;
     max-height: 260px;
@@ -846,5 +914,27 @@
 
   .wpp-btn-primary {
     flex: 1 1 62%;
+  }
+}
+
+@media (max-width: 768px) {
+  .wpp-page {
+    background: linear-gradient(180deg, var(--wpp-page-0) 0%, var(--wpp-page-1) 100%);
+  }
+
+  .wpp-banner-glow,
+  .wpp-header .wpp-banner-glow {
+    display: none;
+  }
+
+  .wpp-shell {
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wpp-skeleton-cover,
+  .wpp-skeleton-copy {
+    animation: none;
   }
 }

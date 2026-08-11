@@ -115,7 +115,7 @@ export default function Workers() {
 
         {!loading && !error && cards.length > 0 && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {cards.map((w) => (
+            {cards.map((w, index) => (
               <button
                 key={w._id}
                 onClick={() => navigate(`/workers/${w._id}`)}
@@ -126,6 +126,11 @@ export default function Workers() {
                     <img
                       src={w._avatar}
                       alt={w._name}
+                      width="96"
+                      height="96"
+                      loading={index === 0 ? 'eager' : 'lazy'}
+                      fetchPriority={index === 0 ? 'high' : 'low'}
+                      decoding="async"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.currentTarget.src = '/media_files/Snejan.jpg';

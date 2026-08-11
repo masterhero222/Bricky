@@ -39,19 +39,7 @@ export default function Home() {
   return (
     <div className="bg-[#07111f] text-white">
       <section className="relative flex min-h-[calc(100vh-118px)] items-center overflow-hidden border-b border-slate-400/15">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          poster="/assets/worker-banners/v1/blueprint-general.webp"
-          className="absolute inset-0 h-full w-full object-cover"
-          aria-hidden="true"
-        >
-          <source src="/media_files/loop.mp4" type="video/mp4" />
-        </video>
-        <div className="absolute inset-0 bg-[#030912]/80" />
+        <div className="absolute inset-0 bg-[#030912]" aria-hidden="true" />
 
         <div className="bricky-container relative z-10 py-20">
           <div className="max-w-3xl">

@@ -196,7 +196,16 @@ async function main() {
     }
 
     await loginAs(page, "worker", accounts.worker);
-    await openRoute(page, "/repair-map");
+    const mapNavigation = page.getByRole("button", { name: "Карта заявки" });
+    await mapNavigation.waitFor({ state: "visible", timeout });
+    await Promise.all([
+      page.waitForURL((url) => url.pathname === "/repair-map", { timeout }),
+      mapNavigation.click(),
+    ]);
+    await settle(page);
+
+    const mapSidebar = page.getByRole("button", { name: "Контрол панел" });
+    await mapSidebar.waitFor({ state: "visible", timeout });
     const requestReturn = page.locator('a[href="/worker/profile?tab=requests"]');
     await requestReturn.waitFor({ state: "visible", timeout });
     await Promise.all([
@@ -226,6 +235,7 @@ async function main() {
       checkedRoutes: [...publicRoutes, "/auth/login", ...Object.values(roleRoutes), "/repair-map"],
       authenticatedRoles: Object.keys(roleRoutes),
       anonymousAdminRejected: true,
+      mapClientTransitionVerified: true,
       mapReturnVerified: true,
       browserErrors,
     };

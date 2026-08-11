@@ -1,5 +1,11 @@
 ﻿import { useState } from 'react';
 import { apiPost } from '../services/api';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS,
+  passwordPolicyError,
+} from '../utils/passwordPolicy';
 
 import { REPAIR_CATEGORY_OPTIONS } from '../constants/repairCatalog';
 
@@ -49,6 +55,12 @@ export default function Register() {
 
     if (form.password !== form.confirmPassword) {
       setError('Паролите не съвпадат.');
+      return;
+    }
+
+    const passwordError = passwordPolicyError(form.password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -232,8 +244,15 @@ export default function Register() {
           className="w-full p-3 rounded bg-gray-700"
           value={form.password}
           onChange={change}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
+          aria-describedby="password-requirements"
           required
         />
+
+        <p id="password-requirements" className="text-sm text-gray-400">
+          {PASSWORD_REQUIREMENTS}
+        </p>
 
         <input
           name="confirmPassword"
@@ -242,6 +261,8 @@ export default function Register() {
           className="w-full p-3 rounded bg-gray-700"
           value={form.confirmPassword}
           onChange={change}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
           required
         />
 

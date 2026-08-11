@@ -101,10 +101,19 @@ export class ReviewsService {
     const wid = Number(workerUserId);
     if (!wid) throw new BadRequestException('Invalid workerUserId');
 
-    const items = await this.reviewsRepo.find({
+    const rows = await this.reviewsRepo.find({
       where: { workerUserId: wid },
       order: { created_at: 'DESC' },
     });
+
+    const items = rows
+      .filter((review) => !['rejected', 'hidden'].includes(String(review.moderationStatus || '')))
+      .map((review) => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.created_at,
+      }));
 
     const total = items.length;
     const average =

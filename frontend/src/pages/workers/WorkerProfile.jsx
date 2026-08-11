@@ -206,6 +206,7 @@ export default function WorkerProfile() {
   const [galleryFiles, setGalleryFiles] = useState([]); // File[]
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [reorderingGallery, setReorderingGallery] = useState(false);
   const [albumViewer, setAlbumViewer] = useState(null); // { albumIndex, photoIndex }
   const [referralInfo, setReferralInfo] = useState({
     code: null,
@@ -823,9 +824,10 @@ export default function WorkerProfile() {
       Array.isArray(completedRequests) ? completedRequests : []
     )
       .map((job) => {
+        const ordered = cleanPhotos(job.portfolioPhotos);
         const before = cleanPhotos(job.beforePhotos || job.photos);
         const after = cleanPhotos(job.afterPhotos);
-        const photos = [...after, ...before];
+        const photos = ordered.length > 0 ? ordered : [...after, ...before];
         const id = job.requestId || job.id;
 
         return {
@@ -1052,6 +1054,57 @@ export default function WorkerProfile() {
           }
         : viewer,
     );
+  }
+
+  async function moveActiveGalleryPhoto(delta) {
+    if (!activeAlbum || !albumViewer || reorderingGallery) return;
+    const from = albumViewer.photoIndex || 0;
+    const to = from + delta;
+    if (to < 0 || to >= activeAlbum.photos.length) return;
+
+    const reordered = [...activeAlbum.photos];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const mediaIds = reordered.map((photo) => Number(photo.id));
+    if (mediaIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      setGalleryError('Този стар албум не поддържа постоянно подреждане.');
+      return;
+    }
+
+    try {
+      setGalleryError('');
+      setGalleryMsg('');
+      setReorderingGallery(true);
+      await apiPost('/workers/me/gallery/reorder', {
+        requestId:
+          activeAlbum.type === 'job'
+            ? Number(String(activeAlbum.id).replace(/^job-/, ''))
+            : null,
+        mediaIds,
+      });
+
+      if (activeAlbum.type === 'job') {
+        const requestId = Number(String(activeAlbum.id).replace(/^job-/, ''));
+        setCompletedRequests((current) =>
+          current.map((job) =>
+            Number(job.requestId || job.id) === requestId
+              ? { ...job, portfolioPhotos: reordered }
+              : job,
+          ),
+        );
+      } else {
+        setGallery(reordered);
+      }
+      setAlbumViewer((viewer) => (viewer ? { ...viewer, photoIndex: to } : viewer));
+      setGalleryMsg('Редът на снимките е запазен.');
+    } catch (err) {
+      console.error('moveActiveGalleryPhoto error:', err);
+      setGalleryError(
+        err?.response?.data?.message || 'Не успях да запазя реда на снимките.',
+      );
+    } finally {
+      setReorderingGallery(false);
+    }
   }
 
   const avatarSrc =
@@ -1833,6 +1886,7 @@ export default function WorkerProfile() {
             selectedFiles={galleryFiles}
             uploading={uploadingGallery}
             deletingId={deletingId}
+            reordering={reorderingGallery}
             activeAlbum={activeAlbum}
             activePhoto={activePhoto}
             activePhotoIndex={albumViewer?.photoIndex || 0}
@@ -1849,6 +1903,7 @@ export default function WorkerProfile() {
               )
             }
             onDeleteActivePhoto={deleteActiveGalleryPhoto}
+            onMoveActivePhoto={moveActiveGalleryPhoto}
             formatDate={formatBG}
           />
         )}

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
@@ -413,6 +413,7 @@ export class WorkersService {
         url: this.normalizeUploadUrl(row.publicUrl),
         storageKey: row.storageKey,
         moderationStatus: row.moderationStatus,
+        displayOrder: row.displayOrder,
         created_at: row.createdAt,
       }));
 
@@ -482,6 +483,43 @@ export class WorkersService {
     return { ok: true };
   }
 
+  async reorderPortfolioMedia(userId: number, requestId: number | null, mediaIds: number[]) {
+    const uid = Number(userId);
+    const orderedIds = (Array.isArray(mediaIds) ? mediaIds : []).map(Number);
+    if (!uid || orderedIds.length === 0 || orderedIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      throw new BadRequestException('Invalid media order');
+    }
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      throw new BadRequestException('Duplicate media ids');
+    }
+
+    let allowedRows: any[];
+    if (requestId) {
+      const request = await this.repairRequestsRepo.findOne({ where: { id: Number(requestId) } });
+      if (!request) throw new NotFoundException('Request not found');
+      if (Number(request.assignedWorkerUserId) !== uid || !request.archivedAt) {
+        throw new ForbiddenException('Completed worker project required');
+      }
+      allowedRows = (await this.media.findByRequest(Number(requestId)))
+        .filter((row) => ['request_before', 'request_after'].includes(row.kind))
+        .filter((row) => row.moderationStatus === 'approved');
+    } else {
+      allowedRows = (await this.media.findByWorker(uid))
+        .filter((row) => row.kind === 'worker_gallery');
+    }
+
+    const allowedIds = allowedRows.map((row) => Number(row.id));
+    if (
+      orderedIds.length !== allowedIds.length ||
+      orderedIds.some((id) => !allowedIds.includes(id))
+    ) {
+      throw new ForbiddenException('Media order does not match this portfolio album');
+    }
+
+    await this.media.setDisplayOrder(orderedIds);
+    return { ok: true, mediaIds: orderedIds };
+  }
+
   async setApprovalStatus(
     workerUserId: number,
     approvalStatus: string,
@@ -549,8 +587,21 @@ export class WorkersService {
               url: this.normalizeUploadUrl(row.publicUrl),
               storageKey: row.storageKey,
               moderationStatus: row.moderationStatus,
+              displayOrder: row.displayOrder,
               created_at: row.createdAt,
             }));
+
+        const portfolioPhotos = approved
+          .filter((row) => ['request_before', 'request_after'].includes(row.kind))
+          .map((row) => ({
+            id: row.id,
+            name: `media-${row.id}`,
+            url: this.normalizeUploadUrl(row.publicUrl),
+            storageKey: row.storageKey,
+            moderationStatus: row.moderationStatus,
+            displayOrder: row.displayOrder,
+            created_at: row.createdAt,
+          }));
 
         return {
           id: request.id,
@@ -564,6 +615,7 @@ export class WorkersService {
           durationDays: this.completionDurationDays(request.createdAt, request.completedAt),
           beforePhotos: toPhotos('request_before'),
           afterPhotos: toPhotos('request_after'),
+          portfolioPhotos,
           created_at: request.createdAt,
         };
       }),

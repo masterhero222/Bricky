@@ -400,6 +400,34 @@ describe('WorkersService v2 independence from legacy tables', () => {
     expect(workerRepository.find).toHaveBeenCalledTimes(1);
   });
 
+  it('allows a worker to persist the order of approved media from their completed project', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 91,
+        assignedWorkerUserId: 201,
+        archivedAt: new Date('2026-08-10T10:00:00Z'),
+      }),
+    });
+    const media = {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'approved' },
+        { id: 2, kind: 'request_after', moderationStatus: 'approved' },
+        { id: 3, kind: 'request_after', moderationStatus: 'rejected' },
+      ]),
+      setDisplayOrder: jest.fn().mockResolvedValue({ ok: true }),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    await expect(service.reorderPortfolioMedia(201, 91, [2, 1])).resolves.toEqual({
+      ok: true,
+      mediaIds: [2, 1],
+    });
+    expect(media.setDisplayOrder).toHaveBeenCalledWith([2, 1]);
+  });
+
   it('returns only active, approved and public workers from batch lookup', async () => {
     const workerProfilesRepo = repo({
       find: jest.fn().mockResolvedValue([

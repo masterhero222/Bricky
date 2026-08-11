@@ -1,19 +1,24 @@
 // src/components/LogoutButton.jsx
 import React from "react";
+import { LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { clearAuthSession } from "../utils/authSession";
 
-export default function LogoutButton() {
+export default function LogoutButton({ className = "" }) {
+  const navigate = useNavigate();
+
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    window.location.href = "/auth";
+    clearAuthSession();
+    navigate("/auth", { replace: true });
   };
 
   return (
     <button
       onClick={logout}
-      className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold text-sm"
+      type="button"
+      className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 ${className}`}
     >
-      Изход
+      <LogOut size={18} aria-hidden="true" /> Изход
     </button>
   );
 }

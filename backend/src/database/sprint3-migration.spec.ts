@@ -13,6 +13,7 @@ describe('Sprint 3 SQL migrations', () => {
   const passwordReset = readMigration('20260808_password_reset_tokens.sql');
   const emailVerification = readMigration('20260808_email_verification.sql');
   const contentReports = readMigration('20260808_content_reports.sql');
+  const mediaDisplayOrder = readMigration('20260811_media_display_order.sql');
   const integrityVerifier = readFileSync(
     resolve(__dirname, '../../scripts/verify-sprint3-integrity.mjs'),
     'utf8',
@@ -165,6 +166,12 @@ describe('Sprint 3 SQL migrations', () => {
     expect(contentReports).toContain('resolved_by_user_id INT NULL');
     expect(contentReports).toContain('ON DELETE RESTRICT');
     expect(contentReports).toContain('ON DELETE SET NULL');
+  });
+
+  it('adds persistent portfolio media ordering idempotently', () => {
+    expect(mediaDisplayOrder).toContain("column_name = 'display_order'");
+    expect(mediaDisplayOrder).toContain('ADD COLUMN display_order int NULL');
+    expect(mediaDisplayOrder).toContain('idx_media_display_order');
   });
 
   it.each([

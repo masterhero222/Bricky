@@ -107,3 +107,43 @@ describe('ReviewsService request lifecycle', () => {
     expect(manager.save).not.toHaveBeenCalled();
   });
 });
+
+describe('ReviewsService public worker reviews', () => {
+  it('returns public review content without exposing client identifiers', async () => {
+    const reviewsRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          workerUserId: 201,
+          clientUserId: 101,
+          rating: 5,
+          comment: 'Отлична работа',
+          moderationStatus: 'approved',
+          created_at: new Date('2026-08-10T10:00:00Z'),
+        },
+        {
+          id: 2,
+          workerUserId: 201,
+          clientUserId: 102,
+          rating: 1,
+          comment: 'Скрит отзив',
+          moderationStatus: 'rejected',
+          created_at: new Date('2026-08-09T10:00:00Z'),
+        },
+      ]),
+    };
+    const service = new ReviewsService(
+      reviewsRepo as any,
+      new RequestLifecycleService(),
+    );
+
+    const result = await service.getByWorker(201);
+
+    expect(result.total).toBe(1);
+    expect(result.average).toBe(5);
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 1, rating: 5, comment: 'Отлична работа' }),
+    ]);
+    expect(result.items[0]).not.toHaveProperty('clientUserId');
+  });
+});

@@ -12,6 +12,7 @@ export const migrationNames = [
   '20260808_password_reset_tokens.sql',
   '20260808_email_verification.sql',
   '20260808_content_reports.sql',
+  '20260811_media_display_order.sql',
 ];
 
 export const migrations = migrationNames.map((name) => ({
@@ -53,6 +54,7 @@ const expectedIndexes = [
   ['repair_request_applications', 'uq_repair_request_application'],
   ['repair_request_reviews', 'uq_repair_request_review_client'],
   ['media_assets', 'idx_media_moderation'],
+  ['media_assets', 'idx_media_display_order'],
   ['worker_profiles', 'idx_worker_profiles_approval'],
   ['pricing_rules', 'uq_pricing_rule'],
   ['referrals', 'uq_referrals_code'],

@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 import { REPAIR_CATEGORY_KEYS, REPAIR_CATEGORY_LABELS } from '../repair-catalog';
 
 export class CreateRequestDto {
@@ -53,6 +53,10 @@ export class CreateRequestDto {
   @IsOptional()
   @IsString()
   estimateCurrency?: string;
+
+  @IsOptional()
+  @IsObject()
+  pricingSnapshot?: Record<string, any>;
 
   @IsOptional()
   @IsArray()

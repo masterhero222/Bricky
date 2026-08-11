@@ -17,13 +17,14 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { apiPost } from "../services/api";
+import { apiGet, apiPost } from "../services/api";
 import {
   REPAIR_CATEGORY_FLOW,
   REPAIR_CATEGORY_OPTIONS,
 } from "../constants/repairCatalog";
 import { getPricingActivity } from "../constants/repairPricingConfig";
 import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
+import { calculateCatalogEstimate } from "../utils/pricingCatalogAdapter";
 import { useAuthModal } from "../context/AuthModalContext";
 
 const GOALS = [
@@ -108,6 +109,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
   const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pricingCatalog, setPricingCatalog] = useState(null);
   const [locationStatus, setLocationStatus] = useState("idle");
   const [locationMessage, setLocationMessage] = useState("Позволи текуща локация или въведи точния адрес ръчно.");
   const locationAskedRef = useRef(false);
@@ -130,6 +132,14 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
   useEffect(() => {
     setIsLogged(Boolean(localStorage.getItem("token")));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiGet("/catalog")
+      .then((response) => active && setPricingCatalog(response.data || null))
+      .catch(() => active && setPricingCatalog(null));
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -165,7 +175,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
   );
   const asksForArea = selectedPricingActivities.some((item) => item.areaBased);
   const quantityPrompt = QUANTITY_PROMPTS[category.key] || "Какъв е приблизителният обхват?";
-  const estimate = useMemo(
+  const fallbackEstimate = useMemo(
     () => calculateRepairEstimate({
       categoryKey: category.key,
       selectedActivities: form.activities,
@@ -175,6 +185,18 @@ export function RequestFlow({ embedded = false, onCreated }) {
       location: "sofia_regular",
     }),
     [category.key, form.activities, form.quantity, form.exactAreaM2, form.pricingMode]
+  );
+  const estimate = useMemo(
+    () => calculateCatalogEstimate({
+      catalog: pricingCatalog,
+      categoryKey: category.key,
+      selectedActivities: form.activities,
+      quantity: form.quantity,
+      exactAreaM2: form.exactAreaM2,
+      pricingMode: form.pricingMode,
+      fallbackEstimate,
+    }),
+    [category.key, fallbackEstimate, form.activities, form.exactAreaM2, form.pricingMode, form.quantity, pricingCatalog]
   );
 
   function setField(field, value) {
@@ -335,14 +357,9 @@ export function RequestFlow({ embedded = false, onCreated }) {
         estimateMin: estimate.expectedMin,
         estimateMax: estimate.expectedMax,
         estimateCurrency: estimate.currency,
-        photos: String(localStorage.getItem("token") || "").startsWith("local-dev-token")
-          ? form.photos || []
-          : [],
-      };
-
-      if (String(localStorage.getItem("token") || "").startsWith("local-dev-token")) {
-        requestPayload.pricingSnapshot = {
+        pricingSnapshot: {
           pricingVersion: estimate.pricingVersion,
+          pricingSource: estimate.source || "fallback",
           materialPricingVersion: estimate.materialPricingVersion,
           materialPriceIndexVersion: estimate.materialPriceIndexVersion,
           pricingMode: estimate.pricingMode,
@@ -373,8 +390,11 @@ export function RequestFlow({ embedded = false, onCreated }) {
           excludedMaterialKeys: estimate.excludedMaterialKeys,
           warnings: estimate.warnings,
           notes: estimate.notes,
-        };
-      }
+        },
+        photos: String(localStorage.getItem("token") || "").startsWith("local-dev-token")
+          ? form.photos || []
+          : [],
+      };
 
       const createdResponse = await apiPost("/requests", requestPayload);
       const createdRequestId = Number(createdResponse?.data?.id);
@@ -638,7 +658,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                       {form.photos.map((photo) => (
                         <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
-                          <img src={photo.url} alt={photo.name || "Снимка към заявка"} className="h-24 w-full object-cover" />
+                          <img src={photo.url} alt={photo.name || "Снимка към заявка"} loading="lazy" decoding="async" className="h-24 w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => removePhoto(photo.id)}

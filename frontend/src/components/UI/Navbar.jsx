@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Box, Menu, UserRound, X } from 'lucide-react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Box, LogOut, Menu, UserRound, X } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { clearAuthSession } from '../../utils/authSession';
 
 const navClass = ({ isActive }) =>
   `relative flex min-h-[78px] items-center px-4 font-bold transition-colors ${
@@ -12,6 +13,7 @@ const navClass = ({ isActive }) =>
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const role = localStorage.getItem('role');
   const isAdmin = ['admin', 'super_admin'].includes(role);
   const profilePath =
@@ -21,6 +23,30 @@ export default function Navbar() {
         ? '/admin'
         : '/worker/profile';
   const profileLabel = isAdmin ? 'Админ панел' : 'Моят профил';
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  function logout() {
+    clearAuthSession();
+    setOpen(false);
+    navigate('/auth', { replace: true });
+  }
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 h-[78px] border-b border-slate-400/15 bg-[#08111f]/85 backdrop-blur-xl">
@@ -73,9 +99,20 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <Link className="bricky-button-primary !min-h-11" to={profilePath}>
-              <UserRound size={19} /> {profileLabel}
-            </Link>
+            <>
+              <Link className="bricky-button-primary !min-h-11" to={profilePath}>
+                <UserRound size={19} /> {profileLabel}
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="grid h-11 w-11 place-items-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-200 transition-colors hover:bg-red-500/20"
+                aria-label="Изход"
+                title="Изход"
+              >
+                <LogOut size={19} aria-hidden="true" />
+              </button>
+            </>
           )}
         </div>
 
@@ -83,13 +120,15 @@ export default function Navbar() {
           onClick={() => setOpen((value) => !value)}
           className="grid h-11 w-11 place-items-center rounded-xl border border-slate-400/15 bg-slate-800/70 text-white md:hidden"
           aria-label={open ? 'Затвори менюто' : 'Отвори менюто'}
+          aria-expanded={open}
+          aria-controls="primary-mobile-navigation"
         >
           {open ? <X size={24} /> : <Menu size={24} />}
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-slate-400/20 bg-[#07101d] px-5 py-5 shadow-2xl shadow-black/60 md:hidden">
+        <div id="primary-mobile-navigation" className="fixed inset-x-0 top-[78px] max-h-[calc(100dvh-78px)] overflow-y-auto border-t border-slate-400/20 bg-[#07101d] px-5 py-5 shadow-2xl shadow-black/60 md:hidden">
           <nav className="flex flex-col gap-1 font-bold text-slate-200">
             <Link
               to="/"
@@ -143,13 +182,22 @@ export default function Navbar() {
                 </button>
               </div>
             ) : (
-              <Link
-                onClick={() => setOpen(false)}
-                to={profilePath}
-                className="bricky-button-primary mt-3"
-              >
-                <UserRound size={19} /> {profileLabel}
-              </Link>
+              <div className="mt-3 grid gap-3">
+                <Link
+                  onClick={() => setOpen(false)}
+                  to={profilePath}
+                  className="bricky-button-primary"
+                >
+                  <UserRound size={19} /> {profileLabel}
+                </Link>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-500/10 px-4 font-bold text-red-100"
+                >
+                  <LogOut size={19} aria-hidden="true" /> Изход
+                </button>
+              </div>
             )}
           </nav>
         </div>

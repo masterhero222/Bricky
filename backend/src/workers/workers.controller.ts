@@ -178,6 +178,17 @@ export class WorkersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('me/gallery/reorder')
+  async reorderGallery(@Req() req: any, @Body() body: any) {
+    this.assertWorkerRole(req);
+    return this.workersService.reorderPortfolioMedia(
+      Number(req.user.id),
+      body?.requestId ? Number(body.requestId) : null,
+      body?.mediaIds,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('me/history')
   async myHistory(@Req() req: any) {
     this.assertWorkerRole(req);

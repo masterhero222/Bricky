@@ -208,22 +208,39 @@ export class RequestsService {
       }),
     );
 
+    const suppliedSnapshot = dto.pricingSnapshot || {};
+    const snapshotVersion = String(suppliedSnapshot.pricingVersion || 'v2-fallback').slice(0, 80);
+    const activityKeys = Array.isArray(suppliedSnapshot.selectedActivityKeys)
+      ? suppliedSnapshot.selectedActivityKeys
+          .map((value: unknown) => String(value || '').trim())
+          .filter((value: string) => /^[a-z0-9][a-z0-9_-]{0,119}$/.test(value))
+          .slice(0, 30)
+      : [];
+    const snapshotInput = {
+      source: suppliedSnapshot.pricingSource === 'live' ? 'live' : 'fallback',
+      pricingMode: suppliedSnapshot.pricingMode || null,
+      sizeKey: suppliedSnapshot.sizeKey || null,
+      exactAreaM2: suppliedSnapshot.exactAreaM2 ?? null,
+    };
+    const snapshotResult = {
+      laborMin: suppliedSnapshot.laborMin ?? null,
+      laborMax: suppliedSnapshot.laborMax ?? null,
+      materialMin: suppliedSnapshot.materialMin ?? null,
+      materialMax: suppliedSnapshot.materialMax ?? null,
+      estimateMin: dto.estimateMin ?? null,
+      estimateMax: dto.estimateMax ?? null,
+      currency: request.estimateCurrency,
+    };
+
     const snapshot = await this.pricingSnapshotsRepo.save(
       this.pricingSnapshotsRepo.create({
         requestId: request.id,
-        pricingVersion: 'v2-manual',
+        pricingVersion: snapshotVersion,
         currency: request.estimateCurrency,
         categoryKey,
-        activityKeysJson: [],
-        inputJson: {
-          estimateMin: dto.estimateMin ?? null,
-          estimateMax: dto.estimateMax ?? null,
-        },
-        resultJson: {
-          estimateMin: dto.estimateMin ?? null,
-          estimateMax: dto.estimateMax ?? null,
-          currency: request.estimateCurrency,
-        },
+        activityKeysJson: activityKeys,
+        inputJson: snapshotInput,
+        resultJson: snapshotResult,
       }),
     );
     request.pricingSnapshotId = snapshot.id;

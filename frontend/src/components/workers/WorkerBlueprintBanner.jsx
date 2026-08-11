@@ -6,7 +6,14 @@ export default function WorkerBlueprintBanner({ bannerKey }) {
   return (
     <div className="wpp-banner" aria-label={`Работен банер: ${banner.label}`}>
       <span className="wpp-banner-glow" aria-hidden="true" />
-      <img className="wpp-banner-image" src={banner.src} alt="" loading="eager" decoding="async" />
+      <img
+        className="wpp-banner-image"
+        src={banner.src}
+        alt=""
+        loading="lazy"
+        fetchPriority="low"
+        decoding="async"
+      />
     </div>
   );
 }

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 function GalleryViewer({
   album,
   photo,
   photoIndex,
   deletingId,
+  reordering,
   canDelete,
   onDelete,
   onClose,
   onStep,
   onSelectPhoto,
+  onMovePhoto,
 }) {
   const [deleteArmed, setDeleteArmed] = useState(false);
 
@@ -30,6 +33,33 @@ function GalleryViewer({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {album.photos.length > 1 ? (
+              <div className="flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-950/50 p-1">
+                <button
+                  type="button"
+                  onClick={() => onMovePhoto(-1)}
+                  disabled={reordering || photoIndex === 0}
+                  aria-label="Премести снимката наляво"
+                  title="Премести снимката по-напред"
+                  className="rounded-md p-2 text-cyan-100 hover:bg-cyan-800/60 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                </button>
+                <span className="px-2 text-xs font-bold text-cyan-100">
+                  {reordering ? 'Запазвам...' : 'Подреди'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onMovePhoto(1)}
+                  disabled={reordering || photoIndex === album.photos.length - 1}
+                  aria-label="Премести снимката надясно"
+                  title="Премести снимката по-назад"
+                  className="rounded-md p-2 text-cyan-100 hover:bg-cyan-800/60 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
             {canDelete ? (
               <button
                 type="button"
@@ -141,6 +171,7 @@ export default function WorkerGalleryPanel({
   selectedFiles,
   uploading,
   deletingId,
+  reordering,
   activeAlbum,
   activePhoto,
   activePhotoIndex,
@@ -153,6 +184,7 @@ export default function WorkerGalleryPanel({
   onStepPhoto,
   onSelectPhoto,
   onDeleteActivePhoto,
+  onMoveActivePhoto,
   formatDate,
 }) {
   return (
@@ -283,11 +315,13 @@ export default function WorkerGalleryPanel({
         photo={activePhoto}
         photoIndex={activePhotoIndex}
         deletingId={deletingId}
+        reordering={reordering}
         canDelete={canDeleteActivePhoto}
         onDelete={onDeleteActivePhoto}
         onClose={onCloseAlbum}
         onStep={onStepPhoto}
         onSelectPhoto={onSelectPhoto}
+        onMovePhoto={onMoveActivePhoto}
       />
     </>
   );
