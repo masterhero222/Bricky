@@ -13,6 +13,7 @@ export const migrationNames = [
   '20260808_email_verification.sql',
   '20260808_content_reports.sql',
   '20260811_media_display_order.sql',
+  '20260825_worker_onboarding_profile_guidance.sql',
 ];
 
 export const migrations = migrationNames.map((name) => ({
@@ -67,6 +68,21 @@ const expectedIndexes = [
 const expectedChecks = [
   ['worker_credit_wallets', 'chk_worker_credit_wallet_balance'],
   ['worker_credit_transactions', 'chk_worker_credit_transaction_amount'],
+];
+
+const expectedWorkerProfileColumns = [
+  'primary_category_key',
+  'preferred_contact_method',
+  'contact_accuracy_confirmed',
+  'work_type',
+  'experience_range',
+  'availability_status',
+  'acquisition_source_self_reported',
+  'acquisition_source_detail',
+  'project_photos_readiness',
+  'service_description_readiness',
+  'onboarding_step',
+  'onboarding_completed_at',
 ];
 
 const expectedForeignKeys = new Set(
@@ -134,6 +150,18 @@ export async function validateSprint3Schema(connection, database) {
   const [categoryRows] = await connection.query(
     'SELECT category_key FROM repair_categories ORDER BY sort_order',
   );
+  const [workerProfileColumnRows] = await connection.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'worker_profiles'`,
+  );
+  const workerProfileColumns = new Set(
+    workerProfileColumnRows.map((row) => row.COLUMN_NAME || row.column_name),
+  );
+  const missingWorkerProfileColumns = expectedWorkerProfileColumns.filter(
+    (column) => !workerProfileColumns.has(column),
+  );
 
   const result = {
     database,
@@ -148,6 +176,7 @@ export async function validateSprint3Schema(connection, database) {
     missingIndexes,
     missingForeignKeys,
     missingChecks,
+    missingWorkerProfileColumns,
   };
 
   if (
@@ -155,6 +184,7 @@ export async function validateSprint3Schema(connection, database) {
     missingIndexes.length ||
     missingForeignKeys.length ||
     missingChecks.length ||
+    missingWorkerProfileColumns.length ||
     categoryRows.length !== 15 ||
     result.requestStatusDefault !== 'pending_admin'
   ) {

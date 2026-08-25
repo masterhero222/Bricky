@@ -39,9 +39,26 @@ export class AdminController {
   }
 
   @Get('workers')
-  workers(@Req() req: any) {
+  workers(
+    @Req() req: any,
+    @Query('incomplete') incomplete?: string,
+    @Query('missingPhone') missingPhone?: string,
+    @Query('onboardingIncomplete') onboardingIncomplete?: string,
+    @Query('sort') sort?: 'completion_asc' | 'newest',
+  ) {
     this.assertAdmin(req.user);
-    return this.admin.listWorkers();
+    return this.admin.listWorkers({
+      incomplete: incomplete === 'true',
+      missingPhone: missingPhone === 'true',
+      onboardingIncomplete: onboardingIncomplete === 'true',
+      sort,
+    });
+  }
+
+  @Get('workers/:workerUserId')
+  workerDetails(@Req() req: any, @Param('workerUserId') workerUserId: string) {
+    this.assertAdmin(req.user);
+    return this.admin.getWorkerDetails(Number(workerUserId));
   }
 
   @Post('workers/:workerUserId/approval')

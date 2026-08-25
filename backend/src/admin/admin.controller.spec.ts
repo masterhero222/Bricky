@@ -11,6 +11,7 @@ describe('AdminController catalog and timeline authorization', () => {
       createPricingRule: jest.fn().mockResolvedValue({ id: 1 }),
       setPricingRuleActive: jest.fn().mockResolvedValue({ id: 1, isActive: true }),
       getRequestTimeline: jest.fn().mockResolvedValue({ request: { id: 7 }, events: [] }),
+      getWorkerDetails: jest.fn().mockResolvedValue({ workerUserId: 201 }),
     };
     return { controller: new AdminController(admin as any), admin };
   }
@@ -22,10 +23,20 @@ describe('AdminController catalog and timeline authorization', () => {
     await controller.categories(req);
     await controller.pricing(req);
     await controller.requestTimeline(req, '7');
+    await controller.workerDetails(req, '201');
 
     expect(admin.listCategories).toHaveBeenCalled();
     expect(admin.listPricingRules).toHaveBeenCalled();
     expect(admin.getRequestTimeline).toHaveBeenCalledWith(7);
+    expect(admin.getWorkerDetails).toHaveBeenCalledWith(201);
+  });
+
+  it('blocks non-admin users from private worker details', () => {
+    const { controller } = setup();
+
+    expect(() =>
+      controller.workerDetails({ user: { id: 201, role: 'worker' } }, '201'),
+    ).toThrow(ForbiddenException);
   });
 
   it('blocks regular admins from catalog mutations but allows pricing corrections', async () => {

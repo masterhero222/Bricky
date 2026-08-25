@@ -19,6 +19,7 @@ import { RepairRequestEntity } from '../requests/entities/repair-request.entity'
 import { RequestApplicationEntity } from '../requests/entities/request-application.entity';
 import { ReviewEntity } from '../reviews/entities/review.entity';
 import { MediaAssetEntity } from '../media/media-asset.entity';
+import { normalizeWorkerPhone } from '../workers/worker-profile-completion.service';
 
 @Injectable()
 export class UsersService {
@@ -211,7 +212,7 @@ export class UsersService {
         if (!profile) throw new NotFoundException('Client profile not found');
         if (name) profile.displayName = name;
         if (data.phone !== undefined)
-          profile.phonePrivate = this.cleanOptional(data.phone);
+          profile.phonePrivate = this.normalizePhone(data.phone);
         if (data.address !== undefined)
           profile.defaultAddress = this.cleanOptional(data.address);
         await profiles.save(profile);
@@ -221,7 +222,7 @@ export class UsersService {
         if (!profile) throw new NotFoundException('Worker profile not found');
         if (name) profile.publicName = name;
         if (data.phone !== undefined)
-          profile.phonePrivate = this.cleanOptional(data.phone);
+          profile.phonePrivate = this.normalizePhone(data.phone);
         if (data.address !== undefined)
           profile.defaultAddress = this.cleanOptional(data.address);
         await profiles.save(profile);
@@ -349,5 +350,15 @@ export class UsersService {
   private cleanOptional(value: string | null) {
     const clean = String(value || '').trim();
     return clean || null;
+  }
+
+  private normalizePhone(value: string | null) {
+    const clean = String(value || '').trim();
+    if (!clean) return null;
+    const normalized = normalizeWorkerPhone(clean);
+    if (!normalized) {
+      throw new BadRequestException('Въведете валиден телефон');
+    }
+    return normalized;
   }
 }

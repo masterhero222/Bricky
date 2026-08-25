@@ -14,6 +14,9 @@ describe('Sprint 3 SQL migrations', () => {
   const emailVerification = readMigration('20260808_email_verification.sql');
   const contentReports = readMigration('20260808_content_reports.sql');
   const mediaDisplayOrder = readMigration('20260811_media_display_order.sql');
+  const workerOnboarding = readMigration(
+    '20260825_worker_onboarding_profile_guidance.sql',
+  );
   const integrityVerifier = readFileSync(
     resolve(__dirname, '../../scripts/verify-sprint3-integrity.mjs'),
     'utf8',
@@ -172,6 +175,14 @@ describe('Sprint 3 SQL migrations', () => {
     expect(mediaDisplayOrder).toContain("column_name = 'display_order'");
     expect(mediaDisplayOrder).toContain('ADD COLUMN display_order int NULL');
     expect(mediaDisplayOrder).toContain('idx_media_display_order');
+  });
+
+  it('adds the worker onboarding fields idempotently', () => {
+    expect(workerOnboarding).toContain('primary_category_key');
+    expect(workerOnboarding).toContain('contact_accuracy_confirmed');
+    expect(workerOnboarding).toContain('onboarding_completed_at');
+    expect(workerOnboarding).toContain('information_schema.columns');
+    expect(workerOnboarding).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
   });
 
   it.each([

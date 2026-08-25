@@ -24,6 +24,10 @@ import {
 import { DEFAULT_WORKER_BANNER_KEY } from '../../constants/workerBannerCatalog';
 import AccountSettingsPanel from '../../components/account/AccountSettingsPanel';
 import ReportContentButton from '../../components/ReportContentButton';
+import {
+  WorkerOnboardingModal,
+  WorkerProfileGuidanceCard,
+} from '../../components/workers/WorkerOnboarding';
 
 function formatBG(dateStr) {
   try {
@@ -149,6 +153,8 @@ export default function WorkerProfile() {
 
   const [previewAvatar, setPreviewAvatar] = useState('');
   const [saving, setSaving] = useState(false);
+  const [onboarding, setOnboarding] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     const nextTab = normalizeWorkerTab(searchParams.get('tab'));
@@ -224,7 +230,37 @@ export default function WorkerProfile() {
     loadCompletedRequests();
     loadGallery();
     loadReferrals();
+    loadOnboarding();
   }, []);
+
+  async function loadOnboarding() {
+    try {
+      const res = await apiGet('/workers/me/onboarding');
+      setOnboarding(res.data || null);
+    } catch (err) {
+      console.error('loadOnboarding error:', err);
+    }
+  }
+
+  async function saveOnboardingStep(stepKey, data) {
+    const res = await apiPut(`/workers/me/onboarding/${stepKey}`, data);
+    setOnboarding(res.data || null);
+    await loadMeProfile();
+    return res.data;
+  }
+
+  function openGuidanceTarget(target) {
+    const value = String(target || '');
+    if (value.startsWith('onboarding:')) {
+      setShowOnboarding(true);
+      return;
+    }
+    if (value === 'profile:gallery') {
+      selectWorkerTab('gallery');
+      return;
+    }
+    selectWorkerTab('profile');
+  }
 
   async function loadRequests() {
     try {
@@ -613,6 +649,7 @@ export default function WorkerProfile() {
         setPreviewAvatar(absUrl(updated.avatarUrl));
       if (profile.avatar) await uploadAvatarIfNeeded();
       await loadMeProfile();
+      await loadOnboarding();
 
       return true;
     } catch (err) {
@@ -1119,6 +1156,11 @@ export default function WorkerProfile() {
       <main className="flex-1 px-4 pb-20 pt-40 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)] sm:px-6 lg:ml-64 lg:px-10 lg:pt-24">
         {activeTab === 'dashboard' && (
           <div className="max-w-6xl mx-auto rounded-2xl border border-cyan-400/15 bg-[#081827]/75 p-6 shadow-2xl shadow-cyan-950/20">
+            <WorkerProfileGuidanceCard
+              state={onboarding}
+              onContinue={() => setShowOnboarding(true)}
+              onNavigate={openGuidanceTarget}
+            />
             <WorkerDashboardSummary
               stats={stats}
               loadingRequests={loadingRequests}
@@ -1860,6 +1902,8 @@ export default function WorkerProfile() {
             ratingLoading={ratingLoading}
             ratingError={ratingError}
             completedCount={completedRequests.length}
+            profileCompletion={onboarding?.completion}
+            onContinueProfile={() => setShowOnboarding(true)}
           />
         )}
 
@@ -1923,6 +1967,13 @@ export default function WorkerProfile() {
 
         {activeTab === 'subscription' && (
           <AccountSettingsPanel view="subscription" />
+        )}
+        {showOnboarding && onboarding && (
+          <WorkerOnboardingModal
+            state={onboarding}
+            onSaveStep={saveOnboardingStep}
+            onClose={() => setShowOnboarding(false)}
+          />
         )}
       </main>
     </div>

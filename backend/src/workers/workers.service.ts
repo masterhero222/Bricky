@@ -17,6 +17,8 @@ import {
 } from './worker-banner.catalog';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { UpdateWorkerOnboardingStepDto } from './dto/update-worker-onboarding-step.dto';
+import { WorkerProfileCompletionService } from './worker-profile-completion.service';
 
 type CreateWorkerProfileInput = {
   userId: number;
@@ -32,6 +34,13 @@ type CreateWorkerProfileInput = {
 
 type WorkerMediaVisibilityOptions = {
   includeUnapprovedMedia?: boolean;
+};
+
+export type AdminWorkerFilters = {
+  incomplete?: boolean;
+  missingPhone?: boolean;
+  onboardingIncomplete?: boolean;
+  sort?: 'completion_asc' | 'newest';
 };
 
 const SKILL_CATEGORY_ALIASES: Record<string, RepairCategoryKey> = {
@@ -74,6 +83,7 @@ export class WorkersService {
 
     private readonly media: MediaService,
     private readonly users: UsersService,
+    private readonly profileCompletion: WorkerProfileCompletionService,
   ) {}
 
   /**
@@ -199,7 +209,9 @@ export class WorkersService {
       bio: data.bio ?? null,
       experience: data.experience ?? null,
       equipment: data.equipment ?? null,
-      phonePrivate: data.phone ?? null,
+      phonePrivate: data.phone
+        ? this.profileCompletion.normalizePhone(data.phone)
+        : null,
       defaultAddress: data.defaultAddress ?? null,
       approvalStatus: 'pending',
       visibilityStatus: 'private',
@@ -365,7 +377,7 @@ export class WorkersService {
     ];
   }
 
-  async getAllForAdmin() {
+  async getAllForAdmin(filters: AdminWorkerFilters = {}) {
     const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
     const users = await this.users.findByIds(profiles.map((profile) => Number(profile.userId)));
     const usersById = new Map(users.map((user) => [Number(user.id), user]));
@@ -373,14 +385,218 @@ export class WorkersService {
     return Promise.all(
       profiles.map(async (profile) => {
         const summary = await this.withV2WorkerSummary(profile, { includeUnapprovedMedia: true });
+        const completion = await this.getProfileCompletion(profile);
         const user = usersById.get(Number(profile.userId));
         return {
           ...summary,
           userStatus: user?.status || 'missing',
-          email: user?.email || null,
+          hasPhone: this.profileCompletion.isValidPhone(profile.phonePrivate),
+          completionPercent: completion.percentage,
+          missingItems: completion.missingItems,
+          onboardingStatus: completion.onboardingStatus,
         };
       }),
-    );
+    ).then((workers) => {
+      const filtered = workers.filter((worker) => {
+        if (filters.incomplete && worker.completionPercent >= 100) return false;
+        if (filters.missingPhone && worker.hasPhone) return false;
+        if (
+          filters.onboardingIncomplete &&
+          worker.onboardingStatus === 'completed'
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return filtered.sort((a, b) => {
+        if (filters.sort === 'completion_asc') {
+          return a.completionPercent - b.completionPercent;
+        }
+        return (
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime()
+        );
+      });
+    });
+  }
+
+  async getAdminDetail(workerUserId: number) {
+    const userId = Number(workerUserId);
+    if (!userId) throw new BadRequestException('Invalid worker user id');
+    const [profile, user] = await Promise.all([
+      this.workerProfilesRepo.findOne({ where: { userId } }),
+      this.users.findOne(userId),
+    ]);
+    if (!profile || !user) throw new NotFoundException('Worker not found');
+
+    const [skills, completion] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.getProfileCompletion(profile),
+    ]);
+
+    return {
+      workerUserId: userId,
+      publicName: profile.publicName,
+      city: profile.city,
+      phonePrivate: profile.phonePrivate || null,
+      email: user.email || null,
+      defaultAddress: profile.defaultAddress || null,
+      preferredContactMethod: profile.preferredContactMethod || null,
+      primaryCategoryKey:
+        profile.primaryCategoryKey || skills[0]?.categoryKey || null,
+      skills: skills.map((skill) => ({
+        categoryKey: skill.categoryKey,
+        activityKey: skill.activityKey,
+      })),
+      workType: profile.workType || null,
+      experienceRange: profile.experienceRange || null,
+      availabilityStatus: profile.availabilityStatus || null,
+      acquisitionSourceSelfReported:
+        profile.acquisitionSourceSelfReported || null,
+      acquisitionSourceDetail: profile.acquisitionSourceDetail || null,
+      projectPhotosReadiness: profile.projectPhotosReadiness || null,
+      serviceDescriptionReadiness:
+        profile.serviceDescriptionReadiness || null,
+      onboardingStep: Number(profile.onboardingStep || 1),
+      onboardingCompletedAt: profile.onboardingCompletedAt || null,
+      onboardingStatus: completion.onboardingStatus,
+      completionPercent: completion.percentage,
+      missingItems: completion.missingItems,
+      pendingModerationItems: completion.pendingModerationItems,
+      accountStatus: user.status,
+      approvalStatus: profile.approvalStatus,
+      visibilityStatus: profile.visibilityStatus,
+      createdAt: user.createdAt || profile.createdAt,
+    };
+  }
+
+  async getOnboardingState(workerUserId: number) {
+    const userId = Number(workerUserId);
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    const [skills, completion] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.getProfileCompletion(profile),
+    ]);
+
+    return {
+      currentStep: Number(profile.onboardingStep || 1),
+      completedAt: profile.onboardingCompletedAt || null,
+      contact: {
+        phone: profile.phonePrivate || '',
+        preferredContactMethod: profile.preferredContactMethod || '',
+        contactAccuracyConfirmed: Boolean(profile.contactAccuracyConfirmed),
+      },
+      activity: {
+        primaryCategoryKey:
+          profile.primaryCategoryKey || skills[0]?.categoryKey || '',
+        skills: skills.map((skill) => skill.categoryKey),
+        workType: profile.workType || '',
+        experienceRange: profile.experienceRange || '',
+        city: profile.city || '',
+        availabilityStatus: profile.availabilityStatus || '',
+      },
+      acquisition: {
+        source: profile.acquisitionSourceSelfReported || '',
+        detail: profile.acquisitionSourceDetail || '',
+      },
+      readiness: {
+        projectPhotosReadiness: profile.projectPhotosReadiness || '',
+        serviceDescriptionReadiness:
+          profile.serviceDescriptionReadiness || '',
+      },
+      completion,
+    };
+  }
+
+  async updateOnboardingStep(
+    workerUserId: number,
+    stepKey: string,
+    data: UpdateWorkerOnboardingStepDto,
+  ) {
+    const userId = Number(workerUserId);
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+
+    const update: Partial<WorkerProfileEntity> = {};
+    if (stepKey === 'contact') {
+      const phone = this.profileCompletion.normalizePhone(data.phone);
+      if (!phone) throw new BadRequestException('Въведете валиден телефон');
+      if (!data.preferredContactMethod) {
+        throw new BadRequestException('Изберете предпочитан начин за контакт');
+      }
+      if (!data.contactAccuracyConfirmed) {
+        throw new BadRequestException('Потвърдете, че данните са точни');
+      }
+      Object.assign(update, {
+        phonePrivate: phone,
+        preferredContactMethod: data.preferredContactMethod,
+        contactAccuracyConfirmed: true,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 2),
+      });
+    } else if (stepKey === 'activity') {
+      const skills = Array.from(
+        new Set(
+          [data.primaryCategoryKey, ...(data.skills || [])]
+            .map((value) => String(value || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      if (
+        !data.primaryCategoryKey ||
+        !skills.length ||
+        !data.workType ||
+        !data.experienceRange ||
+        !String(data.city || '').trim() ||
+        !data.availabilityStatus
+      ) {
+        throw new BadRequestException('Попълнете всички полета за дейността');
+      }
+      Object.assign(update, {
+        primaryCategoryKey: data.primaryCategoryKey,
+        workType: data.workType,
+        experienceRange: data.experienceRange,
+        city: String(data.city).trim(),
+        availabilityStatus: data.availabilityStatus,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 3),
+      });
+      await this.replaceWorkerSkills(userId, skills);
+    } else if (stepKey === 'acquisition') {
+      const source = String(data.acquisitionSourceSelfReported || '');
+      const needsDetail = ['worker_referral', 'partner', 'other'].includes(source);
+      if (!source || (needsDetail && !String(data.acquisitionSourceDetail || '').trim())) {
+        throw new BadRequestException('Уточнете как научихте за Bricky');
+      }
+      Object.assign(update, {
+        acquisitionSourceSelfReported: source,
+        acquisitionSourceDetail: String(data.acquisitionSourceDetail || '').trim() || null,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 4),
+      });
+    } else if (stepKey === 'readiness') {
+      if (!data.projectPhotosReadiness || !data.serviceDescriptionReadiness) {
+        throw new BadRequestException('Попълнете готовността на профила');
+      }
+      Object.assign(update, {
+        projectPhotosReadiness: data.projectPhotosReadiness,
+        serviceDescriptionReadiness: data.serviceDescriptionReadiness,
+        onboardingStep: 4,
+        onboardingCompletedAt: profile.onboardingCompletedAt || new Date(),
+      });
+    } else {
+      throw new BadRequestException('Unknown onboarding step');
+    }
+
+    await this.workerProfilesRepo.update({ userId }, update);
+    return this.getOnboardingState(userId);
+  }
+
+  private async getProfileCompletion(profile: WorkerProfileEntity) {
+    const userId = Number(profile.userId);
+    const [skills, mediaRows] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.media.findByWorker(userId).catch(() => [] as any[]),
+    ]);
+    return this.profileCompletion.calculate(profile, skills, mediaRows);
   }
 
   // =========================

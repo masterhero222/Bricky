@@ -11,6 +11,7 @@ import { WorkersController } from './workers.controller';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
+import { WorkerProfileCompletionService } from './worker-profile-completion.service';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { MediaModule } from '../media/media.module';
     MediaModule,
   ],
   controllers: [WorkersController],
-  providers: [WorkersService],
+  providers: [WorkersService, WorkerProfileCompletionService],
   exports: [
     TypeOrmModule, // важно за RequestsModule ако import-ва WorkersModule
     WorkersService,

@@ -971,6 +971,80 @@ function publicWorker(user, db) {
   };
 }
 
+function mockWorkerCompletion(db, worker) {
+  const approvedGalleryCount = workerGallery(db, worker, false).length;
+  const media = (db.media || []).filter(
+    (item) => Number(item.ownerUserId) === Number(worker.userId),
+  );
+  const pendingModerationItems = Array.from(
+    new Set(
+      media
+        .filter((item) => item.moderationStatus === "pending")
+        .map((item) => item.kind || "media"),
+    ),
+  );
+  const checks = [
+    [Boolean(String(worker.fullName || worker.name || "").trim()), 10, "public_name", "Добави име", "profile:basic"],
+    [Boolean(String(worker.phone || "").trim()), 10, "phone", "Добави телефон за връзка", "onboarding:contact"],
+    [Boolean(String(worker.city || "").trim()), 10, "service_area", "Добави град или район на работа", "onboarding:activity"],
+    [Array.isArray(worker.skills) && worker.skills.length > 0, 15, "skills", "Добави основна категория и специалности", "onboarding:activity"],
+    [Boolean(String(worker.description || "").trim()), 10, "bio", "Напиши кратко професионално представяне", "profile:about"],
+    [Boolean(approvedWorkerAvatarUrl(db, worker)), 10, "avatar", "Добави профилна снимка", "profile:avatar"],
+    [approvedGalleryCount >= 1, 10, "gallery_one", "Качи снимка от реален обект", "profile:gallery"],
+    [approvedGalleryCount >= 3, 15, "gallery_three", "Качи поне 3 одобрени снимки от реални обекти", "profile:gallery"],
+    [Boolean(worker.workType && worker.availabilityStatus), 5, "work_readiness", "Добави работен тип и текуща заетост", "onboarding:activity"],
+    [Boolean(worker.acquisitionSourceSelfReported && worker.onboardingCompletedAt), 5, "onboarding", "Завърши краткия onboarding", "onboarding:acquisition"],
+  ];
+  const score = checks.reduce((total, item) => total + (item[0] ? item[1] : 0), 0);
+  const missingItems = checks
+    .filter((item) => !item[0])
+    .map((item) => ({ key: item[2], label: item[3], points: item[1], target: item[4] }));
+  const onboardingStatus = worker.onboardingCompletedAt
+    ? "completed"
+    : Number(worker.onboardingStep || 1) > 1
+      ? "in_progress"
+      : "not_started";
+
+  return {
+    percentage: score,
+    score,
+    missingItems,
+    pendingModerationItems,
+    nextRecommendedAction: missingItems[0] || null,
+    onboardingStatus,
+  };
+}
+
+function mockWorkerOnboardingState(db, worker) {
+  const completion = mockWorkerCompletion(db, worker);
+  return {
+    currentStep: Math.min(4, Math.max(1, Number(worker.onboardingStep || 1))),
+    onboardingStatus: completion.onboardingStatus,
+    contact: {
+      phone: worker.phone || "",
+      preferredContactMethod: worker.preferredContactMethod || "",
+      contactAccuracyConfirmed: Boolean(worker.contactAccuracyConfirmed),
+    },
+    activity: {
+      primaryCategoryKey: worker.primaryCategoryKey || "",
+      skills: (worker.skills || []).map(normalizeSkillKey),
+      workType: worker.workType || "",
+      experienceRange: worker.experienceRange || "",
+      city: worker.city || "",
+      availabilityStatus: worker.availabilityStatus || "",
+    },
+    acquisition: {
+      source: worker.acquisitionSourceSelfReported || "",
+      detail: worker.acquisitionSourceDetail || "",
+    },
+    readiness: {
+      projectPhotosReadiness: worker.projectPhotosReadiness || "",
+      serviceDescriptionReadiness: worker.serviceDescriptionReadiness || "",
+    },
+    completion,
+  };
+}
+
 function draftRequest(body = {}) {
   const text = String(body.prompt || "").trim();
   const category = guessRepairCategory(text);
@@ -1525,14 +1599,79 @@ export async function mockRequest(method, url, data) {
       ]);
     }
     if (method === "get" && path === "/admin/workers") {
-      return response((db.workers || []).map((worker) => ({
-        ...publicUser(worker, db),
+      let workers = (db.workers || []).map((worker) => {
+        const completion = mockWorkerCompletion(db, worker);
+        return {
+          ...publicWorker(worker, db),
+          workerUserId: worker.userId,
+          publicName: worker.fullName || worker.name,
+          approvalStatus: worker.approvalStatus || "pending",
+          visibilityStatus: worker.visibilityStatus || "private",
+          userStatus: worker.status || "active",
+          hasPhone: Boolean(String(worker.phone || "").trim()),
+          completionPercent: completion.percentage,
+          missingItems: completion.missingItems,
+          onboardingStatus: completion.onboardingStatus,
+        };
+      });
+      if (queryParam(url, "incomplete") === "true") {
+        workers = workers.filter((worker) => worker.completionPercent < 100);
+      }
+      if (queryParam(url, "missingPhone") === "true") {
+        workers = workers.filter((worker) => !worker.hasPhone);
+      }
+      if (queryParam(url, "onboardingIncomplete") === "true") {
+        workers = workers.filter((worker) => worker.onboardingStatus !== "completed");
+      }
+      const sort = queryParam(url, "sort");
+      workers.sort((left, right) =>
+        sort === "completion_asc"
+          ? left.completionPercent - right.completionPercent
+          : sort === "completion_desc"
+            ? right.completionPercent - left.completionPercent
+            : Number(right.workerUserId) - Number(left.workerUserId),
+      );
+      return response(workers);
+    }
+    const adminWorkerDetailMatch = path.match(/^\/admin\/workers\/(\d+)$/);
+    if (method === "get" && adminWorkerDetailMatch) {
+      const worker = (db.workers || []).find(
+        (item) => Number(item.userId) === Number(adminWorkerDetailMatch[1]),
+      );
+      if (!worker) return fail("Worker not found", 404);
+      const completion = mockWorkerCompletion(db, worker);
+      return response({
         workerUserId: worker.userId,
         publicName: worker.fullName || worker.name,
+        email: worker.email || null,
+        phonePrivate: worker.phone || null,
+        city: worker.city || null,
+        defaultAddress: worker.address || null,
+        bio: worker.description || null,
+        experience: worker.experience || null,
+        equipment: worker.equipment || null,
+        skills: (worker.skills || []).map(normalizeSkillKey),
+        primaryCategoryKey: worker.primaryCategoryKey || null,
+        preferredContactMethod: worker.preferredContactMethod || null,
+        contactAccuracyConfirmed: Boolean(worker.contactAccuracyConfirmed),
+        workType: worker.workType || null,
+        experienceRange: worker.experienceRange || null,
+        availabilityStatus: worker.availabilityStatus || null,
+        acquisitionSourceSelfReported: worker.acquisitionSourceSelfReported || null,
+        acquisitionSourceDetail: worker.acquisitionSourceDetail || null,
+        projectPhotosReadiness: worker.projectPhotosReadiness || null,
+        serviceDescriptionReadiness: worker.serviceDescriptionReadiness || null,
+        onboardingStep: Number(worker.onboardingStep || 1),
+        onboardingCompletedAt: worker.onboardingCompletedAt || null,
+        onboardingStatus: completion.onboardingStatus,
         approvalStatus: worker.approvalStatus || "pending",
         visibilityStatus: worker.visibilityStatus || "private",
-        userStatus: worker.status || "active",
-      })));
+        accountStatus: worker.status || "active",
+        completionPercent: completion.percentage,
+        missingItems: completion.missingItems,
+        pendingModerationItems: completion.pendingModerationItems,
+        createdAt: worker.createdAt || null,
+      });
     }
     if (method === "get" && path === "/admin/requests") {
       const requests = db.requests || [];
@@ -1816,6 +1955,50 @@ export async function mockRequest(method, url, data) {
     } catch (error) {
       return fail(error?.response?.data?.message || error?.message || "Appearance update failed", error?.response?.status || 400);
     }
+  }
+
+  if (method === "get" && path === "/workers/me/onboarding") {
+    const worker = currentWorker(db);
+    return worker
+      ? response(mockWorkerOnboardingState(db, worker))
+      : fail("Worker not found", 404);
+  }
+
+  const onboardingStepMatch = path.match(
+    /^\/workers\/me\/onboarding\/(contact|activity|acquisition|readiness)$/,
+  );
+  if (method === "put" && onboardingStepMatch) {
+    const worker = currentWorker(db);
+    if (!worker) return fail("Worker not found", 404);
+    const stepKey = onboardingStepMatch[1];
+    if (stepKey === "contact") {
+      worker.phone = String(data?.phone || "").trim();
+      worker.preferredContactMethod = data?.preferredContactMethod || null;
+      worker.contactAccuracyConfirmed = Boolean(data?.contactAccuracyConfirmed);
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 2);
+    }
+    if (stepKey === "activity") {
+      worker.primaryCategoryKey = data?.primaryCategoryKey || null;
+      worker.skills = Array.isArray(data?.skills) ? data.skills : worker.skills;
+      worker.workType = data?.workType || null;
+      worker.experienceRange = data?.experienceRange || null;
+      worker.city = String(data?.city || "").trim();
+      worker.availabilityStatus = data?.availabilityStatus || null;
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 3);
+    }
+    if (stepKey === "acquisition") {
+      worker.acquisitionSourceSelfReported = data?.acquisitionSourceSelfReported || null;
+      worker.acquisitionSourceDetail = data?.acquisitionSourceDetail || null;
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 4);
+    }
+    if (stepKey === "readiness") {
+      worker.projectPhotosReadiness = data?.projectPhotosReadiness || null;
+      worker.serviceDescriptionReadiness = data?.serviceDescriptionReadiness || null;
+      worker.onboardingStep = 4;
+      worker.onboardingCompletedAt = worker.onboardingCompletedAt || nowIso();
+    }
+    writeDb(db);
+    return response(mockWorkerOnboardingState(db, worker));
   }
 
   if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId), db));

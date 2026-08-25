@@ -1,6 +1,7 @@
 import { Not } from 'typeorm';
 import { AdminService } from '../admin/admin.service';
 import { WorkersService } from '../workers/workers.service';
+import { WorkerProfileCompletionService } from '../workers/worker-profile-completion.service';
 import { MediaService } from './media.service';
 
 function matchesValue(actual: any, expected: any): boolean {
@@ -98,6 +99,7 @@ describe('Worker media moderation integration', () => {
         findOne: jest.fn().mockResolvedValue({ id: 201, status: 'active' }),
         findByIds: jest.fn().mockResolvedValue([{ id: 201, status: 'active' }]),
       } as any,
+      new WorkerProfileCompletionService(),
     );
     const auditRepo = emptyRepo();
     const referrals = {

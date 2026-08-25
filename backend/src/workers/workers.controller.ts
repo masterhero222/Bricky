@@ -17,6 +17,7 @@ import { WorkersService } from './workers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateWorkerAppearanceDto } from './dto/update-worker-appearance.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { UpdateWorkerOnboardingStepDto } from './dto/update-worker-onboarding-step.dto';
 import {
   deleteStoredMedia,
   StoredMedia,
@@ -175,6 +176,28 @@ export class WorkersController {
     const userId = Number(req.user.id);
     const imageId = Number(id);
     return this.workersService.deleteGalleryImage(userId, imageId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me/onboarding')
+  async myOnboarding(@Req() req: any) {
+    this.assertWorkerRole(req);
+    return this.workersService.getOnboardingState(Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('me/onboarding/:stepKey')
+  async updateMyOnboarding(
+    @Req() req: any,
+    @Param('stepKey') stepKey: string,
+    @Body() data: UpdateWorkerOnboardingStepDto,
+  ) {
+    this.assertWorkerRole(req);
+    return this.workersService.updateOnboardingStep(
+      Number(req.user.id),
+      stepKey,
+      data,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Eye,
   LogOut,
   Plus,
   RefreshCw,
@@ -12,6 +13,11 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api';
 import { mediaUrl, photoMediaUrl } from '../utils/mediaUrls';
+import {
+  CompletionBadge,
+  WorkerAdminFilters,
+  WorkerDetailModal,
+} from '../components/admin/WorkerAdminOperations';
 
 const tabs = [
   { key: 'users', label: 'Потребители' },
@@ -49,11 +55,31 @@ export default function AdminBackoffice() {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [requestTimeline, setRequestTimeline] = useState(null);
   const [requestIntervention, setRequestIntervention] = useState(null);
+  const [workerDetail, setWorkerDetail] = useState(null);
+  const [workerDetailLoading, setWorkerDetailLoading] = useState(false);
+  const [workerDetailError, setWorkerDetailError] = useState('');
+  const [workerDetailUserId, setWorkerDetailUserId] = useState(null);
+  const [workerFilters, setWorkerFilters] = useState({
+    incomplete: false,
+    missingPhone: false,
+    onboardingIncomplete: false,
+    sort: 'newest',
+  });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const endpoint = useMemo(() => `/admin/${activeTab}`, [activeTab]);
+  const endpoint = useMemo(() => {
+    if (activeTab !== 'workers') return `/admin/${activeTab}`;
+    const params = new URLSearchParams();
+    if (workerFilters.incomplete) params.set('incomplete', 'true');
+    if (workerFilters.missingPhone) params.set('missingPhone', 'true');
+    if (workerFilters.onboardingIncomplete) {
+      params.set('onboardingIncomplete', 'true');
+    }
+    params.set('sort', workerFilters.sort);
+    return `/admin/workers?${params.toString()}`;
+  }, [activeTab, workerFilters]);
   const availableStatuses = useMemo(
     () =>
       [
@@ -117,6 +143,7 @@ export default function AdminBackoffice() {
         setMediaPreview(null);
         setRequestTimeline(null);
         setRequestIntervention(null);
+        setWorkerDetail(null);
       }
     }
 
@@ -145,6 +172,24 @@ export default function AdminBackoffice() {
       setError(
         err?.response?.data?.message || 'Timeline-ът не можа да се зареди',
       );
+    }
+  }
+
+  async function openWorkerDetail(workerUserId) {
+    setWorkerDetailUserId(workerUserId);
+    setWorkerDetailLoading(true);
+    setWorkerDetailError('');
+    setError('');
+    try {
+      const res = await apiGet(`/admin/workers/${workerUserId}`);
+      setWorkerDetail(res.data);
+    } catch (err) {
+      setWorkerDetailError(
+        err?.response?.data?.message ||
+          'Детайлите за майстора не можаха да се заредят',
+      );
+    } finally {
+      setWorkerDetailLoading(false);
     }
   }
 
@@ -232,11 +277,25 @@ export default function AdminBackoffice() {
           />
         )}
 
+        {!loading && activeTab === 'workers' && (
+          <WorkerAdminFilters
+            value={workerFilters}
+            onChange={(next) => {
+              setWorkerFilters(next);
+              setPage(1);
+            }}
+          />
+        )}
+
         {!loading && activeTab === 'users' && (
           <UsersTable items={visibleItems} run={run} />
         )}
         {!loading && activeTab === 'workers' && (
-          <WorkersTable items={visibleItems} run={run} />
+          <WorkersTable
+            items={visibleItems}
+            run={run}
+            onDetails={openWorkerDetail}
+          />
         )}
         {!loading && activeTab === 'requests' && (
           <RequestsTable
@@ -272,6 +331,20 @@ export default function AdminBackoffice() {
         <MediaPreviewModal
           media={mediaPreview}
           onClose={() => setMediaPreview(null)}
+        />
+      )}
+      {(workerDetail || workerDetailLoading || workerDetailError) && (
+        <WorkerDetailModal
+          worker={workerDetail}
+          loading={workerDetailLoading}
+          error={workerDetailError}
+          onRetry={() => openWorkerDetail(workerDetailUserId)}
+          onClose={() => {
+            setWorkerDetail(null);
+            setWorkerDetailLoading(false);
+            setWorkerDetailError('');
+            setWorkerDetailUserId(null);
+          }}
         />
       )}
       {requestTimeline && (
@@ -488,7 +561,7 @@ function UsersTable({ items, run }) {
   );
 }
 
-function WorkersTable({ items, run }) {
+function WorkersTable({ items, run, onDetails }) {
   return (
     <DataTable
       columns={[
@@ -498,6 +571,8 @@ function WorkersTable({ items, run }) {
         'Акаунт',
         'Одобрение',
         'Стена',
+        'Профил',
+        'Onboarding',
         'Действия',
       ]}
       rows={items.map((worker) => [
@@ -507,10 +582,23 @@ function WorkersTable({ items, run }) {
         worker.userStatus || '-',
         worker.approvalStatus || (worker.isApproved ? 'approved' : 'pending'),
         worker.visibilityStatus === 'public' ? 'Показан' : 'Скрит',
+        <CompletionBadge
+          key={`completion-${worker.workerUserId || worker.id}`}
+          value={worker.completionPercent}
+        />,
+        worker.onboardingStatus === 'completed' ? 'Завършен' : 'Незавършен',
         <div
           className="flex flex-wrap gap-2"
           key={worker.workerUserId || worker.userId || worker.id}
         >
+          <SmallButton
+            onClick={() =>
+              onDetails(worker.workerUserId || worker.userId || worker.id)
+            }
+          >
+            <Eye size={14} aria-hidden="true" />
+            Детайли
+          </SmallButton>
           <SmallButton
             onClick={() =>
               run(() =>

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AdminAuditLogEntity } from './admin-audit-log.entity';
 import { UsersService } from '../users/users.service';
-import { WorkersService } from '../workers/workers.service';
+import { AdminWorkerFilters, WorkersService } from '../workers/workers.service';
 import { RequestsService } from '../requests/requests.service';
 import { MediaService } from '../media/media.service';
 import { BillingService } from '../billing/billing.service';
@@ -60,8 +60,12 @@ export class AdminService {
     return user;
   }
 
-  listWorkers() {
-    return this.workers.getAllForAdmin();
+  listWorkers(filters: AdminWorkerFilters = {}) {
+    return this.workers.getAllForAdmin(filters);
+  }
+
+  getWorkerDetails(workerUserId: number) {
+    return this.workers.getAdminDetail(workerUserId);
   }
 
   async setWorkerApproval(

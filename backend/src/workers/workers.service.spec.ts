@@ -1,4 +1,5 @@
 import { WorkersService } from './workers.service';
+import { WorkerProfileCompletionService } from './worker-profile-completion.service';
 
 function repo(overrides: Record<string, any> = {}) {
   return {
@@ -32,6 +33,7 @@ function serviceWith(overrides: Record<string, any> = {}) {
         ids.map((id) => ({ id, status: 'active' })),
       ),
     }) as any,
+    new WorkerProfileCompletionService(),
   );
 }
 
@@ -546,5 +548,56 @@ describe('WorkersService v2 independence from legacy tables', () => {
     });
 
     await expect(service.getAll()).rejects.toBe(connectionError);
+  });
+});
+
+describe('WorkersService admin worker privacy', () => {
+  const profile = {
+    userId: 401,
+    publicName: 'Админ тест майстор',
+    phonePrivate: '+359888123456',
+    city: 'София',
+    approvalStatus: 'approved',
+    visibilityStatus: 'public',
+    onboardingStep: 1,
+    createdAt: new Date('2026-08-25T08:00:00Z'),
+  };
+
+  it('keeps private contact data out of the admin list response', async () => {
+    const service = serviceWith({
+      workerProfilesRepo: repo({ find: jest.fn().mockResolvedValue([profile]) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      users: {
+        findByIds: jest.fn().mockResolvedValue([
+          { id: 401, status: 'active', email: 'private@example.com' },
+        ]),
+      },
+    });
+
+    const [worker] = await service.getAllForAdmin();
+
+    expect(worker.hasPhone).toBe(true);
+    expect(worker).not.toHaveProperty('phonePrivate');
+    expect(worker).not.toHaveProperty('email');
+  });
+
+  it('returns private contact only from the dedicated admin detail method', async () => {
+    const service = serviceWith({
+      workerProfilesRepo: repo({ findOne: jest.fn().mockResolvedValue(profile) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      users: {
+        findOne: jest.fn().mockResolvedValue({
+          id: 401,
+          status: 'active',
+          email: 'private@example.com',
+          createdAt: new Date('2026-08-25T08:00:00Z'),
+        }),
+      },
+    });
+
+    const worker = await service.getAdminDetail(401);
+
+    expect(worker.phonePrivate).toBe('+359888123456');
+    expect(worker.email).toBe('private@example.com');
   });
 });

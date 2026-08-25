@@ -42,6 +42,8 @@ export default function WorkerProfileEditorPremium({
   ratingLoading,
   ratingError,
   completedCount = 0,
+  profileCompletion,
+  onContinueProfile,
 }) {
   const [tab, setTab] = useState("main");
   const [savedSnapshot, setSavedSnapshot] = useState("");
@@ -52,8 +54,7 @@ export default function WorkerProfileEditorPremium({
   const rating = Number(ratingInfo?.average || 0).toFixed(1);
   const reviews = Number(ratingInfo?.total || 0);
   const profession = profile.skills?.[0] || "Майстор";
-  const completionFields = [profile.fullName, profile.city, profile.description, profile.experience, profile.skills?.length, profile.avatarUrl || profile.avatar];
-  const completion = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100);
+  const completion = Number(profileCompletion?.percentage || 0);
   const avatarFallback = (event) => {
     event.currentTarget.src = "/media_files/Snejan.jpg";
   };
@@ -96,10 +97,11 @@ export default function WorkerProfileEditorPremium({
           <h1>Моят профил</h1>
           <div className="wpe-completion">
             <div className="wpe-progress" style={{ "--progress": `${completion}%` }}>{completion}%</div>
-            <div><strong>{completion === 100 ? "Профилът е завършен" : "Профилът е почти завършен"}</strong><span>Попълнете още малко, за да изпъкнете</span></div>
+            <div><strong>{completion === 100 ? "Профилът е готов" : "Профилът има още за попълване"}</strong><span>{profileCompletion?.nextRecommendedAction?.label || "Основните данни са попълнени"}</span></div>
           </div>
         </div>
         <div className="wpe-actions">
+          {completion < 100 && <button type="button" className="wpe-button wpe-button-secondary" onClick={onContinueProfile}><CheckCircle2 size={18} />Продължи профила</button>}
           <button type="button" className="wpe-button wpe-button-secondary" onClick={onPreview}><Eye size={18} />Преглед като клиент</button>
           <button type="button" className="wpe-button wpe-button-primary" onClick={save} disabled={saving || !dirty}><Check size={19} />{saving ? "Запазване..." : "Запази промените"}</button>
         </div>
