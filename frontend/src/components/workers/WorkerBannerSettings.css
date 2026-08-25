@@ -1,0 +1,177 @@
+.wbs-shell {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 28px;
+  color: #f8fafc;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(8, 26, 44, 0.98), rgba(4, 15, 27, 0.98));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.wbs-heading {
+  text-align: left;
+}
+
+.wbs-eyebrow {
+  margin: 0 0 8px;
+  color: #24d4f2;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wbs-heading h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 900;
+}
+
+.wbs-heading p:last-child {
+  margin: 10px 0 0;
+  color: #aebfd1;
+}
+
+.wbs-preview {
+  margin-top: 22px;
+}
+
+.wbs-preview .wpp-banner {
+  height: 164px;
+  border-radius: 12px;
+}
+
+.wbs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.wbs-option {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  color: #dce9f5;
+  border: 1px solid rgba(71, 101, 128, 0.64);
+  border-radius: 12px;
+  background: rgba(8, 23, 39, 0.94);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.wbs-option:hover {
+  transform: translateY(-1px);
+  border-color: rgba(36, 212, 242, 0.58);
+  background: rgba(12, 35, 58, 0.98);
+}
+
+.wbs-option.is-selected {
+  border-color: #24d4f2;
+  box-shadow: 0 0 0 1px rgba(36, 212, 242, 0.4), 0 12px 24px rgba(36, 212, 242, 0.1);
+}
+
+.wbs-thumb {
+  display: block;
+  aspect-ratio: 6 / 1;
+  overflow: hidden;
+  background: #061424;
+}
+
+.wbs-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.wbs-option-footer {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.wbs-check {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 999px;
+  background: #20c65a;
+}
+
+.wbs-check svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wbs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.wbs-save {
+  min-height: 48px;
+  padding: 0 22px;
+  color: #fff;
+  border: 1px solid #35dd74;
+  border-radius: 10px;
+  background: #20c65a;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.wbs-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.wbs-success,
+.wbs-error {
+  margin: 0;
+  font-weight: 800;
+}
+
+.wbs-success {
+  color: #9df5bd;
+}
+
+.wbs-error {
+  color: #fca5a5;
+}
+
+@media (max-width: 900px) {
+  .wbs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .wbs-shell {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .wbs-preview .wpp-banner {
+    height: 112px;
+  }
+
+  .wbs-grid {
+    grid-template-columns: 1fr;
+  }
+}

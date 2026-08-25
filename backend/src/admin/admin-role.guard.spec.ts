@@ -9,4 +9,3 @@ describe('AdminRoleGuard', () => {
   it('allows admins', () => expect(new AdminRoleGuard().canActivate(context('admin'))).toBe(true));
   it('rejects non-admin users', () => expect(() => new AdminRoleGuard().canActivate(context('worker'))).toThrow(ForbiddenException));
 });
-

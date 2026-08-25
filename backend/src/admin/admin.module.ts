@@ -1,23 +1,30 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RequestEntity } from '../requests/entities/request.entity';
-import { RequestImageEntity } from '../requests/entities/request-image.entity';
+import { AdminAuditLogEntity } from './admin-audit-log.entity';
 import { AdminController } from './admin.controller';
-import { AdminRoleGuard } from './admin-role.guard';
 import { AdminService } from './admin.service';
-import { AdminAuditLogEntity } from './entities/admin-audit-log.entity';
-import { Worker } from '../workers/worker.entity';
-import { WorkerGalleryImage } from '../workers/worker-gallery-image.entity';
-import { ReviewEntity } from '../reviews/entities/review.entity';
-import { UserEntity } from '../users/user.entity';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { MediaModerationService } from './media-moderation.service';
+import { UsersModule } from '../users/users.module';
+import { WorkersModule } from '../workers/workers.module';
+import { RequestsModule } from '../requests/requests.module';
+import { MediaModule } from '../media/media.module';
+import { BillingModule } from '../billing/billing.module';
+import { ReferralsModule } from '../referrals/referrals.module';
+import { CatalogModule } from '../catalog/catalog.module';
+import { ReportsModule } from '../reports/reports.module';
 
 @Module({
-  imports: [NotificationsModule, TypeOrmModule.forFeature([
-    RequestEntity, RequestImageEntity, Worker, WorkerGalleryImage, ReviewEntity, UserEntity, AdminAuditLogEntity,
-  ])],
+  imports: [
+    TypeOrmModule.forFeature([AdminAuditLogEntity]),
+    UsersModule,
+    WorkersModule,
+    RequestsModule,
+    MediaModule,
+    BillingModule,
+    ReferralsModule,
+    CatalogModule,
+    ReportsModule,
+  ],
   controllers: [AdminController],
-  providers: [AdminService, AdminRoleGuard, MediaModerationService],
+  providers: [AdminService],
 })
 export class AdminModule {}

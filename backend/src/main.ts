@@ -1,35 +1,29 @@
 import * as dotenv from 'dotenv';
-dotenv.config({ path: '/var/www/Bricky/backend/.env' });
+import { join } from 'path';
+dotenv.config({ path: join(process.cwd(), '.env') });
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { accessSync, constants, existsSync, mkdirSync } from 'fs';
+import { getCorsOrigins, validateRuntimeConfig } from './config/runtime-config';
 import { getUploadsRoot } from './common/storage-paths';
 
 async function bootstrap() {
+  validateRuntimeConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
 
-  // ensure uploads folder exists
   const uploadsDir = getUploadsRoot();
   if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
   accessSync(uploadsDir, constants.R_OK | constants.W_OK);
 
   // serve /uploads/*
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
-  console.log(`Uploads directory: ${uploadsDir}`);
 
-  // CORS за фронтенда
   app.enableCors({
-    origin: [
-      'http://bricky.bg',
-      'https://bricky.bg',
-      'http://94.72.143.22',
-      'https://94.72.143.22',
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
+    origin: getCorsOrigins(),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
@@ -40,7 +34,10 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT) || 3000;
   await app.listen(PORT, '0.0.0.0');
 
-  console.log(`🚀 Backend is running on port ${PORT}`);
+  console.log(`Backend is running on port ${PORT}`);
 }
 
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('Backend startup failed', error);
+  process.exitCode = 1;
+});

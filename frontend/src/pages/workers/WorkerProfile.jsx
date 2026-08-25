@@ -1,25 +1,46 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import { apiGet, apiPost, apiPut } from "../../services/api";
-import { isDevMockToken, saveDevWorkerProfile, uploadDevWorkerAvatar, uploadDevWorkerGallery } from "../../services/devMockApi";
-import LogoutButton from "../../components/LogoutButton";
-import { getApiBase, mediaUrl, photoMediaUrl, photoThumbnailUrl } from "../../utils/mediaUrls";
-import { cleanRequestDescription, formatRequestExpectedRange } from "../../utils/requestPresentation";
-import { REPAIR_CATEGORY_FLOW, REPAIR_CATEGORY_OPTIONS } from "../../constants/repairCatalog";
-import { getPricingActivity } from "../../constants/repairPricingConfig";
-import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../../utils/repairPriceCalculator";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { apiGet, apiPost, apiPut } from '../../services/api';
+import {
+  isDevMockToken,
+  saveDevWorkerProfile,
+  updateDevWorkerAppearance,
+  uploadDevWorkerAvatar,
+  uploadDevWorkerGallery,
+} from '../../services/devMockApi';
+import WorkerCalculatorPanel from '../../components/workers/WorkerCalculatorPanel';
+import WorkerDashboardSummary from '../../components/workers/WorkerDashboardSummary';
+import WorkerGalleryPanel from '../../components/workers/WorkerGalleryPanel';
+import WorkerProfileSidebar from '../../components/workers/WorkerProfileSidebar';
+import WorkerReferralPanel from '../../components/workers/WorkerReferralPanel';
+import WorkerProfileEditorPremium from '../../components/workers/WorkerProfileEditorPremium';
+import { getApiBase, mediaUrl, photoMediaUrl } from '../../utils/mediaUrls';
+import {
+  cleanRequestDescription,
+  formatRequestExpectedRange,
+} from '../../utils/requestPresentation';
+import { DEFAULT_WORKER_BANNER_KEY } from '../../constants/workerBannerCatalog';
+import AccountSettingsPanel from '../../components/account/AccountSettingsPanel';
+import ReportContentButton from '../../components/ReportContentButton';
+import {
+  WorkerOnboardingModal,
+  WorkerProfileGuidanceCard,
+} from '../../components/workers/WorkerOnboarding';
 
 function formatBG(dateStr) {
   try {
-    return new Date(dateStr).toLocaleString("bg-BG");
+    return new Date(dateStr).toLocaleString('bg-BG');
   } catch {
-    return dateStr || "—";
+    return dateStr || '—';
   }
 }
 
 function getToken() {
-  return localStorage.getItem("token") || localStorage.getItem("access_token") || "";
+  return (
+    localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+  );
 }
 
 function absUrl(url) {
@@ -34,26 +55,10 @@ function requestPhotos(req) {
   const photos = Array.isArray(req?.photos)
     ? req.photos
     : Array.isArray(req?.beforePhotos)
-    ? req.beforePhotos
-    : [];
+      ? req.beforePhotos
+      : [];
 
   return photos.filter((photo) => photoUrl(photo));
-}
-
-function normalizeArr(x) {
-  if (!x) return [];
-  if (Array.isArray(x)) return x;
-  if (typeof x === "string") {
-    try {
-      const parsed = JSON.parse(x);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {}
-    return x
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
@@ -64,19 +69,22 @@ function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
 
-      const scale = Math.min(1, maxSize / Math.max(img.width || 1, img.height || 1));
-      const canvas = document.createElement("canvas");
+      const scale = Math.min(
+        1,
+        maxSize / Math.max(img.width || 1, img.height || 1),
+      );
+      const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round((img.width || 1) * scale));
       canvas.height = Math.max(1, Math.round((img.height || 1) * scale));
 
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      resolve(canvas.toDataURL('image/jpeg', quality));
     };
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error("Cannot read image"));
+      reject(new Error('Cannot read image'));
     };
 
     img.src = objectUrl;
@@ -84,13 +92,16 @@ function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
 }
 
 function filesToPhotos(files) {
-  const images = Array.from(files || []).filter((file) => String(file.type || "").startsWith("image/"));
+  const images = Array.from(files || []).filter((file) =>
+    String(file.type || '').startsWith('image/'),
+  );
   return Promise.all(
     images.map(async (file) => ({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: file.name,
       url: await imageFileToDataUrl(file),
-    }))
+      file,
+    })),
   );
 }
 
@@ -99,117 +110,184 @@ function toNum(x) {
   return Number.isFinite(n) ? n : null;
 }
 
-function formatEuroRange(min, max) {
-  const safeMin = Number(min) || 0;
-  const safeMax = Number(max) || 0;
-  return `${safeMin.toLocaleString("bg-BG")}–${safeMax.toLocaleString("bg-BG")} EUR`;
+const WORKER_TABS = new Set([
+  'dashboard',
+  'requests',
+  'history',
+  'profile',
+  'referrals',
+  'gallery',
+  'calculator',
+  'settings',
+  'subscription',
+]);
+
+function normalizeWorkerTab(tab) {
+  return WORKER_TABS.has(tab) ? tab : 'dashboard';
 }
 
 export default function WorkerProfile() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() =>
+    normalizeWorkerTab(searchParams.get('tab')),
+  );
 
   const [profile, setProfile] = useState({
-    fullName: "",
-    city: "",
-    description: "",
-    experience: "",
-    equipment: "",
+    fullName: '',
+    city: '',
+    description: '',
+    experience: '',
+    equipment: '',
     avatar: null,
-    avatarUrl: "",
+    avatarUrl: '',
+    profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
+    skills: [],
+    skillKeys: [],
+    approvalStatus: '',
+    visibilityStatus: '',
   });
 
   // IMPORTANT: това е users.id на логнатия worker (userId)
   const [myUserId, setMyUserId] = useState(null);
 
-  const [previewAvatar, setPreviewAvatar] = useState("");
+  const [previewAvatar, setPreviewAvatar] = useState('');
   const [saving, setSaving] = useState(false);
+  const [onboarding, setOnboarding] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const nextTab = normalizeWorkerTab(searchParams.get('tab'));
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [searchParams]);
+
+  function selectWorkerTab(key) {
+    if (key === 'map') {
+      navigate('/repair-map');
+      return;
+    }
+
+    const nextTab = normalizeWorkerTab(key);
+    setActiveTab(nextTab);
+    navigate(
+      nextTab === 'dashboard'
+        ? '/worker/profile'
+        : `/worker/profile?tab=${encodeURIComponent(nextTab)}`,
+    );
+  }
 
   const [requests, setRequests] = useState([]);
   const [completedRequests, setCompletedRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
-  const [reqError, setReqError] = useState("");
+  const [reqError, setReqError] = useState('');
 
   const [applyingId, setApplyingId] = useState(null);
-  const [applyMsg, setApplyMsg] = useState("");
+  const [withdrawingId, setWithdrawingId] = useState(null);
+  const [applyMsg, setApplyMsg] = useState('');
 
   // ✅ COMPLETE state
   const [completingId, setCompletingId] = useState(null);
   const [completionPhotos, setCompletionPhotos] = useState({});
 
   // ✅ REVIEWS state (worker rating)
-  const [ratingInfo, setRatingInfo] = useState({ total: 0, average: 0, items: [] });
-  const [ratingLoading, setRatingLoading] = useState(false);
-  const [ratingError, setRatingError] = useState("");
-
-  const [calc, setCalc] = useState({
-    categoryKey: "bathroom_renovation",
-    activities: [],
-    sizeOption: "",
-    exactAreaM2: "",
-    pricingMode: "labor_plus_materials",
+  const [ratingInfo, setRatingInfo] = useState({
+    total: 0,
+    average: 0,
+    items: [],
   });
+  const [ratingLoading, setRatingLoading] = useState(false);
+  const [ratingError, setRatingError] = useState('');
 
-  const calcCategory = useMemo(
-    () => REPAIR_CATEGORY_OPTIONS.find((item) => item.key === calc.categoryKey) || REPAIR_CATEGORY_OPTIONS[0],
-    [calc.categoryKey]
-  );
-  const calcFlow = REPAIR_CATEGORY_FLOW[calcCategory.key] || { activities: [], quantityOptions: [] };
-  const calcPricingActivities = useMemo(
-    () => calc.activities.map((item) => getPricingActivity(calcCategory.key, item)).filter(Boolean),
-    [calc.activities, calcCategory.key]
-  );
-  const calcAsksForArea = calcPricingActivities.some((item) => item.areaBased);
-  const calcEstimate = useMemo(
-    () => calculateRepairEstimate({
-      categoryKey: calcCategory.key,
-      selectedActivities: calc.activities,
-      sizeOption: calc.sizeOption,
-      exactAreaM2: calc.exactAreaM2,
-      pricingMode: calc.pricingMode,
-      location: "sofia_regular",
-    }),
-    [calc.activities, calc.exactAreaM2, calc.pricingMode, calc.sizeOption, calcCategory.key]
-  );
-
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // =========================
   // ✅ GALLERY STATE
   // =========================
   const [gallery, setGallery] = useState([]); // [{ id, url, created_at }]
   const [galleryLoading, setGalleryLoading] = useState(false);
-  const [galleryError, setGalleryError] = useState("");
-  const [galleryMsg, setGalleryMsg] = useState("");
+  const [galleryError, setGalleryError] = useState('');
+  const [galleryMsg, setGalleryMsg] = useState('');
   const [galleryFiles, setGalleryFiles] = useState([]); // File[]
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [reorderingGallery, setReorderingGallery] = useState(false);
   const [albumViewer, setAlbumViewer] = useState(null); // { albumIndex, photoIndex }
+  const [referralInfo, setReferralInfo] = useState({
+    code: null,
+    referralUrl: null,
+    invites: [],
+    rewards: [],
+  });
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralMsg, setReferralMsg] = useState('');
+  const [referralError, setReferralError] = useState('');
 
   useEffect(() => {
     loadMeProfile();
     loadRequests();
     loadCompletedRequests();
     loadGallery();
+    loadReferrals();
+    loadOnboarding();
   }, []);
 
-  useEffect(() => {
-    if (myUserId) loadMyReviews();
-  }, [myUserId]);
+  async function loadOnboarding() {
+    try {
+      const res = await apiGet('/workers/me/onboarding');
+      setOnboarding(res.data || null);
+    } catch (err) {
+      console.error('loadOnboarding error:', err);
+    }
+  }
+
+  async function saveOnboardingStep(stepKey, data) {
+    const res = await apiPut(`/workers/me/onboarding/${stepKey}`, data);
+    setOnboarding(res.data || null);
+    await loadMeProfile();
+    return res.data;
+  }
+
+  function openGuidanceTarget(target) {
+    const value = String(target || '');
+    if (value.startsWith('onboarding:')) {
+      setShowOnboarding(true);
+      return;
+    }
+    if (value === 'profile:gallery') {
+      selectWorkerTab('gallery');
+      return;
+    }
+    selectWorkerTab('profile');
+  }
 
   async function loadRequests() {
     try {
-      setReqError("");
-      setApplyMsg("");
+      setReqError('');
+      setApplyMsg('');
       setLoadingRequests(true);
 
-      const res = await apiGet("/requests/worker");
+      const res = await apiGet('/requests/worker');
       const data = Array.isArray(res.data) ? res.data : [];
       setRequests(data);
     } catch (err) {
-      console.error("Error loading requests:", err);
-      setReqError("Грешка при зареждане на заявки.");
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || '';
+      const accessRestricted =
+        status === 403 &&
+        /worker (profile|account) (is not approved|is not visible|is not active)/i.test(
+          message,
+        );
+
+      if (accessRestricted) {
+        setReqError(
+          'Заявките ще бъдат достъпни, когато профилът ти е одобрен и активен.',
+        );
+      } else {
+        console.error('Error loading requests:', err);
+        setReqError('Грешка при зареждане на заявки.');
+      }
       setRequests([]);
     } finally {
       setLoadingRequests(false);
@@ -218,148 +296,230 @@ export default function WorkerProfile() {
 
   async function loadCompletedRequests() {
     try {
-      const [completedRes, historyRes] = await Promise.all([
-        apiGet("/requests/worker/completed").catch(() => ({ data: [] })),
-        apiGet("/workers/me/history").catch(() => ({ data: [] })),
-      ]);
-      const completed = Array.isArray(completedRes.data) ? completedRes.data : [];
-      const history = Array.isArray(historyRes.data) ? historyRes.data : [];
-      setCompletedRequests(history.length ? history : completed);
+      const completedRes = await apiGet('/requests/worker?scope=history');
+      const completed = Array.isArray(completedRes.data)
+        ? completedRes.data
+        : [];
+      setCompletedRequests(completed);
     } catch (err) {
-      console.error("Error loading completed requests:", err);
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || '';
+      const accessRestricted =
+        status === 403 &&
+        /worker (profile|account) (is not approved|is not visible|is not active)/i.test(
+          message,
+        );
+
+      if (!accessRestricted) {
+        console.error('Error loading completed requests:', err);
+      }
       setCompletedRequests([]);
     }
   }
 
-  async function loadMyReviews() {
+  const loadMyReviews = useCallback(async () => {
     try {
-      setRatingError("");
+      setRatingError('');
       setRatingLoading(true);
 
       const res = await apiGet(`/reviews/worker/${myUserId}`);
       setRatingInfo(res.data || { total: 0, average: 0, items: [] });
     } catch (e) {
-      console.error("loadMyReviews error:", e);
-      setRatingError("Не успях да заредя рейтинга.");
+      console.error('loadMyReviews error:', e);
+      setRatingError('Не успях да заредя рейтинга.');
       setRatingInfo({ total: 0, average: 0, items: [] });
     } finally {
       setRatingLoading(false);
     }
-  }
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (myUserId) loadMyReviews();
+  }, [loadMyReviews, myUserId]);
 
   async function loadMeProfile() {
     try {
       const token = getToken();
       if (!token) return;
 
-      const res = await apiGet("/workers/me");
+      const res = await apiGet('/workers/me');
 
       const w = res.data || {};
 
       // ✅ myUserId е users.id, а /workers/me връща worker.userId (връзката към users)
-      const uid = Number(w.userId || localStorage.getItem("userId") || 0) || null;
+      const uid =
+        Number(w.userId || localStorage.getItem('userId') || 0) || null;
       setMyUserId(uid);
 
       setProfile((p) => ({
         ...p,
-        fullName: w.fullName || "",
-        city: w.city || "",
-        description: w.description || "",
-        experience: w.experience || "",
-        equipment: w.equipment || "",
-        avatarUrl: w.avatarUrl || "",
+        fullName: w.fullName || '',
+        city: w.city || '',
+        description: w.description || '',
+        experience: w.experience || '',
+        equipment: w.equipment || '',
+        avatarUrl: w.avatarUrl || '',
+        profileBannerKey: w.profileBannerKey || DEFAULT_WORKER_BANNER_KEY,
+        skills: Array.isArray(w.skills) ? w.skills : [],
+        skillKeys: Array.isArray(w.skillKeys) ? w.skillKeys : [],
+        approvalStatus:
+          w.approvalStatus || (w.isApproved ? 'approved' : 'pending'),
+        visibilityStatus: w.visibilityStatus || '',
         avatar: null,
       }));
 
       if (w.avatarUrl) setPreviewAvatar(absUrl(w.avatarUrl));
     } catch (err) {
-      console.error("Error loading worker profile:", err);
+      console.error('Error loading worker profile:', err);
     }
   }
 
   function hasApplied(req) {
-    const list = normalizeArr(req.appliedWorkers).map((x) => Number(x)).filter(Boolean);
     if (!myUserId) return false;
-    return list.includes(Number(myUserId));
+    if (!Array.isArray(req?.applications)) return false;
+    return req.applications.some(
+      (application) =>
+        Number(application?.workerUserId) === Number(myUserId) &&
+        !['withdrawn', 'rejected'].includes(application?.status),
+    );
   }
 
   function isClosed(req) {
-    const st = String(req.statusKey || req.status || "").toLowerCase();
-    return ["completed", "canceled", "disputed"].includes(st) || st.includes("завърш") || st.includes("отказ");
+    return ['completed', 'canceled', 'archived'].includes(
+      requestStatusKey(req),
+    );
   }
 
   function isAssignedToMe(req) {
     if (!myUserId) return false;
-    return Number(req?.assignedWorkerId) === Number(myUserId);
+    return Number(req?.assignedWorkerUserId) === Number(myUserId);
   }
 
-  function canComplete(req) {
-    return isAssignedToMe(req) && String(req.statusKey || req.status || "").toLowerCase() === "in_progress";
+  function requestStatusKey(req) {
+    return req?.statusKey || '';
+  }
+
+  function requestAllows(req, action) {
+    return (
+      Array.isArray(req?.allowedActions) && req.allowedActions.includes(action)
+    );
+  }
+
+  function canWithdrawApplication(req) {
+    const selectedToMe =
+      isAssignedToMe(req) &&
+      ['worker_selected', 'assigned'].includes(requestStatusKey(req));
+    return (
+      hasApplied(req) &&
+      !isClosed(req) &&
+      requestAllows(req, 'withdraw_application') &&
+      (selectedToMe || !toNum(req.assignedWorkerUserId))
+    );
+  }
+
+  function workerStepAction(req) {
+    if (!isAssignedToMe(req)) return null;
+    const actions = {
+      worker_selected: {
+        endpoint: 'worker-confirm',
+        label: 'Потвърждавам заявката',
+        action: 'mark_arrived',
+      },
+      assigned: {
+        endpoint: 'worker-confirm',
+        label: 'Потвърждавам заявката',
+        action: 'mark_arrived',
+      },
+      worker_confirmed: {
+        endpoint: 'on-site',
+        label: 'На адрес съм',
+        action: 'mark_arrived',
+      },
+      worker_on_site: {
+        endpoint: 'inspect',
+        label: 'Огледах обекта',
+        action: 'start_work',
+      },
+      inspected: {
+        endpoint: 'start',
+        label: 'Започнах работа',
+        action: 'start_work',
+      },
+      in_progress: {
+        endpoint: 'finish',
+        label: 'Свърших работа',
+        needsPhotos: true,
+        action: 'mark_ready',
+      },
+      work_finished: { endpoint: 'ready', label: 'Готово за клиента' },
+      reviewed: {
+        endpoint: 'complete',
+        label: 'Затвори поръчката',
+        action: 'close',
+      },
+    };
+    const step = actions[requestStatusKey(req)] || null;
+    if (!step || !step.action) return step;
+    return requestAllows(req, step.action) ? step : null;
   }
 
   async function handleCompletionPhotos(requestId, files) {
     try {
       const photos = await filesToPhotos(files);
-      const withFiles = photos.map((photo, index) => ({ ...photo, file: files[index] }));
-      setCompletionPhotos((p) => ({ ...p, [requestId]: [...(p[requestId] || []), ...withFiles] }));
+      setCompletionPhotos((p) => ({
+        ...p,
+        [requestId]: [...(p[requestId] || []), ...photos],
+      }));
     } catch (err) {
       console.error(err);
-      setApplyMsg("Не успях да прочета снимките след ремонта.");
+      setApplyMsg('Не успях да прочета снимките след ремонта.');
     }
   }
 
   function removeCompletionPhoto(requestId, photoId) {
     setCompletionPhotos((p) => ({
       ...p,
-      [requestId]: (p[requestId] || []).filter((photo) => String(photo.id) !== String(photoId)),
+      [requestId]: (p[requestId] || []).filter(
+        (photo) => String(photo.id) !== String(photoId),
+      ),
     }));
   }
 
-  async function advanceRequest(req) {
+  async function completeRequest(requestId) {
     try {
-      setApplyMsg("");
-      setCompletingId(req.id);
+      setApplyMsg('');
+      setCompletingId(requestId);
 
-      const status = String(req.statusKey || req.status || "").toLowerCase();
-      const endpoint = status === "assigned" ? "arrive" : status === "worker_arrived" ? "start" : status === "in_progress" ? "ready" : status === "client_confirmed" ? "complete" : null;
-      if (!endpoint) throw new Error("Няма позволена следваща стъпка.");
+      await apiPost(`/requests/${requestId}/complete`, {});
 
-      const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
-      const photos = completionPhotos[req.id] || [];
-      if (endpoint === "ready" && !isDevMock) {
-        const files = photos.map((photo) => photo.file).filter(Boolean);
-        if (!files.length) throw new Error("Добави поне една снимка след ремонта.");
-        const data = new FormData();
-        files.forEach((file) => data.append("images", file));
-        await apiPost(`/requests/${req.id}/images/after`, data);
-      }
-
-      await apiPost(`/requests/${req.id}/${endpoint}`, {
-        afterPhotos: endpoint === "ready" && isDevMock ? photos.map(({ file: _file, ...photo }) => photo) : [],
-      });
-
-      setApplyMsg(`Статусът на заявка #${req.id} е обновен.`);
+      setApplyMsg(`Поръчка #${requestId} е затворена ✅`);
       await loadRequests();
+      await loadCompletedRequests();
     } catch (err) {
-      console.error("completeRequest error:", err);
+      console.error('completeRequest error:', err);
       const status = err?.response?.status;
 
-      if (status === 401) setApplyMsg("401: Нямаш валиден токен. Логни се пак.");
-      else if (status === 403) setApplyMsg("403: Нямаш права (трябва worker).");
-      else setApplyMsg(err?.response?.data?.message || err?.message || "Неуспешна промяна на статуса.");
+      if (status === 401)
+        setApplyMsg('401: Нямаш валиден токен. Логни се пак.');
+      else if (status === 403) setApplyMsg('403: Нямаш права (трябва worker).');
+      else
+        setApplyMsg(
+          err?.response?.data?.message || 'Неуспешно затваряне. Виж конзолата.',
+        );
     } finally {
       setCompletingId(null);
     }
   }
 
-  function lifecycleLabel(req) {
-    const status = String(req.statusKey || req.status || "").toLowerCase();
-    return ({ assigned: "Пристигнах на адрес", worker_arrived: "Започнах работа", in_progress: "Работата е готова", client_confirmed: "Затвори заявката" })[status] || "";
-  }
-
   async function applyToRequest(requestId) {
     try {
-      setApplyMsg("");
+      setApplyMsg('');
+      if (!canApplyToJobs()) {
+        setApplyMsg(
+          'Профилът ти трябва да е одобрен и активен, за да кандидатстваш.',
+        );
+        return;
+      }
       setApplyingId(requestId);
 
       await apiPost(`/requests/${requestId}/apply`, {});
@@ -367,13 +527,22 @@ export default function WorkerProfile() {
       setApplyMsg(`Кандидатства успешно по заявка #${requestId}.`);
       await loadRequests();
     } catch (err) {
-      console.error("applyToRequest error:", err);
+      console.error('applyToRequest error:', err);
       const status = err?.response?.status;
 
-      if (status === 401) setApplyMsg("401: Нямаш валиден токен. Логни се пак.");
-      else if (status === 403) setApplyMsg("403: Нямаш права (role). Endpoint-ът е за worker.");
-      else if (status === 404) setApplyMsg("404: Няма endpoint /requests/:id/apply (или не е деплойнат).");
-      else setApplyMsg(err?.response?.data?.message || "Неуспешно кандидатстване. Виж конзолата.");
+      if (status === 401)
+        setApplyMsg('401: Нямаш валиден токен. Логни се пак.');
+      else if (status === 403)
+        setApplyMsg('403: Нямаш права (role). Endpoint-ът е за worker.');
+      else if (status === 404)
+        setApplyMsg(
+          '404: Няма endpoint /requests/:id/apply (или не е деплойнат).',
+        );
+      else
+        setApplyMsg(
+          err?.response?.data?.message ||
+            'Неуспешно кандидатстване. Виж конзолата.',
+        );
     } finally {
       setApplyingId(null);
     }
@@ -386,19 +555,19 @@ export default function WorkerProfile() {
     setProfile((p) => ({ ...p, avatar: file }));
   };
 
-  const handleChange = (e) => {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
-  };
-
   async function uploadAvatarIfNeeded() {
     const token = getToken();
-    if (!token) throw new Error("No token");
+    if (!token) throw new Error('No token');
     if (!profile.avatar) return null;
 
     if (isDevMockToken()) {
       const updated = await uploadDevWorkerAvatar(profile.avatar);
       if (updated?.avatarUrl) {
-        setProfile((p) => ({ ...p, avatarUrl: updated.avatarUrl, avatar: null }));
+        setProfile((p) => ({
+          ...p,
+          avatarUrl: updated.avatarUrl,
+          avatar: null,
+        }));
         setPreviewAvatar(absUrl(updated.avatarUrl));
       } else {
         setProfile((p) => ({ ...p, avatar: null }));
@@ -407,12 +576,12 @@ export default function WorkerProfile() {
     }
 
     const fd = new FormData();
-    fd.append("avatar", profile.avatar);
+    fd.append('avatar', profile.avatar);
 
     const res = await axios.post(`${getApiBase()}/workers/me/avatar`, fd, {
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
+        'Content-Type': 'multipart/form-data',
       },
     });
 
@@ -432,8 +601,7 @@ export default function WorkerProfile() {
       setSaving(true);
       const token = getToken();
       if (!token) {
-        alert("Няма токен. Логни се пак.");
-        return;
+        return false;
       }
 
       let updated = null;
@@ -444,15 +612,19 @@ export default function WorkerProfile() {
           city: profile.city,
           description: profile.description,
           experience: profile.experience,
-          equipment: profile.equipment,
+          skills: profile.skills,
+          profileBannerKey: profile.profileBannerKey,
+        });
+        await updateDevWorkerAppearance({
+          profileBannerKey: profile.profileBannerKey,
         });
       } else {
-        const res = await apiPut("/workers/me", {
+        const res = await apiPut('/workers/me', {
           fullName: profile.fullName,
           city: profile.city,
           description: profile.description,
           experience: profile.experience,
-          equipment: profile.equipment,
+          skills: profile.skills,
         });
         updated = res.data || {};
       }
@@ -467,37 +639,25 @@ export default function WorkerProfile() {
         avatarUrl: updated?.avatarUrl || p.avatarUrl,
       }));
 
-      if (updated?.avatarUrl && !profile.avatar) setPreviewAvatar(absUrl(updated.avatarUrl));
+      if (!isDevMockToken()) {
+        await apiPut('/workers/me/appearance', {
+          profileBannerKey: profile.profileBannerKey,
+        });
+      }
+
+      if (updated?.avatarUrl && !profile.avatar)
+        setPreviewAvatar(absUrl(updated.avatarUrl));
       if (profile.avatar) await uploadAvatarIfNeeded();
       await loadMeProfile();
+      await loadOnboarding();
 
-      alert("Профилът е обновен!");
+      return true;
     } catch (err) {
       console.error(err);
-      alert("Грешка при запазването.");
+      return false;
     } finally {
       setSaving(false);
     }
-  };
-
-  const selectCalcCategory = (categoryKey) => {
-    const nextFlow = REPAIR_CATEGORY_FLOW[categoryKey] || { quantityOptions: [] };
-    setCalc((prev) => ({
-      ...prev,
-      categoryKey,
-      activities: [],
-      sizeOption: nextFlow.quantityOptions?.[0] || "",
-      exactAreaM2: "",
-    }));
-  };
-
-  const toggleCalcActivity = (activity) => {
-    setCalc((prev) => ({
-      ...prev,
-      activities: prev.activities.includes(activity)
-        ? prev.activities.filter((item) => item !== activity)
-        : [...prev.activities, activity],
-    }));
   };
 
   // =========================
@@ -505,21 +665,21 @@ export default function WorkerProfile() {
   // =========================
   async function loadGallery() {
     try {
-      setGalleryError("");
-      setGalleryMsg("");
+      setGalleryError('');
+      setGalleryMsg('');
       setGalleryLoading(true);
 
-      const res = await apiGet("/workers/me/gallery");
+      const res = await apiGet('/workers/me/gallery');
       const data = Array.isArray(res.data) ? res.data : [];
       setGallery(
         data.map((x) => ({
           ...x,
           url: photoUrl(x),
-        }))
+        })),
       );
     } catch (err) {
-      console.error("Error loading gallery:", err);
-      setGalleryError("Грешка при зареждане на галерията.");
+      console.error('Error loading gallery:', err);
+      setGalleryError('Грешка при зареждане на галерията.');
       setGallery([]);
     } finally {
       setGalleryLoading(false);
@@ -530,23 +690,23 @@ export default function WorkerProfile() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const imgs = files.filter((f) => String(f.type || "").startsWith("image/"));
+    const imgs = files.filter((f) => String(f.type || '').startsWith('image/'));
     setGalleryFiles(imgs);
   }
 
   async function uploadGallery() {
     try {
-      setGalleryError("");
-      setGalleryMsg("");
+      setGalleryError('');
+      setGalleryMsg('');
 
       if (!galleryFiles.length) {
-        setGalleryMsg("Избери снимки първо.");
+        setGalleryMsg('Избери снимки първо.');
         return;
       }
 
       const token = getToken();
       if (!token) {
-        setGalleryError("Няма токен. Логни се пак.");
+        setGalleryError('Няма токен. Логни се пак.');
         return;
       }
 
@@ -554,33 +714,41 @@ export default function WorkerProfile() {
 
       if (isDevMockToken()) {
         await uploadDevWorkerGallery(galleryFiles);
-        setGalleryMsg("Снимките са качени.");
+        setGalleryMsg('Снимките са качени.');
         setGalleryFiles([]);
         await loadGallery();
         return;
       }
 
       const fd = new FormData();
-      galleryFiles.forEach((f) => fd.append("images", f));
+      galleryFiles.forEach((f) => fd.append('images', f));
 
       await axios.post(`${getApiBase()}/workers/me/gallery`, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
+          'Content-Type': 'multipart/form-data',
         },
       });
 
-      setGalleryMsg("Снимките са качени.");
+      setGalleryMsg('Снимките са качени.');
       setGalleryFiles([]);
 
       await loadGallery();
     } catch (err) {
-      console.error("uploadGallery error:", err);
+      console.error('uploadGallery error:', err);
       const status = err?.response?.status;
-      if (status === 401) setGalleryError("401: Нямаш валиден токен. Логни се пак.");
-      else if (status === 403) setGalleryError("403: Нямаш права (role). Endpoint-ът е за worker.");
-      else if (status === 404) setGalleryError("404: Няма endpoint /workers/me/gallery (или не е деплойнат).");
-      else setGalleryError(err?.response?.data?.message || "Грешка при качване. Виж конзолата.");
+      if (status === 401)
+        setGalleryError('401: Нямаш валиден токен. Логни се пак.');
+      else if (status === 403)
+        setGalleryError('403: Нямаш права (role). Endpoint-ът е за worker.');
+      else if (status === 404)
+        setGalleryError(
+          '404: Няма endpoint /workers/me/gallery (или не е деплойнат).',
+        );
+      else
+        setGalleryError(
+          err?.response?.data?.message || 'Грешка при качване. Виж конзолата.',
+        );
     } finally {
       setUploadingGallery(false);
     }
@@ -588,21 +756,26 @@ export default function WorkerProfile() {
 
   async function deleteGalleryImage(imageId) {
     try {
-      setGalleryError("");
-      setGalleryMsg("");
+      setGalleryError('');
+      setGalleryMsg('');
       setDeletingId(imageId);
 
       await apiPost(`/workers/me/gallery/${imageId}/delete`, {});
 
-      setGalleryMsg("Снимката е изтрита.");
+      setGalleryMsg('Снимката е изтрита.');
       await loadGallery();
     } catch (err) {
-      console.error("deleteGalleryImage error:", err);
+      console.error('deleteGalleryImage error:', err);
       const status = err?.response?.status;
-      if (status === 401) setGalleryError("401: Нямаш валиден токен. Логни се пак.");
-      else if (status === 403) setGalleryError("403: Нямаш права (role).");
-      else if (status === 404) setGalleryError("404: Няма endpoint за триене (или не е деплойнат).");
-      else setGalleryError(err?.response?.data?.message || "Грешка при триене. Виж конзолата.");
+      if (status === 401)
+        setGalleryError('401: Нямаш валиден токен. Логни се пак.');
+      else if (status === 403) setGalleryError('403: Нямаш права (role).');
+      else if (status === 404)
+        setGalleryError('404: Няма endpoint за триене (или не е деплойнат).');
+      else
+        setGalleryError(
+          err?.response?.data?.message || 'Грешка при триене. Виж конзолата.',
+        );
     } finally {
       setDeletingId(null);
     }
@@ -612,13 +785,13 @@ export default function WorkerProfile() {
     const total = requests.length;
 
     const byStatus = requests.reduce((acc, r) => {
-      const s = (r.statusKey || r.status || "—").toLowerCase();
+      const s = (r.statusLabel || r.statusKey || '—').toLowerCase();
       acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
 
     const byCategory = requests.reduce((acc, r) => {
-      const c = r.category || "—";
+      const c = r.category || '—';
       acc[c] = (acc[c] || 0) + 1;
       return acc;
     }, {});
@@ -634,16 +807,24 @@ export default function WorkerProfile() {
     const q = query.trim().toLowerCase();
 
     return requests.filter((r) => {
-      const catOk = categoryFilter === "all" ? true : r.category === categoryFilter;
-      const st = (r.statusKey || r.status || "").toLowerCase();
-      const statusOk = statusFilter === "all" ? true : st === statusFilter;
+      const catOk =
+        categoryFilter === 'all' ? true : r.category === categoryFilter;
+      const st = (r.statusKey || '').toLowerCase();
+      const statusOk = statusFilter === 'all' ? true : st === statusFilter;
 
       if (!catOk || !statusOk) return false;
       if (!q) return true;
 
-      const hay = [r.clientName, r.phone, r.address, r.description, r.category, r.email, r.status]
+      const hay = [
+        r.clientName,
+        r.address,
+        r.description,
+        r.category,
+        r.statusLabel,
+        r.statusKey,
+      ]
         .filter(Boolean)
-        .join(" ")
+        .join(' ')
         .toLowerCase();
 
       return hay.includes(q);
@@ -652,36 +833,45 @@ export default function WorkerProfile() {
 
   const categories = useMemo(() => {
     const set = new Set(requests.map((r) => r.category).filter(Boolean));
-    return ["all", ...Array.from(set)];
+    return ['all', ...Array.from(set)];
   }, [requests]);
 
   const statuses = useMemo(() => {
-    const set = new Set(requests.map((r) => (r.statusKey || r.status || "").toLowerCase()).filter(Boolean));
-    return ["all", ...Array.from(set)];
+    const labelsByKey = new Map();
+    requests.forEach((request) => {
+      const key = String(request.statusKey || '').toLowerCase();
+      if (key) labelsByKey.set(key, request.statusLabel || key);
+    });
+    return [
+      { key: 'all', label: 'Всички статуси' },
+      ...Array.from(labelsByKey, ([key, label]) => ({ key, label })),
+    ];
   }, [requests]);
 
   const galleryAlbums = useMemo(() => {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
         .map((photo) => ({
-          ...(typeof photo === "object" && photo ? photo : {}),
+          ...(typeof photo === 'object' && photo ? photo : {}),
           url: photoUrl(photo),
-          thumbnailUrl: photoThumbnailUrl(photo),
         }))
         .filter((photo) => !!photo.url);
 
-    const completedAlbums = (Array.isArray(completedRequests) ? completedRequests : [])
+    const completedAlbums = (
+      Array.isArray(completedRequests) ? completedRequests : []
+    )
       .map((job) => {
+        const ordered = cleanPhotos(job.portfolioPhotos);
         const before = cleanPhotos(job.beforePhotos || job.photos);
         const after = cleanPhotos(job.afterPhotos);
-        const photos = [...after, ...before];
+        const photos = ordered.length > 0 ? ordered : [...after, ...before];
         const id = job.requestId || job.id;
 
         return {
           id: `job-${id}`,
-          type: "job",
-          title: `Обект #${id} • ${job.category || "Ремонт"}`,
-          subtitle: job.address || "Завършен ремонт",
+          type: 'job',
+          title: `Обект #${id} • ${job.category || 'Ремонт'}`,
+          subtitle: job.address || 'Завършен ремонт',
           meta: `${job.durationDays || 1} дни`,
           photos,
           cover: photos[0],
@@ -692,8 +882,8 @@ export default function WorkerProfile() {
 
     const jobRequestIds = new Set(
       completedAlbums
-        .map((album) => String(album.id).replace(/^job-/, ""))
-        .filter(Boolean)
+        .map((album) => String(album.id).replace(/^job-/, ''))
+        .filter(Boolean),
     );
 
     const loosePhotos = cleanPhotos(gallery).filter((photo) => {
@@ -705,10 +895,10 @@ export default function WorkerProfile() {
       loosePhotos.length > 0
         ? [
             {
-              id: "manual-gallery",
-              type: "manual",
-              title: "Качени снимки",
-              subtitle: "Общи портфолио снимки",
+              id: 'manual-gallery',
+              type: 'manual',
+              title: 'Качени снимки',
+              subtitle: 'Общи портфолио снимки',
               meta: `${loosePhotos.length} снимки`,
               photos: loosePhotos,
               cover: loosePhotos[0],
@@ -721,12 +911,15 @@ export default function WorkerProfile() {
   }, [completedRequests, gallery]);
 
   const activeAlbum =
-    albumViewer && galleryAlbums[albumViewer.albumIndex] ? galleryAlbums[albumViewer.albumIndex] : null;
+    albumViewer && galleryAlbums[albumViewer.albumIndex]
+      ? galleryAlbums[albumViewer.albumIndex]
+      : null;
   const activePhoto =
     activeAlbum && activeAlbum.photos[albumViewer?.photoIndex || 0]
       ? activeAlbum.photos[albumViewer?.photoIndex || 0]
       : null;
-  const canDeleteActivePhoto = activeAlbum?.type === "manual" && activePhoto?.id;
+  const canDeleteActivePhoto =
+    activeAlbum?.type === 'manual' && activePhoto?.id;
 
   function openAlbum(albumIndex, photoIndex = 0) {
     setAlbumViewer({ albumIndex, photoIndex });
@@ -741,16 +934,144 @@ export default function WorkerProfile() {
       if (!viewer) return viewer;
       const album = galleryAlbums[viewer.albumIndex];
       if (!album?.photos?.length) return viewer;
-      const next = (viewer.photoIndex + delta + album.photos.length) % album.photos.length;
+      const next =
+        (viewer.photoIndex + delta + album.photos.length) % album.photos.length;
       return { ...viewer, photoIndex: next };
     });
+  }
+
+  async function withdrawApplication(requestId) {
+    try {
+      setApplyMsg('');
+      setWithdrawingId(requestId);
+
+      await apiPost(`/requests/${requestId}/withdraw`, {});
+
+      setApplyMsg(`Кандидатурата по заявка #${requestId} е оттеглена.`);
+      await loadRequests();
+    } catch (err) {
+      console.error('withdrawApplication error:', err);
+      const status = err?.response?.status;
+
+      if (status === 401)
+        setApplyMsg('401: Нямаш валиден токен. Логни се пак.');
+      else if (status === 403) setApplyMsg('403: Нямаш права (трябва worker).');
+      else
+        setApplyMsg(
+          err?.response?.data?.message ||
+            'Неуспешно оттегляне на кандидатурата.',
+        );
+    } finally {
+      setWithdrawingId(null);
+    }
+  }
+
+  async function advanceWorkerStep(req) {
+    const action = workerStepAction(req);
+    if (!action) return;
+
+    try {
+      setApplyMsg('');
+      setCompletingId(req.id);
+      let payload = {};
+
+      if (action.needsPhotos) {
+        const photos = completionPhotos[req.id] || [];
+        if (isDevMockToken()) {
+          payload = { afterPhotos: photos };
+        } else {
+          const imageFiles = photos
+            .map((photo) => photo?.file)
+            .filter((file) => file instanceof File);
+
+          if (imageFiles.length) {
+            const mediaPayload = new FormData();
+            imageFiles.forEach((file) => mediaPayload.append('images', file));
+            await apiPost(`/requests/${req.id}/media/after`, mediaPayload);
+          }
+        }
+      }
+
+      await apiPost(`/requests/${req.id}/${action.endpoint}`, payload);
+      setApplyMsg(`Заявка #${req.id}: ${action.label}.`);
+      await loadRequests();
+      await loadCompletedRequests();
+    } catch (err) {
+      console.error('advanceWorkerStep error:', err);
+      setApplyMsg(
+        err?.response?.data?.message || 'Неуспешна промяна на статуса.',
+      );
+    } finally {
+      setCompletingId(null);
+    }
+  }
+
+  function canApplyToJobs() {
+    return (
+      profile.approvalStatus === 'approved' &&
+      !['hidden', 'suspended'].includes(
+        String(profile.visibilityStatus || '').toLowerCase(),
+      )
+    );
+  }
+
+  async function loadReferrals() {
+    try {
+      setReferralError('');
+      setReferralLoading(true);
+      const res = await apiGet('/referrals/me');
+      setReferralInfo(
+        res.data || { code: null, referralUrl: null, invites: [], rewards: [] },
+      );
+    } catch (err) {
+      console.error('loadReferrals error:', err);
+      setReferralError('Не успях да заредя referral информацията.');
+    } finally {
+      setReferralLoading(false);
+    }
+  }
+
+  async function createReferralCode() {
+    try {
+      setReferralMsg('');
+      setReferralError('');
+      setReferralLoading(true);
+      const res = await apiPost('/referrals/me/code', {});
+      setReferralInfo((prev) => ({ ...prev, ...(res.data || {}) }));
+      await loadReferrals();
+    } catch (err) {
+      console.error('createReferralCode error:', err);
+      setReferralError(
+        err?.response?.data?.message || 'Не успях да създам referral код.',
+      );
+    } finally {
+      setReferralLoading(false);
+    }
+  }
+
+  async function copyReferralLink() {
+    const link = referralInfo.referralUrl || '';
+    if (!link) return;
+    await navigator.clipboard?.writeText(link);
+    setReferralMsg('Линкът е копиран.');
+  }
+
+  async function shareReferralLink() {
+    const link = referralInfo.referralUrl || '';
+    if (!link) return;
+    const text = `Покани добър майстор в Bricky. След като завърши успешно 2 ремонта, получаваш 30 дни подсилена видимост: ${link}`;
+    if (navigator.share) {
+      await navigator.share({ title: 'Bricky referral', text, url: link });
+      setReferralMsg('Линкът е споделен.');
+    } else {
+      await navigator.clipboard?.writeText(text);
+      setReferralMsg('Текстът за споделяне е копиран.');
+    }
   }
 
   async function deleteActiveGalleryPhoto() {
     if (!canDeleteActivePhoto) return;
     const imageId = activePhoto.id;
-    const ok = window.confirm("Да изтрия ли тази снимка от галерията?");
-    if (!ok) return;
 
     const currentIndex = albumViewer?.photoIndex || 0;
     const remaining = Math.max(0, (activeAlbum?.photos?.length || 1) - 1);
@@ -768,120 +1089,93 @@ export default function WorkerProfile() {
             ...viewer,
             photoIndex: Math.min(currentIndex, remaining - 1),
           }
-        : viewer
+        : viewer,
     );
   }
 
+  async function moveActiveGalleryPhoto(delta) {
+    if (!activeAlbum || !albumViewer || reorderingGallery) return;
+    const from = albumViewer.photoIndex || 0;
+    const to = from + delta;
+    if (to < 0 || to >= activeAlbum.photos.length) return;
+
+    const reordered = [...activeAlbum.photos];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const mediaIds = reordered.map((photo) => Number(photo.id));
+    if (mediaIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      setGalleryError('Този стар албум не поддържа постоянно подреждане.');
+      return;
+    }
+
+    try {
+      setGalleryError('');
+      setGalleryMsg('');
+      setReorderingGallery(true);
+      await apiPost('/workers/me/gallery/reorder', {
+        requestId:
+          activeAlbum.type === 'job'
+            ? Number(String(activeAlbum.id).replace(/^job-/, ''))
+            : null,
+        mediaIds,
+      });
+
+      if (activeAlbum.type === 'job') {
+        const requestId = Number(String(activeAlbum.id).replace(/^job-/, ''));
+        setCompletedRequests((current) =>
+          current.map((job) =>
+            Number(job.requestId || job.id) === requestId
+              ? { ...job, portfolioPhotos: reordered }
+              : job,
+          ),
+        );
+      } else {
+        setGallery(reordered);
+      }
+      setAlbumViewer((viewer) => (viewer ? { ...viewer, photoIndex: to } : viewer));
+      setGalleryMsg('Редът на снимките е запазен.');
+    } catch (err) {
+      console.error('moveActiveGalleryPhoto error:', err);
+      setGalleryError(
+        err?.response?.data?.message || 'Не успях да запазя реда на снимките.',
+      );
+    } finally {
+      setReorderingGallery(false);
+    }
+  }
+
   const avatarSrc =
-    previewAvatar || (profile.avatarUrl ? absUrl(profile.avatarUrl) : "") || "/media_files/Snejan.jpg";
+    previewAvatar ||
+    (profile.avatarUrl ? absUrl(profile.avatarUrl) : '') ||
+    '/media_files/Snejan.jpg';
 
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
-      <aside className="hidden md:block w-64 bg-gray-800 border-r border-gray-700 pt-24 fixed h-full">
-        <nav className="flex flex-col gap-4 px-6 text-sm">
-          {[
-            ["dashboard", "Контрол панел"],
-            ["requests", "Заявки"],
-            ["map", "Карта заявки"],
-            ["profile", "Профил"],
-            ["gallery", "Галерия"],
-            ["calculator", "Калкулатор"],
-            ["settings", "Настройки"],
-            ["subscription", "Абонамент"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => {
-                if (key === "map") window.location.href = "/repair-map";
-                else setActiveTab(key);
+    <div className="flex min-h-screen bg-[#07101d] text-white">
+      <WorkerProfileSidebar activeTab={activeTab} onSelect={selectWorkerTab} />
+
+      <main className="flex-1 px-4 pb-20 pt-40 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,#07101d,#050b14)] sm:px-6 lg:ml-64 lg:px-10 lg:pt-24">
+        {activeTab === 'dashboard' && (
+          <div className="max-w-6xl mx-auto rounded-2xl border border-cyan-400/15 bg-[#081827]/75 p-6 shadow-2xl shadow-cyan-950/20">
+            <WorkerProfileGuidanceCard
+              state={onboarding}
+              onContinue={() => setShowOnboarding(true)}
+              onNavigate={openGuidanceTarget}
+            />
+            <WorkerDashboardSummary
+              stats={stats}
+              loadingRequests={loadingRequests}
+              requestError={reqError}
+              actionMessage={applyMsg}
+              ratingInfo={ratingInfo}
+              ratingLoading={ratingLoading}
+              ratingError={ratingError}
+              onRefresh={() => {
+                loadRequests();
+                loadMyReviews();
               }}
-              className={activeTab === key ? "text-red-400 font-bold" : "hover:text-red-300"}
-            >
-              {label}
-            </button>
-          ))}
+            />
 
-          <div className="mt-6">
-            <LogoutButton />
-          </div>
-        </nav>
-      </aside>
-
-      <main className="min-w-0 flex-1 ml-0 md:ml-64 pt-24 px-4 sm:px-6 lg:px-10 pb-20">
-        {activeTab === "dashboard" && (
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-              <h1 className="text-3xl font-bold">Контрол панел</h1>
-
-              <button
-                onClick={() => {
-                  loadRequests();
-                  loadMyReviews();
-                }}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-              >
-                Обнови
-              </button>
-            </div>
-
-            {loadingRequests && <p className="text-gray-400">Зареждане на заявки...</p>}
-            {reqError && <p className="text-red-400">{reqError}</p>}
-            {applyMsg && <p className="text-yellow-300 mt-2">{applyMsg}</p>}
-
-            <div className="grid md:grid-cols-4 gap-4 mt-4">
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">Общо заявки</p>
-                <p className="text-3xl font-bold mt-2">{stats.total}</p>
-              </div>
-
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">Рейтинг</p>
-                {ratingLoading ? (
-                  <p className="text-gray-400 mt-2">Зареждане...</p>
-                ) : ratingError ? (
-                  <p className="text-red-400 mt-2">{ratingError}</p>
-                ) : (
-                  <div className="mt-2">
-                    <div className="text-2xl font-bold">{ratingInfo.average} ⭐</div>
-                    <div className="text-sm text-gray-400">{ratingInfo.total} отзива</div>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">По статус</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {Object.keys(stats.byStatus).length === 0 ? (
-                    <p className="text-gray-500">—</p>
-                  ) : (
-                    Object.entries(stats.byStatus).map(([k, v]) => (
-                      <div key={k} className="flex justify-between">
-                        <span className="capitalize">{k}</span>
-                        <span className="font-bold">{v}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <p className="text-gray-400 text-sm">По категория</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {Object.keys(stats.byCategory).length === 0 ? (
-                    <p className="text-gray-500">—</p>
-                  ) : (
-                    Object.entries(stats.byCategory).map(([k, v]) => (
-                      <div key={k} className="flex justify-between">
-                        <span>{k}</span>
-                        <span className="font-bold">{v}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 bg-gray-800 border border-gray-700 rounded-xl p-6">
+            <div className="mt-8 rounded-2xl border border-cyan-400/15 bg-[#0b2033]/85 p-6 shadow-inner shadow-cyan-950/20">
               <h2 className="text-xl font-bold mb-4">Последни заявки</h2>
 
               {stats.newest.length === 0 ? (
@@ -891,31 +1185,55 @@ export default function WorkerProfile() {
                   {stats.newest.map((r) => {
                     const applied = hasApplied(r);
                     const closed = isClosed(r);
-                    const hasAssigned = !!toNum(r.assignedWorkerId);
+                    const hasAssigned = !!toNum(r.assignedWorkerUserId);
                     const assignedToMe = isAssignedToMe(r);
+                    const canWithdraw = canWithdrawApplication(r);
 
-                      const disabledApply = applied || closed || hasAssigned || applyingId === r.id;
-                      const showContact = assignedToMe;
-                      const showComplete = canComplete(r);
-                      const lifecycleAction = assignedToMe ? lifecycleLabel(r) : "";
-                      const beforePhotos = requestPhotos(r);
+                    const profileCannotApply = !canApplyToJobs();
+                    const disabledApply =
+                      profileCannotApply ||
+                      applied ||
+                      closed ||
+                      hasAssigned ||
+                      !requestAllows(r, 'apply') ||
+                      applyingId === r.id;
+                    const selectionPending =
+                      assignedToMe &&
+                      ['worker_selected', 'assigned'].includes(
+                        requestStatusKey(r),
+                      );
+                    const showContact =
+                      assignedToMe &&
+                      !selectionPending &&
+                      r.addressPrecision === 'exact';
+                    const stageAction = workerStepAction(r);
+                    const showComplete = Boolean(stageAction);
+                    const showAfterPhotos = Boolean(stageAction?.needsPhotos);
+                    const beforePhotos = requestPhotos(r);
 
-                      return (
-                        <div key={r.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+                    return (
+                      <div
+                        key={r.id}
+                        className="bg-gray-900 border border-gray-700 rounded-xl p-4"
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <div className="font-bold">
                             #{r.id} • {r.category} • {r.clientName}
                           </div>
-                          <div className="text-sm text-red-400">{r.status}</div>
+                          <div className="text-sm text-red-400">
+                            {r.statusLabel || r.statusKey}
+                          </div>
                         </div>
 
                         <div className="text-sm text-gray-400 mt-2">
-                          {r.address || "—"} • {formatBG(r.created_at)}
+                          {r.address || '—'} • {formatBG(r.created_at)}
                         </div>
 
                         {beforePhotos.length > 0 && (
                           <div className="mt-3">
-                            <div className="text-xs font-bold text-gray-300 mb-2">Снимки от клиента</div>
+                            <div className="text-xs font-bold text-gray-300 mb-2">
+                              Снимки от клиента
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               {beforePhotos.map((photo) => (
                                 <a
@@ -925,71 +1243,152 @@ export default function WorkerProfile() {
                                   rel="noreferrer"
                                   className="block h-20 w-20 overflow-hidden rounded-lg border border-gray-700 bg-gray-950"
                                 >
-                                  <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-full w-full object-cover" />
+                                  <img
+                                    src={photoUrl(photo)}
+                                    alt={photo.name || 'Снимка от клиента'}
+                                    className="h-full w-full object-cover"
+                                  />
                                 </a>
                               ))}
                             </div>
                           </div>
                         )}
 
-                        {/* ✅ Когато е назначена на този майстор */}
+                        {selectionPending && (
+                          <div className="mt-3 rounded-xl border border-cyan-500/25 bg-cyan-950/25 p-3 text-sm text-cyan-100">
+                            Потвърди заявката, за да получиш телефона и точния
+                            адрес на клиента.
+                          </div>
+                        )}
+
                         {showContact && (
                           <div className="mt-3 bg-gray-800 border border-gray-700 rounded-xl p-3">
-                            <div className="text-green-400 font-bold">Свържете се с клиента</div>
+                            <div className="text-green-400 font-bold">
+                              Контакт с клиента
+                            </div>
                             <div className="text-sm text-gray-200 mt-2">
                               <div>
-                                <b>Име:</b> {r.clientName || "—"}
+                                <b>Име:</b> {r.clientName || '—'}
                               </div>
                               <div>
-                                <b>Телефон:</b> {r.phone || "—"}
+                                <b>Адрес:</b> {r.address || '—'}
                               </div>
                               <div>
-                                <b>Адрес:</b> {r.address || "—"}
+                                <b>Телефон:</b> {r.phone || '—'}
                               </div>
                             </div>
+                            <p className="mt-3 text-xs text-amber-200">
+                              Поръчката е потвърдена. За прекратяване се обърни
+                              към администратор.
+                            </p>
                           </div>
                         )}
 
                         <div className="mt-3 flex items-center justify-end gap-2">
-                          {applied && <span className="text-green-400 text-sm font-bold">Кандидатствал</span>}
+                          {applied && (
+                            <span className="text-green-400 text-sm font-bold">
+                              Кандидатствал
+                            </span>
+                          )}
 
                           {hasAssigned && !assignedToMe && (
-                            <span className="text-yellow-300 text-sm font-bold">Има избран майстор</span>
+                            <span className="text-yellow-300 text-sm font-bold">
+                              Има избран майстор
+                            </span>
                           )}
 
                           {assignedToMe && (
-                            <span className="text-green-400 text-sm font-bold">Назначен</span>
+                            <span className="text-green-400 text-sm font-bold">
+                              Назначен
+                            </span>
+                          )}
+
+                          {canWithdraw && (
+                            <button
+                              type="button"
+                              onClick={() => withdrawApplication(r.id)}
+                              disabled={withdrawingId === r.id}
+                              className={
+                                withdrawingId === r.id
+                                  ? 'bg-gray-700 text-gray-300 px-4 py-2 rounded-lg font-bold cursor-not-allowed'
+                                  : 'bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg font-bold'
+                              }
+                            >
+                              {withdrawingId === r.id
+                                ? 'Оттеглям...'
+                                : selectionPending
+                                  ? 'Откажи заявката'
+                                  : 'Оттегли кандидатура'}
+                            </button>
                           )}
 
                           {/* ✅ Complete button */}
-                          {showComplete && (
+                          {showAfterPhotos && (
                             <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
-                              <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
-                              <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(r.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
-                              {Array.isArray(completionPhotos[r.id]) && completionPhotos[r.id].length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-3">
-                                  {completionPhotos[r.id].map((photo) => (
-                                    <div key={photo.id || photoUrl(photo)} className="relative h-14 w-14 overflow-hidden rounded border border-gray-700">
-                                      <img src={photoUrl(photo)} alt={photo.name || "Снимка след ремонта"} className="h-full w-full object-cover" />
-                                      <button type="button" onClick={() => removeCompletionPhoto(r.id, photo.id)} className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1">x</button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              <label className="block text-xs font-bold text-gray-300 mb-2">
+                                Снимки след ремонта
+                              </label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => {
+                                  handleCompletionPhotos(r.id, e.target.files);
+                                  e.target.value = '';
+                                }}
+                                className="block text-xs max-w-56"
+                              />
+                              {Array.isArray(completionPhotos[r.id]) &&
+                                completionPhotos[r.id].length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mt-3">
+                                    {completionPhotos[r.id].map((photo) => (
+                                      <div
+                                        key={photo.id || photoUrl(photo)}
+                                        className="relative h-14 w-14 overflow-hidden rounded border border-gray-700"
+                                      >
+                                        <img
+                                          src={photoUrl(photo)}
+                                          alt={
+                                            photo.name || 'Снимка след ремонта'
+                                          }
+                                          className="h-full w-full object-cover"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeCompletionPhoto(
+                                              r.id,
+                                              photo.id,
+                                            )
+                                          }
+                                          className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1"
+                                        >
+                                          x
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                             </div>
                           )}
 
-                          {lifecycleAction && (
+                          {showComplete && (
                             <button
-                              onClick={() => advanceRequest(r)}
+                              onClick={() =>
+                                stageAction.endpoint === 'complete'
+                                  ? completeRequest(r.id)
+                                  : advanceWorkerStep(r)
+                              }
                               disabled={completingId === r.id}
                               className={
                                 completingId === r.id
-                                  ? "bg-gray-700 px-4 py-2 rounded-lg font-bold cursor-not-allowed"
-                                  : "bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-bold"
+                                  ? 'bg-gray-700 px-4 py-2 rounded-lg font-bold cursor-not-allowed'
+                                  : 'bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-bold'
                               }
                             >
-                              {completingId === r.id ? "Обновявам..." : lifecycleAction}
+                              {completingId === r.id
+                                ? 'Записвам...'
+                                : stageAction.label}
                             </button>
                           )}
 
@@ -999,17 +1398,19 @@ export default function WorkerProfile() {
                             onClick={() => applyToRequest(r.id)}
                             className={
                               disabledApply || assignedToMe
-                                ? "bg-gray-700 text-gray-300 px-4 py-2 rounded-lg font-bold cursor-not-allowed"
-                                : "bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold"
+                                ? 'bg-gray-700 text-gray-300 px-4 py-2 rounded-lg font-bold cursor-not-allowed'
+                                : 'bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold'
                             }
                           >
                             {assignedToMe
-                              ? "Назначен"
+                              ? 'Назначен'
                               : applied
-                              ? "Кандидатствал"
-                              : applyingId === r.id
-                              ? "Кандидатствам..."
-                              : "Кандидатствай"}
+                                ? 'Кандидатствал'
+                                : profileCannotApply
+                                  ? 'Чака одобрение'
+                                  : applyingId === r.id
+                                    ? 'Кандидатствам...'
+                                    : 'Кандидатствай'}
                           </button>
                         </div>
                       </div>
@@ -1021,7 +1422,7 @@ export default function WorkerProfile() {
           </div>
         )}
 
-        {activeTab === "requests" && (
+        {activeTab === 'requests' && (
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between gap-4 mb-4">
               <h1 className="text-3xl font-bold">Заявки</h1>
@@ -1033,13 +1434,15 @@ export default function WorkerProfile() {
               </button>
             </div>
 
-            {applyMsg && <div className="mb-3 text-yellow-300 font-bold">{applyMsg}</div>}
+            {applyMsg && (
+              <div className="mb-3 text-yellow-300 font-bold">{applyMsg}</div>
+            )}
 
             <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-6 grid md:grid-cols-3 gap-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Търси по име, адрес, телефон..."
+                placeholder="Търси по категория, район или описание..."
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
               />
 
@@ -1050,7 +1453,7 @@ export default function WorkerProfile() {
               >
                 {categories.map((c) => (
                   <option key={c} value={c}>
-                    {c === "all" ? "Всички категории" : c}
+                    {c === 'all' ? 'Всички категории' : c}
                   </option>
                 ))}
               </select>
@@ -1060,9 +1463,9 @@ export default function WorkerProfile() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="p-3 rounded bg-gray-900 border border-gray-700 w-full"
               >
-                {statuses.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "all" ? "Всички статуси" : s}
+                {statuses.map((status) => (
+                  <option key={status.key} value={status.key}>
+                    {status.label}
                   </option>
                 ))}
               </select>
@@ -1071,7 +1474,15 @@ export default function WorkerProfile() {
             {loadingRequests ? (
               <p className="text-gray-400">Зареждане...</p>
             ) : reqError ? (
-              <p className="text-red-400">{reqError}</p>
+              <p
+                className={
+                  reqError.startsWith('Заявките ще бъдат')
+                    ? 'text-amber-300'
+                    : 'text-red-400'
+                }
+              >
+                {reqError}
+              </p>
             ) : filteredRequests.length === 0 ? (
               <p className="text-gray-400">Няма налични заявки.</p>
             ) : (
@@ -1079,22 +1490,44 @@ export default function WorkerProfile() {
                 {filteredRequests.map((req) => {
                   const applied = hasApplied(req);
                   const closed = isClosed(req);
-                  const hasAssigned = !!toNum(req.assignedWorkerId);
+                  const hasAssigned = !!toNum(req.assignedWorkerUserId);
                   const assignedToMe = isAssignedToMe(req);
+                  const canWithdraw = canWithdrawApplication(req);
 
-                  const disabledApply = applied || closed || hasAssigned || applyingId === req.id;
-                  const showContact = assignedToMe;
-                  const showComplete = canComplete(req);
-                  const lifecycleAction = assignedToMe ? lifecycleLabel(req) : "";
+                  const profileCannotApply = !canApplyToJobs();
+                  const disabledApply =
+                    profileCannotApply ||
+                    applied ||
+                    closed ||
+                    hasAssigned ||
+                    !requestAllows(req, 'apply') ||
+                    applyingId === req.id;
+                  const selectionPending =
+                    assignedToMe &&
+                    ['worker_selected', 'assigned'].includes(
+                      requestStatusKey(req),
+                    );
+                  const showContact =
+                    assignedToMe &&
+                    !selectionPending &&
+                    req.addressPrecision === 'exact';
+                  const stageAction = workerStepAction(req);
+                  const showComplete = Boolean(stageAction);
+                  const showAfterPhotos = Boolean(stageAction?.needsPhotos);
                   const beforePhotos = requestPhotos(req);
 
                   return (
-                    <div key={req.id} className="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                    <div
+                      key={req.id}
+                      className="bg-gray-800 p-5 rounded-xl border border-gray-700"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <h2 className="text-xl font-bold">
                           #{req.id} • {req.category}
                         </h2>
-                        <span className="text-red-400 font-bold">{req.status}</span>
+                        <span className="text-red-400 font-bold">
+                          {req.statusLabel || req.statusKey}
+                        </span>
                       </div>
 
                       <div className="mt-3 grid md:grid-cols-2 gap-3 text-sm">
@@ -1102,18 +1535,18 @@ export default function WorkerProfile() {
                           <strong>Клиент:</strong> {req.clientName}
                         </p>
                         <p className="text-gray-300">
-                          <strong>Телефон:</strong> {req.phone}
-                        </p>
-                        <p className="text-gray-300">
-                          <strong>Имейл:</strong> {req.email}
-                        </p>
-                        <p className="text-gray-300">
-                          <strong>Адрес:</strong> {req.address || "—"}
+                          <strong>
+                            {req.addressPrecision === 'exact'
+                              ? 'Адрес:'
+                              : 'Район:'}
+                          </strong>{' '}
+                          {req.address || '—'}
                         </p>
                       </div>
 
                       <p className="mt-3 whitespace-pre-line text-gray-400">
-                        {cleanRequestDescription(req.description) || "Няма описание."}
+                        {cleanRequestDescription(req.description) ||
+                          'Няма описание.'}
                       </p>
                       {formatRequestExpectedRange(req) && (
                         <p className="mt-3 text-sm font-bold text-green-300">
@@ -1121,11 +1554,23 @@ export default function WorkerProfile() {
                         </p>
                       )}
 
-                      <p className="text-gray-500 text-sm mt-3">Създадена: {formatBG(req.created_at)}</p>
+                      <p className="text-gray-500 text-sm mt-3">
+                        Създадена: {formatBG(req.created_at)}
+                      </p>
+
+                      <div className="mt-3">
+                        <ReportContentButton
+                          targetType="request"
+                          targetId={req.id}
+                          label="Сигнализирай заявката"
+                        />
+                      </div>
 
                       {beforePhotos.length > 0 && (
                         <div className="mt-4">
-                          <div className="text-sm font-bold text-gray-300 mb-2">Снимки от клиента</div>
+                          <div className="text-sm font-bold text-gray-300 mb-2">
+                            Снимки от клиента
+                          </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {beforePhotos.map((photo) => (
                               <a
@@ -1135,72 +1580,163 @@ export default function WorkerProfile() {
                                 rel="noreferrer"
                                 className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
                               >
-                                <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка от клиента"} className="h-24 w-full object-cover" />
+                                <img
+                                  src={photoUrl(photo)}
+                                  alt={photo.name || 'Снимка от клиента'}
+                                  className="h-24 w-full object-cover"
+                                />
                               </a>
                             ))}
                           </div>
                         </div>
                       )}
 
+                      {selectionPending && (
+                        <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-950/25 p-4 text-sm text-cyan-100">
+                          Потвърди заявката, за да получиш телефона и точния
+                          адрес на клиента.
+                        </div>
+                      )}
+
                       {showContact && (
                         <div className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4">
-                          <div className="text-green-400 font-bold">Свържете се с клиента</div>
-                          <div className="grid md:grid-cols-3 gap-3 text-sm mt-3">
+                          <div className="text-green-400 font-bold">
+                            Контакт с клиента
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-3 text-sm mt-3">
                             <div className="text-gray-200">
-                              <b>Име:</b> {req.clientName || "—"}
+                              <b>Име:</b> {req.clientName || '—'}
                             </div>
                             <div className="text-gray-200">
-                              <b>Телефон:</b> {req.phone || "—"}
+                              <b>Адрес:</b> {req.address || '—'}
                             </div>
-                            <div className="text-gray-200 md:col-span-3">
-                              <b>Адрес:</b> {req.address || "—"}
+                            <div className="text-gray-200">
+                              <b>Телефон:</b> {req.phone || '—'}
                             </div>
                           </div>
+                          <p className="mt-3 text-xs text-amber-200">
+                            Поръчката е потвърдена. За прекратяване се обърни
+                            към администратор.
+                          </p>
                         </div>
                       )}
 
                       <div className="mt-4 flex items-center justify-between gap-3">
                         <div className="text-sm">
-                          {applied && <span className="text-green-400 font-bold">Кандидатствал</span>}
-
-                          {hasAssigned && !assignedToMe && (
-                            <span className="text-yellow-300 font-bold">Има избран майстор</span>
+                          {applied && (
+                            <span className="text-green-400 font-bold">
+                              Кандидатствал
+                            </span>
                           )}
 
-                          {assignedToMe && <span className="text-green-400 font-bold">Назначен</span>}
+                          {hasAssigned && !assignedToMe && (
+                            <span className="text-yellow-300 font-bold">
+                              Има избран майстор
+                            </span>
+                          )}
 
-                          {!applied && closed && <span className="text-gray-400 font-bold">Затворена</span>}
+                          {assignedToMe && (
+                            <span className="text-green-400 font-bold">
+                              Назначен
+                            </span>
+                          )}
+
+                          {!applied && closed && (
+                            <span className="text-gray-400 font-bold">
+                              Затворена
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {showComplete && (
+                          {canWithdraw && (
+                            <button
+                              type="button"
+                              onClick={() => withdrawApplication(req.id)}
+                              disabled={withdrawingId === req.id}
+                              className={
+                                withdrawingId === req.id
+                                  ? 'bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed'
+                                  : 'bg-yellow-600 hover:bg-yellow-700 px-5 py-2 rounded-lg font-bold'
+                              }
+                            >
+                              {withdrawingId === req.id
+                                ? 'Оттеглям...'
+                                : selectionPending
+                                  ? 'Откажи заявката'
+                                  : 'Оттегли кандидатура'}
+                            </button>
+                          )}
+
+                          {showAfterPhotos && (
                             <div className="w-full md:w-auto bg-gray-900 border border-gray-700 rounded-lg p-3">
-                              <label className="block text-xs font-bold text-gray-300 mb-2">Снимки след ремонта</label>
-                              <input type="file" accept="image/*" multiple onChange={(e) => { handleCompletionPhotos(req.id, e.target.files); e.target.value = ""; }} className="block text-xs max-w-56" />
-                              {Array.isArray(completionPhotos[req.id]) && completionPhotos[req.id].length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-3">
-                                  {completionPhotos[req.id].map((photo) => (
-                                    <div key={photo.id || photoUrl(photo)} className="relative h-14 w-14 overflow-hidden rounded border border-gray-700">
-                                      <img src={photoUrl(photo)} alt={photo.name || "Снимка след ремонта"} className="h-full w-full object-cover" />
-                                      <button type="button" onClick={() => removeCompletionPhoto(req.id, photo.id)} className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1">x</button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              <label className="block text-xs font-bold text-gray-300 mb-2">
+                                Снимки след ремонта
+                              </label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => {
+                                  handleCompletionPhotos(
+                                    req.id,
+                                    e.target.files,
+                                  );
+                                  e.target.value = '';
+                                }}
+                                className="block text-xs max-w-56"
+                              />
+                              {Array.isArray(completionPhotos[req.id]) &&
+                                completionPhotos[req.id].length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mt-3">
+                                    {completionPhotos[req.id].map((photo) => (
+                                      <div
+                                        key={photo.id || photoUrl(photo)}
+                                        className="relative h-14 w-14 overflow-hidden rounded border border-gray-700"
+                                      >
+                                        <img
+                                          src={photoUrl(photo)}
+                                          alt={
+                                            photo.name || 'Снимка след ремонта'
+                                          }
+                                          className="h-full w-full object-cover"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeCompletionPhoto(
+                                              req.id,
+                                              photo.id,
+                                            )
+                                          }
+                                          className="absolute right-0 top-0 bg-red-600 text-white text-[10px] px-1"
+                                        >
+                                          x
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                             </div>
                           )}
 
-                          {lifecycleAction && (
+                          {showComplete && (
                             <button
-                              onClick={() => advanceRequest(req)}
+                              onClick={() =>
+                                stageAction.endpoint === 'complete'
+                                  ? completeRequest(req.id)
+                                  : advanceWorkerStep(req)
+                              }
                               disabled={completingId === req.id}
                               className={
                                 completingId === req.id
-                                  ? "bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed"
-                                  : "bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg font-bold"
+                                  ? 'bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed'
+                                  : 'bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg font-bold'
                               }
                             >
-                              {completingId === req.id ? "Обновявам..." : lifecycleAction}
+                              {completingId === req.id
+                                ? 'Записвам...'
+                                : stageAction.label}
                             </button>
                           )}
 
@@ -1209,17 +1745,19 @@ export default function WorkerProfile() {
                             onClick={() => applyToRequest(req.id)}
                             className={
                               disabledApply || assignedToMe
-                                ? "bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed"
-                                : "bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold"
+                                ? 'bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed'
+                                : 'bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold'
                             }
                           >
                             {assignedToMe
-                              ? "Назначен"
+                              ? 'Назначен'
                               : applied
-                              ? "Кандидатствал"
-                              : applyingId === req.id
-                              ? "Кандидатствам..."
-                              : "Кандидатствай"}
+                                ? 'Кандидатствал'
+                                : profileCannotApply
+                                  ? 'Чака одобрение'
+                                  : applyingId === req.id
+                                    ? 'Кандидатствам...'
+                                    : 'Кандидатствай'}
                           </button>
                         </div>
                       </div>
@@ -1231,29 +1769,58 @@ export default function WorkerProfile() {
           </div>
         )}
 
-
-        {activeTab === "history" && (
+        {activeTab === 'history' && (
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between gap-4 mb-6">
               <h1 className="text-3xl font-bold">История на ремонтите</h1>
-              <button onClick={loadCompletedRequests} className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold">Обнови</button>
+              <button
+                onClick={loadCompletedRequests}
+                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
+              >
+                Обнови
+              </button>
             </div>
             {completedRequests.length === 0 ? (
               <p className="text-gray-400">Все още няма завършени ремонти.</p>
             ) : (
               <div className="space-y-4">
                 {completedRequests.map((job) => {
-                  const before = Array.isArray(job.beforePhotos) ? job.beforePhotos : Array.isArray(job.photos) ? job.photos : [];
-                  const after = Array.isArray(job.afterPhotos) ? job.afterPhotos : [];
+                  const before = Array.isArray(job.beforePhotos)
+                    ? job.beforePhotos
+                    : Array.isArray(job.photos)
+                      ? job.photos
+                      : [];
+                  const after = Array.isArray(job.afterPhotos)
+                    ? job.afterPhotos
+                    : [];
                   const duration = job.durationDays || 1;
                   return (
-                    <div key={job.id || job.requestId} className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <div
+                      key={job.id || job.requestId}
+                      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <div><h2 className="text-xl font-bold">#{job.requestId || job.id} • {job.category || "Ремонт"}</h2><p className="text-gray-400 text-sm mt-1">{job.address || "—"}</p></div>
-                        <div className="text-right text-sm"><div className="text-green-400 font-bold">Завършена</div><div className="text-gray-400 mt-1">Време: {duration} дни</div></div>
+                        <div>
+                          <h2 className="text-xl font-bold">
+                            #{job.requestId || job.id} •{' '}
+                            {job.category || 'Ремонт'}
+                          </h2>
+                          <p className="text-gray-400 text-sm mt-1">
+                            {job.address || '—'}
+                          </p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <div className="text-green-400 font-bold">
+                            Завършена
+                          </div>
+                          <div className="text-gray-400 mt-1">
+                            Време: {duration} дни
+                          </div>
+                        </div>
                       </div>
                       <p className="mt-3 whitespace-pre-line text-gray-300">
-                        {cleanRequestDescription(job.description) || "Няма описание."}
+                        {cleanRequestDescription(job.description) ||
+                          'Няма описание.'}
                       </p>
                       {formatRequestExpectedRange(job) && (
                         <p className="mt-3 text-sm font-bold text-green-300">
@@ -1261,8 +1828,58 @@ export default function WorkerProfile() {
                         </p>
                       )}
                       <div className="grid md:grid-cols-2 gap-4 mt-5">
-                        <div><h3 className="font-bold mb-2">Преди ремонта</h3>{before.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки преди.</p> : <div className="grid grid-cols-2 gap-3">{before.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "Преди ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
-                        <div><h3 className="font-bold mb-2">След ремонта</h3>{after.length === 0 ? <p className="text-gray-500 text-sm">Няма снимки след.</p> : <div className="grid grid-cols-2 gap-3">{after.map((photo) => <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"><img src={photoThumbnailUrl(photo)} alt={photo.name || "След ремонта"} className="h-28 w-full object-cover" /></a>)}</div>}</div>
+                        <div>
+                          <h3 className="font-bold mb-2">Преди ремонта</h3>
+                          {before.length === 0 ? (
+                            <p className="text-gray-500 text-sm">
+                              Няма снимки преди.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-3">
+                              {before.map((photo) => (
+                                <a
+                                  key={photo.id || photoUrl(photo)}
+                                  href={photoUrl(photo)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+                                >
+                                  <img
+                                    src={photoUrl(photo)}
+                                    alt={photo.name || 'Преди ремонта'}
+                                    className="h-28 w-full object-cover"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-bold mb-2">След ремонта</h3>
+                          {after.length === 0 ? (
+                            <p className="text-gray-500 text-sm">
+                              Няма снимки след.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-3">
+                              {after.map((photo) => (
+                                <a
+                                  key={photo.id || photoUrl(photo)}
+                                  href={photoUrl(photo)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+                                >
+                                  <img
+                                    src={photoUrl(photo)}
+                                    alt={photo.name || 'След ремонта'}
+                                    className="h-28 w-full object-cover"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1272,466 +1889,93 @@ export default function WorkerProfile() {
           </div>
         )}
 
-        {activeTab === "profile" && (
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <h1 className="text-3xl font-bold">Моят профил</h1>
-
-              <button
-                onClick={loadMyReviews}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-              >
-                Обнови рейтинг
-              </button>
-            </div>
-
-            {/* ✅ Rating panel */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-gray-400 text-sm">Рейтинг</div>
-                  {ratingLoading ? (
-                    <div className="text-gray-400 mt-2">Зареждане...</div>
-                  ) : ratingError ? (
-                    <div className="text-red-400 mt-2">{ratingError}</div>
-                  ) : (
-                    <>
-                      <div className="text-3xl font-bold mt-1">{ratingInfo.average} ⭐</div>
-                      <div className="text-sm text-gray-400">{ratingInfo.total} отзива</div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {!ratingLoading && !ratingError && (ratingInfo.items || []).length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {(ratingInfo.items || []).slice(0, 5).map((it) => (
-                    <div key={it.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="font-bold">{it.rating} ⭐</div>
-                        <div className="text-xs text-gray-400">{formatBG(it.created_at)}</div>
-                      </div>
-                      {it.comment ? <div className="text-gray-200 mt-2">{it.comment}</div> : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold">Профилна снимка</h2>
-              <div className="flex items-center gap-6 mt-4">
-                <img
-                  src={avatarSrc}
-                  className="w-32 h-32 rounded-full border-4 border-red-500 object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = "/media_files/Snejan.jpg";
-                  }}
-                />
-                <input type="file" accept="image/*" onChange={handleAvatarUpload} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <input
-                name="fullName"
-                value={profile.fullName}
-                onChange={handleChange}
-                placeholder="Трите имена / фирма"
-                className="p-3 rounded bg-gray-800 w-full"
-              />
-              <input
-                name="city"
-                value={profile.city}
-                onChange={handleChange}
-                placeholder="Град"
-                className="p-3 rounded bg-gray-800 w-full"
-              />
-            </div>
-
-            <textarea
-              name="description"
-              value={profile.description}
-              onChange={handleChange}
-              placeholder="Кратко описание"
-              className="w-full p-3 bg-gray-800 rounded h-28"
-            />
-
-            <textarea
-              name="experience"
-              value={profile.experience}
-              onChange={handleChange}
-              placeholder="Опит / специализации"
-              className="mt-4 w-full p-3 bg-gray-800 rounded h-24"
-            />
-
-            <textarea
-              name="equipment"
-              value={profile.equipment}
-              onChange={handleChange}
-              placeholder="Оборудване и техника"
-              className="mt-4 w-full p-3 bg-gray-800 rounded h-24"
-            />
-
-            <button
-              onClick={saveProfile}
-              disabled={saving}
-              className="mt-6 bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg text-lg font-bold"
-            >
-              {saving ? "Запазване..." : "Запази промените"}
-            </button>
-          </div>
+        {activeTab === 'profile' && (
+          <WorkerProfileEditorPremium
+            profile={profile}
+            setProfile={setProfile}
+            avatarSrc={avatarSrc}
+            onAvatarChange={handleAvatarUpload}
+            onSave={saveProfile}
+            onPreview={() => myUserId && navigate(`/workers/${myUserId}`)}
+            saving={saving}
+            ratingInfo={ratingInfo}
+            ratingLoading={ratingLoading}
+            ratingError={ratingError}
+            completedCount={completedRequests.length}
+            profileCompletion={onboarding?.completion}
+            onContinueProfile={() => setShowOnboarding(true)}
+          />
         )}
 
-        {activeTab === "gallery" && (
-          <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <h1 className="text-3xl font-bold">Галерия</h1>
-
-              <button
-                onClick={loadGallery}
-                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-bold"
-              >
-                Обнови
-              </button>
-            </div>
-
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-              <h2 className="text-xl font-bold mb-3">Качи снимки от обекти</h2>
-
-              <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-                <input type="file" accept="image/*" multiple onChange={onPickGalleryFiles} className="block" />
-
-                <button
-                  onClick={uploadGallery}
-                  disabled={uploadingGallery || !galleryFiles.length}
-                  className={
-                    uploadingGallery || !galleryFiles.length
-                      ? "bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-bold cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-bold"
-                  }
-                >
-                  {uploadingGallery ? "Качвам..." : "Качи"}
-                </button>
-
-                {galleryFiles.length > 0 && (
-                  <span className="text-gray-300 text-sm">
-                    Избрани: <strong>{galleryFiles.length}</strong>
-                  </span>
-                )}
-              </div>
-
-              {galleryError && <p className="text-red-400 mt-3">{galleryError}</p>}
-              {galleryMsg && <p className="text-yellow-300 mt-3">{galleryMsg}</p>}
-            </div>
-
-            <div className="mt-6">
-              {galleryLoading ? (
-                <p className="text-gray-400">Зареждане...</p>
-              ) : galleryAlbums.length === 0 ? (
-                <p className="text-gray-400">Няма качени снимки.</p>
-              ) : (
-                <div className="space-y-3">
-                  {galleryAlbums.map((album, albumIndex) => (
-                    <button
-                      key={album.id}
-                      type="button"
-                      onClick={() => openAlbum(albumIndex)}
-                      className="w-full text-left bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-blue-500 transition"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-green-600/20 border border-green-500/40 px-3 py-1 text-xs font-bold text-green-300">
-                              Реален обект
-                            </span>
-                            <span className="rounded-full bg-blue-600/20 border border-blue-500/40 px-3 py-1 text-xs font-bold text-blue-200">
-                              {album.photos.length} снимки
-                            </span>
-                          </div>
-
-                          <div className="mt-3 text-xl font-extrabold leading-tight">{album.title.replace(/^Обект #\d+\s•\s/, "")}</div>
-                          <div className="mt-1 text-sm text-gray-300">{album.subtitle}</div>
-
-                          <div className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Статус</div>
-                              <div className="font-bold text-green-400">{album.type === "job" ? "Завършен" : "Портфолио"}</div>
-                            </div>
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Време</div>
-                              <div className="font-bold">{album.meta}</div>
-                            </div>
-                            <div className="rounded-lg bg-gray-900 px-3 py-2">
-                              <div className="text-gray-500 text-xs">Дата</div>
-                              <div className="font-bold">{formatBG(album.date)}</div>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 text-sm font-bold text-blue-300">
-                            Виж всички снимки →
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 md:w-72 lg:w-80 h-32 md:h-36">
-                          <div className="overflow-hidden rounded-lg bg-gray-900">
-                            <img
-                              src={album.cover.thumbnailUrl || album.cover.url}
-                              alt={album.title}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </div>
-                          <div className="relative overflow-hidden rounded-lg bg-gray-900">
-                            <img
-                              src={(album.photos[1] || album.cover).thumbnailUrl || (album.photos[1] || album.cover).url}
-                              alt={album.title}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                            {album.photos.length > 2 && (
-                              <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-lg font-extrabold">
-                                +{album.photos.length - 2}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-          </div>
+        {activeTab === 'referrals' && (
+          <WorkerReferralPanel
+            referralInfo={referralInfo}
+            loading={referralLoading}
+            error={referralError}
+            message={referralMsg}
+            onRefresh={loadReferrals}
+            onCreateCode={createReferralCode}
+            onCopyLink={copyReferralLink}
+            onShareLink={shareReferralLink}
+            formatDate={formatBG}
+          />
         )}
 
-        {activeTab === "calculator" && (
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-6">
-              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-cyan-300">Bricky pricing engine v0.2</p>
-              <h1 className="mt-2 text-3xl font-bold">Калкулатор</h1>
-              <p className="mt-2 text-sm text-gray-300">Ориентир за труд или труд и материали по същите правила, които използва заявката.</p>
-            </div>
-
-            <div className="space-y-6 rounded-xl border border-gray-700 bg-gray-800 p-6">
-              <label className="block">
-                <span className="mb-2 block text-sm font-bold text-gray-200">Тип ремонт</span>
-                <select
-                  value={calc.categoryKey}
-                  onChange={(e) => selectCalcCategory(e.target.value)}
-                  className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
-                >
-                  {REPAIR_CATEGORY_OPTIONS.map((item) => (
-                    <option key={item.key} value={item.key}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div>
-                <div className="mb-3 text-sm font-bold text-gray-200">Дейности</div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {calcFlow.activities.map((activity) => {
-                    const selected = calc.activities.includes(activity);
-                    return (
-                      <label
-                        key={activity}
-                        className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${selected ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900 hover:border-gray-500"}`}
-                      >
-                        <input type="checkbox" checked={selected} onChange={() => toggleCalcActivity(activity)} />
-                        <span className="font-semibold">{activity}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-2 block text-sm font-bold text-gray-200">Приблизителен обхват</span>
-                  <select
-                    value={calc.sizeOption}
-                    onChange={(e) => setCalc((prev) => ({ ...prev, sizeOption: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
-                  >
-                    <option value="">Избери обхват</option>
-                    {calcFlow.quantityOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-
-                {calcAsksForArea && (
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-bold text-gray-200">Точна площ (кв.м)</span>
-                    <input
-                      type="number"
-                      min="0.1"
-                      max={MAX_EXACT_AREA_M2}
-                      step="0.1"
-                      value={calc.exactAreaM2}
-                      onChange={(e) => setCalc((prev) => ({ ...prev, exactAreaM2: e.target.value }))}
-                      placeholder="Напр. 24"
-                      className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3"
-                    />
-                  </label>
-                )}
-              </div>
-
-              <fieldset>
-                <legend className="mb-3 text-sm font-bold text-gray-200">Какво да включва ориентирът?</legend>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[
-                    ["labor_only", "Труд"],
-                    ["labor_plus_materials", "Труд + материали"],
-                  ].map(([value, label]) => (
-                    <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 ${calc.pricingMode === value ? "border-cyan-300 bg-cyan-950/40" : "border-gray-700 bg-gray-900"}`}>
-                      <input
-                        type="radio"
-                        name="worker-calculator-pricing-mode"
-                        checked={calc.pricingMode === value}
-                        onChange={() => setCalc((prev) => ({ ...prev, pricingMode: value }))}
-                      />
-                      <span className="font-bold">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
-                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-700 pb-4">
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-wider text-gray-400">Най-вероятен ориентир</div>
-                    <div className="mt-1 text-2xl font-black text-green-400">{formatEuroRange(calcEstimate.expectedMin, calcEstimate.expectedMax)}</div>
-                  </div>
-                  <div className="text-right text-xs text-gray-400">Версия {calcEstimate.pricingVersion}</div>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                  <div><span className="block text-gray-400">Труд</span><strong>{formatEuroRange(calcEstimate.laborMin, calcEstimate.laborMax)}</strong></div>
-                  <div><span className="block text-gray-400">Материали</span><strong>{formatEuroRange(calcEstimate.materialMin, calcEstimate.materialMax)}</strong></div>
-                  <div><span className="block text-gray-400">Технически диапазон</span><strong>{formatEuroRange(calcEstimate.possibleMin, calcEstimate.possibleMax)}</strong></div>
-                </div>
-
-                {calcEstimate.warnings?.length > 0 && (
-                  <ul className="mt-4 space-y-1 border-t border-gray-700 pt-4 text-sm text-amber-200">
-                    {calcEstimate.warnings.slice(0, 3).map((warning) => <li key={warning}>• {warning}</li>)}
-                  </ul>
-                )}
-
-                <p className="mt-4 text-xs leading-5 text-gray-400">Ориентировъчна стойност, не оферта. Крайната цена зависи от оглед, достъп, състояние на обекта и избрани материали.</p>
-              </div>
-            </div>
-          </div>
+        {activeTab === 'gallery' && (
+          <WorkerGalleryPanel
+            albums={galleryAlbums}
+            loading={galleryLoading}
+            error={galleryError}
+            message={galleryMsg}
+            selectedFiles={galleryFiles}
+            uploading={uploadingGallery}
+            deletingId={deletingId}
+            reordering={reorderingGallery}
+            activeAlbum={activeAlbum}
+            activePhoto={activePhoto}
+            activePhotoIndex={albumViewer?.photoIndex || 0}
+            canDeleteActivePhoto={canDeleteActivePhoto}
+            onRefresh={loadGallery}
+            onPickFiles={onPickGalleryFiles}
+            onUpload={uploadGallery}
+            onOpenAlbum={openAlbum}
+            onCloseAlbum={closeAlbum}
+            onStepPhoto={stepAlbumPhoto}
+            onSelectPhoto={(photoIndex) =>
+              setAlbumViewer((viewer) =>
+                viewer ? { ...viewer, photoIndex } : viewer,
+              )
+            }
+            onDeleteActivePhoto={deleteActiveGalleryPhoto}
+            onMoveActivePhoto={moveActiveGalleryPhoto}
+            formatDate={formatBG}
+          />
         )}
 
-        {activeTab === "settings" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Настройки</h1>
-            <p className="text-gray-400">(placeholder)</p>
-          </div>
+        {activeTab === 'calculator' && <WorkerCalculatorPanel />}
+
+        {activeTab === 'settings' && (
+          <AccountSettingsPanel
+            onProfileSaved={(account) =>
+              setProfile((current) => ({
+                ...current,
+                fullName: account.profile?.name || current.fullName,
+              }))
+            }
+          />
         )}
 
-        {activeTab === "subscription" && (
-          <div className="text-center mt-10">
-            <h1 className="text-3xl font-bold mb-4">Абонамент</h1>
-            <p className="text-gray-400">Bricky PRO — скоро.</p>
-          </div>
+        {activeTab === 'subscription' && (
+          <AccountSettingsPanel view="subscription" />
+        )}
+        {showOnboarding && onboarding && (
+          <WorkerOnboardingModal
+            state={onboarding}
+            onSaveStep={saveOnboardingStep}
+            onClose={() => setShowOnboarding(false)}
+          />
         )}
       </main>
-
-      {activeAlbum && activePhoto && (
-        <div className="fixed inset-0 z-[80] bg-black/85 px-4 py-6 flex items-center justify-center">
-          <div className="w-full max-w-5xl">
-            <div className="mb-3 flex items-center justify-between gap-3 text-white">
-              <div>
-                <div className="font-bold">{activeAlbum.title}</div>
-                <div className="text-sm text-gray-300">
-                  {(albumViewer?.photoIndex || 0) + 1} / {activeAlbum.photos.length} • {activeAlbum.subtitle}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {canDeleteActivePhoto ? (
-                  <button
-                    type="button"
-                    onClick={deleteActiveGalleryPhoto}
-                    disabled={deletingId === activePhoto.id}
-                    className={
-                      deletingId === activePhoto.id
-                        ? "rounded-lg bg-red-950 px-4 py-2 font-bold text-red-200 cursor-not-allowed"
-                        : "rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 font-bold"
-                    }
-                  >
-                    {deletingId === activePhoto.id ? "Трия..." : "Изтрий снимката"}
-                  </button>
-                ) : null}
-                <button type="button" onClick={closeAlbum} className="rounded-lg bg-gray-800 hover:bg-gray-700 px-4 py-2 font-bold">
-                  Затвори
-                </button>
-              </div>
-            </div>
-
-            <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-950">
-              <img
-                src={activePhoto.url}
-                alt={activePhoto.name || activeAlbum.title}
-                className="max-h-[72vh] w-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-
-              {activeAlbum.photos.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => stepAlbumPhoto(-1)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepAlbumPhoto(1)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black px-4 py-3 text-2xl font-bold"
-                  >
-                    ›
-                  </button>
-                </>
-              )}
-            </div>
-
-            {activeAlbum.photos.length > 1 && (
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {activeAlbum.photos.map((photo, idx) => (
-                  <button
-                    key={photo.id || photo.url || idx}
-                    type="button"
-                    onClick={() => setAlbumViewer((viewer) => ({ ...viewer, photoIndex: idx }))}
-                    className={
-                      idx === albumViewer.photoIndex
-                        ? "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-blue-500"
-                        : "h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-700 opacity-70 hover:opacity-100"
-                    }
-                  >
-                    <img
-                      src={photo.url}
-                      alt={photo.name || activeAlbum.title}
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

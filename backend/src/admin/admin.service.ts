@@ -1,311 +1,489 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
-import { RequestEntity } from '../requests/entities/request.entity';
-import { RequestImageEntity } from '../requests/entities/request-image.entity';
-import { ModerationStatus, MODERATION_STATUSES } from '../moderation/moderation.types';
-import { AdminAuditLogEntity } from './entities/admin-audit-log.entity';
-import { Worker } from '../workers/worker.entity';
-import { WorkerGalleryImage } from '../workers/worker-gallery-image.entity';
-import { ReviewEntity } from '../reviews/entities/review.entity';
-import { UserEntity } from '../users/user.entity';
-import { deleteStoredMedia } from '../common/media-storage';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MediaModerationService } from './media-moderation.service';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { AdminAuditLogEntity } from './admin-audit-log.entity';
+import { UsersService } from '../users/users.service';
+import { AdminWorkerFilters, WorkersService } from '../workers/workers.service';
+import { RequestsService } from '../requests/requests.service';
+import { MediaService } from '../media/media.service';
+import { BillingService } from '../billing/billing.service';
+import { RepairRequestStatus } from '../requests/entities/repair-request.entity';
+import { ReferralsService } from '../referrals/referrals.service';
+import {
+  CatalogActivityInput,
+  CatalogCategoryInput,
+  CatalogService,
+  PricingRuleInput,
+} from '../catalog/catalog.service';
+import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class AdminService {
   constructor(
-    @InjectRepository(RequestEntity) private readonly requests: Repository<RequestEntity>,
-    @InjectRepository(RequestImageEntity) private readonly media: Repository<RequestImageEntity>,
-    @InjectRepository(Worker) private readonly workers: Repository<Worker>,
-    @InjectRepository(WorkerGalleryImage) private readonly gallery: Repository<WorkerGalleryImage>,
-    @InjectRepository(ReviewEntity) private readonly reviews: Repository<ReviewEntity>,
-    @InjectRepository(UserEntity) private readonly users: Repository<UserEntity>,
-    @InjectRepository(AdminAuditLogEntity) private readonly audit: Repository<AdminAuditLogEntity>,
-    private readonly notifications: NotificationsService,
-    private readonly mediaModeration: MediaModerationService,
+    @InjectRepository(AdminAuditLogEntity)
+    private readonly auditRepo: Repository<AdminAuditLogEntity>,
+    private readonly users: UsersService,
+    private readonly workers: WorkersService,
+    private readonly requests: RequestsService,
+    private readonly media: MediaService,
+    private readonly billing: BillingService,
+    private readonly referrals: ReferralsService,
+    private readonly catalog: CatalogService,
+    private readonly reports: ReportsService,
+    private readonly dataSource: DataSource,
   ) {}
 
-  dashboard() {
-    return Promise.all([
-      this.requests.count({ where: { moderationStatus: 'pending_review' } }),
-      this.media.count({ where: { moderationStatus: 'pending_review' } }),
-      this.gallery.count({ where: { moderationStatus: 'pending_review' } }),
-      this.workers.count({ where: { avatarModerationStatus: 'pending_review' } }),
-      this.workers.count({ where: { moderationStatus: 'pending_review' } }),
-      this.reviews.count({ where: { moderationStatus: 'pending_review' } }),
-      this.requests.count({ where: { moderationStatus: 'approved', completedAt: IsNull() } }),
-      this.requests.count({ where: { moderationStatus: 'approved', completedAt: Not(IsNull()) } }),
-      this.users.count({ where: { accountStatus: 'active' } }),
-      this.workers.count({ where: { moderationStatus: 'approved' } }),
-      this.audit.find({ order: { created_at: 'DESC' }, take: 10 }),
-    ]).then(([pendingRequests, requestMedia, galleryMedia, avatarMedia, pendingWorkers, pendingReviews, activeRequests, completedRequests, activeUsers, activeWorkers, recentActions]) => ({
-      pendingRequests,
-      pendingMedia: requestMedia + galleryMedia + avatarMedia,
-      pendingWorkers,
-      pendingReviews,
-      activeRequests,
-      completedRequests,
-      activeUsers,
-      activeWorkers,
-      recentActions,
-      systemHealth: { api: 'ok', database: 'ok' },
-    }));
+  listAudit() {
+    return this.auditRepo.find({ order: { createdAt: 'DESC' }, take: 200 });
   }
 
-  async listRequests(status?: ModerationStatus, q = '', page = 1, limit = 25) {
-    const rows = await this.requests.find({
-      where: status ? { moderationStatus: status } : {},
-      relations: ['client'],
-      order: { created_at: 'DESC' },
-    });
-    return this.paginate(rows.filter((item) => this.matches(item, q, ['category', 'description', 'address', 'clientName', 'email'])), page, limit);
+  listUsers(query?: string) {
+    return this.users.searchUsers(query || '');
   }
 
-  async listMedia(status?: ModerationStatus, q = '', page = 1, limit = 25) {
-    const [requestMedia, galleryMedia, avatars] = await Promise.all([
-      this.media.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } }),
-      this.gallery.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } }),
-      this.workers.find({ where: status ? { avatarModerationStatus: status } : {}, order: { createdAt: 'DESC' } }),
-    ]);
-    const rows = [
-      ...requestMedia.map((item) => ({ ...item, source: 'request' })),
-      ...galleryMedia.map((item) => ({ ...item, source: 'gallery' })),
-      ...avatars.filter((item) => item.avatarUrl).map((item) => ({
-        id: item.id, userId: item.userId, url: item.avatarUrl, source: 'avatar',
-        moderationStatus: item.avatarModerationStatus, moderationReason: item.avatarModerationReason,
-        created_at: item.createdAt,
-      })),
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return this.paginate(rows.filter((item) => this.matches(item, q, ['name', 'url', 'source'])), page, limit);
-  }
-
-  async listWorkers(status?: ModerationStatus, q = '', page = 1, limit = 25) {
-    const rows = await this.workers.find({ where: status ? { moderationStatus: status } : {}, order: { createdAt: 'DESC' } });
-    return this.paginate(rows.filter((item) => this.matches(item, q, ['fullName', 'email', 'city', 'description'])), page, limit);
-  }
-
-  async listReviews(status?: ModerationStatus, q = '', page = 1, limit = 25) {
-    const rows = await this.reviews.find({ where: status ? { moderationStatus: status } : {}, order: { created_at: 'DESC' } });
-    return this.paginate(rows.filter((item) => this.matches(item, q, ['comment', 'rating', 'workerUserId', 'clientUserId'])), page, limit);
-  }
-
-  async listUsers() {
-    const rows = await this.users.find({ order: { id: 'DESC' } });
-    return rows.map(({ password: _password, ...user }) => user);
-  }
-
-  async getRequest(id: number) {
-    const [entity, images] = await Promise.all([
-      this.requests.findOne({ where: { id }, relations: ['client'] }),
-      this.media.find({ where: { requestId: id }, order: { sortOrder: 'ASC', created_at: 'ASC' } }),
-    ]);
-    if (!entity) throw new NotFoundException('Request not found');
-    return { ...entity, images };
-  }
-
-  async getMedia(source: 'request' | 'gallery' | 'avatar', id: number) {
-    if (source === 'gallery') {
-      const entity = await this.gallery.findOne({ where: { id } });
-      if (!entity) throw new NotFoundException('Media not found');
-      return { ...entity, source };
-    }
-    if (source === 'avatar') {
-      const entity = await this.workers.findOne({ where: { id } });
-      if (!entity?.avatarUrl) throw new NotFoundException('Media not found');
-      return { id: entity.id, userId: entity.userId, url: entity.avatarUrl, source, moderationStatus: entity.avatarModerationStatus };
-    }
-    const entity = await this.media.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Media not found');
-    return { ...entity, source };
-  }
-
-  async getWorker(id: number) {
-    const entity = await this.workers.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Worker not found');
-    return entity;
-  }
-
-  async getReview(id: number) {
-    const entity = await this.reviews.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Review not found');
-    return entity;
-  }
-
-  async listAudit(q = '', action = '', entityType = '', page = 1, limit = 25) {
-    const rows = await this.audit.find({ order: { created_at: 'DESC' }, take: 1000 });
-    const needle = String(q || '').trim().toLowerCase();
-    return this.paginate(rows.filter((item) => {
-      if (action && item.action !== action) return false;
-      if (entityType && item.entityType !== entityType) return false;
-      if (!needle) return true;
-      return [item.adminUserId, item.entityType, item.entityId, item.action, item.reason, item.ipAddress]
-        .some((value) => String(value ?? '').toLowerCase().includes(needle));
-    }), page, limit);
-  }
-
-  async moderateRequest(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    this.assertStatus(status);
-    this.assertReason(status, reason);
-    const entity = await this.requests.findOne({ where: { id }, relations: ['client'] });
-    if (!entity) throw new NotFoundException('Request not found');
-    const oldValue = this.moderationSnapshot(entity);
-    entity.moderationStatus = status;
-    entity.moderationReason = reason?.trim() || null;
-    entity.moderatedByUserId = adminUserId;
-    entity.moderatedAt = new Date();
-    await this.requests.save(entity);
-    await this.writeAudit(adminUserId, 'request', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
-    if (status === 'rejected' && entity.client?.id) {
-      await this.notifyRejection(Number(entity.client.id), 'request_rejected', `Заявка #${id} е отхвърлена`, entity.moderationReason, id);
-    }
-    return entity;
-  }
-
-  async editRequest(id: number, patch: Record<string, unknown>, adminUserId: number, reason?: string, ipAddress?: string) {
-    if (!reason?.trim()) throw new BadRequestException('Reason is required');
-    const entity = await this.requests.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Request not found');
-    const allowed = ['category', 'categoryKey', 'description', 'address'] as const;
-    const oldValue: Record<string, unknown> = {};
-    const newValue: Record<string, unknown> = {};
-    for (const field of allowed) {
-      if (!Object.prototype.hasOwnProperty.call(patch, field)) continue;
-      oldValue[field] = entity[field];
-      const value = patch[field];
-      (entity as any)[field] = value == null ? null : String(value).trim();
-      newValue[field] = (entity as any)[field];
-    }
-    if (!Object.keys(newValue).length) throw new BadRequestException('No editable fields supplied');
-    await this.requests.save(entity);
-    await this.writeAudit(adminUserId, 'request', id, 'edited', reason?.trim() || null, oldValue, newValue, ipAddress);
-    return entity;
-  }
-
-  async deleteRequest(id: number, adminUserId: number, reason?: string, ipAddress?: string) {
-    if (!reason?.trim()) throw new BadRequestException('Reason is required');
-    const entity = await this.requests.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Request not found');
-    const images = await this.media.find({ where: { requestId: id } });
-    await this.writeAudit(adminUserId, 'request', id, 'deleted', reason?.trim() || null, this.requestSnapshot(entity), null, ipAddress);
-    await this.media.delete({ requestId: id });
-    await this.requests.delete({ id });
-    await Promise.all(images.map((image) => deleteStoredMedia(image.storageKey, image.thumbnailStorageKey)));
-    return { ok: true, id };
-  }
-
-  async moderateMedia(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    return this.mediaModeration.moderateRequestImage(id, status, adminUserId, reason, ipAddress);
-  }
-
-  async moderateGallery(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    return this.mediaModeration.moderateGalleryImage(id, status, adminUserId, reason, ipAddress);
-  }
-
-  async moderateWorker(id: number, target: 'profile' | 'avatar', status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    if (target === 'avatar') return this.mediaModeration.moderateAvatar(id, status, adminUserId, reason, ipAddress);
-    this.assertStatus(status);
-    this.assertReason(status, reason);
-    const entity = await this.workers.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Worker not found');
-    const oldValue = this.moderationSnapshot(entity);
-    const value = reason?.trim() || null;
-    entity.moderationStatus = status; entity.moderationReason = value;
-    entity.moderatedByUserId = adminUserId; entity.moderatedAt = new Date();
-    entity.isApproved = status === 'approved';
-    await this.workers.save(entity);
-    const newValue = this.moderationSnapshot(entity);
-    await this.writeAudit(adminUserId, `worker_${target}`, id, status, value, oldValue, newValue, ipAddress);
-    if (status === 'rejected') await this.notifyRejection(entity.userId, 'worker_profile_rejected', 'Профилът е отхвърлен', value);
-    return entity;
-  }
-
-  async moderateReview(id: number, status: ModerationStatus, adminUserId: number, reason?: string, ipAddress?: string) {
-    this.assertStatus(status);
-    this.assertReason(status, reason);
-    const entity = await this.reviews.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Review not found');
-    const oldValue = this.moderationSnapshot(entity);
-    this.applyModeration(entity, status, adminUserId, reason);
-    await this.reviews.save(entity);
-    await this.writeAudit(adminUserId, 'review', id, status, entity.moderationReason, oldValue, this.moderationSnapshot(entity), ipAddress);
-    if (status === 'rejected') {
-      await this.notifyRejection(entity.clientUserId, 'review_rejected', `Отзив #${id} е отхвърлен`, entity.moderationReason, entity.requestId);
-    }
-    return entity;
-  }
-
-  async setUserStatus(id: number, action: 'activate' | 'suspend', adminUserId: number, reason?: string, ipAddress?: string) {
-    if (!reason?.trim()) throw new BadRequestException('Reason is required');
-    if (id === adminUserId && action === 'suspend') throw new BadRequestException('Admin cannot suspend own account');
-    const entity = await this.users.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('User not found');
-    const oldValue = { accountStatus: entity.accountStatus };
-    entity.accountStatus = action === 'suspend' ? 'suspended' : 'active';
-    await this.users.save(entity);
-    await this.writeAudit(adminUserId, 'user', id, action, reason?.trim() || null, oldValue, { accountStatus: entity.accountStatus }, ipAddress);
-    const { password: _password, ...safe } = entity;
-    return safe;
-  }
-
-  private assertStatus(status: string): asserts status is ModerationStatus {
-    if (!MODERATION_STATUSES.includes(status as ModerationStatus) || status === 'pending_review') {
-      throw new BadRequestException('Invalid moderation action');
-    }
-  }
-
-  private assertReason(status: ModerationStatus, reason?: string) {
-    if (status !== 'approved' && !reason?.trim()) throw new BadRequestException('Reason is required');
-  }
-
-  private applyModeration(entity: any, status: ModerationStatus, adminUserId: number, reason?: string) {
-    entity.moderationStatus = status;
-    entity.moderationReason = reason?.trim() || null;
-    entity.moderatedByUserId = adminUserId;
-    entity.moderatedAt = new Date();
-  }
-
-  private matches(item: any, q: string, fields: string[]) {
-    const needle = String(q || '').trim().toLowerCase();
-    if (!needle) return true;
-    return fields.some((field) => String(item?.[field] ?? '').toLowerCase().includes(needle));
-  }
-
-  private paginate<T>(rows: T[], page: number, limit: number) {
-    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 25));
-    const safePage = Math.max(1, Number(page) || 1);
-    return rows.slice((safePage - 1) * safeLimit, safePage * safeLimit);
-  }
-
-  private moderationSnapshot(entity: any) {
-    return { moderationStatus: entity.moderationStatus, moderationReason: entity.moderationReason ?? null };
-  }
-
-  private avatarSnapshot(entity: Worker) {
-    return { moderationStatus: entity.avatarModerationStatus, moderationReason: entity.avatarModerationReason ?? null };
-  }
-
-  private requestSnapshot(entity: RequestEntity) {
-    return {
-      id: entity.id, category: entity.category, categoryKey: entity.categoryKey,
-      description: entity.description, address: entity.address,
-      status: entity.status, statusKey: entity.statusKey, moderationStatus: entity.moderationStatus,
-    };
-  }
-
-  private writeAudit(
-    adminUserId: number, entityType: string, entityId: number, action: string, reason: string | null,
-    oldValue: Record<string, unknown> | null = null, newValue: Record<string, unknown> | null = null,
-    ipAddress: string | null = null,
+  async setUserStatus(
+    actorUserId: number,
+    userId: number,
+    status: string,
+    reason?: string,
   ) {
-    return this.audit.save(this.audit.create({
-      adminUserId, entityType, entityId, action, reason, metadata: null, oldValue, newValue, ipAddress,
-    }));
+    this.assertOneOf(
+      status,
+      ['active', 'pending', 'blocked', 'deleted'],
+      'Invalid user status',
+    );
+    if (['blocked', 'deleted'].includes(status)) this.requireReason(reason);
+    const user = await this.users.updateStatus(userId, status);
+    await this.log(actorUserId, 'user.status_changed', 'user', userId, reason, {
+      status,
+    });
+    return user;
   }
 
-  private notifyRejection(userId: number, type: string, prefix: string, reason?: string | null, requestId?: number) {
-    const suffix = reason ? ` Причина: ${reason}` : '';
-    return this.notifications.create(userId, { type, message: `${prefix}.${suffix}`, requestId: requestId ?? null });
+  listWorkers(filters: AdminWorkerFilters = {}) {
+    return this.workers.getAllForAdmin(filters);
+  }
+
+  getWorkerDetails(workerUserId: number) {
+    return this.workers.getAdminDetail(workerUserId);
+  }
+
+  async setWorkerApproval(
+    actorUserId: number,
+    workerUserId: number,
+    approvalStatus: string,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      approvalStatus,
+      ['pending', 'approved', 'rejected', 'suspended'],
+      'Invalid worker approval status',
+    );
+    if (['rejected', 'suspended'].includes(approvalStatus)) {
+      this.requireReason(reason);
+    }
+    return this.dataSource.transaction(async (manager) => {
+      if (approvalStatus === 'approved') {
+        await this.users.updateStatus(workerUserId, 'active', manager);
+      }
+
+      const worker = await this.workers.setApprovalStatus(
+        workerUserId,
+        approvalStatus,
+        undefined,
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'worker.approval_changed',
+        'worker',
+        workerUserId,
+        reason,
+        {
+          approvalStatus,
+          userStatus: approvalStatus === 'approved' ? 'active' : undefined,
+          visibilityStatus: (worker as any)?.visibilityStatus,
+        },
+        manager,
+      );
+      return worker;
+    });
+  }
+
+  listReports(status?: string) {
+    return this.reports.list(status);
+  }
+
+  async resolveReport(
+    actorUserId: number,
+    reportId: number,
+    status: string,
+    note: string,
+  ) {
+    const report = await this.reports.resolve(
+      reportId,
+      actorUserId,
+      status,
+      note,
+    );
+    await this.log(
+      actorUserId,
+      'content_report.status_changed',
+      'content_report',
+      reportId,
+      note,
+      {
+        status,
+        targetType: report.targetType,
+        targetId: report.targetId,
+      },
+    );
+    return report;
+  }
+
+  async setWorkerWallVisibility(
+    actorUserId: number,
+    workerUserId: number,
+    listed: boolean,
+    reason?: string,
+  ) {
+    const worker = await this.workers.setWallVisibility(workerUserId, listed);
+    await this.log(
+      actorUserId,
+      'worker.wall_visibility_changed',
+      'worker',
+      workerUserId,
+      reason,
+      { listed, visibilityStatus: listed ? 'public' : 'private' },
+    );
+    return worker;
+  }
+
+  listRequests(queue?: string) {
+    return this.requests.adminListRequests(queue);
+  }
+
+  getRequestTimeline(requestId: number) {
+    return this.requests.adminGetTimeline(requestId);
+  }
+
+  async setRequestStatus(
+    actorUserId: number,
+    requestId: number,
+    status: RepairRequestStatus,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      status,
+      [
+        'draft',
+        'pending_admin',
+        'published',
+        'applied',
+        'assigned',
+        'worker_selected',
+        'worker_confirmed',
+        'worker_on_site',
+        'inspected',
+        'in_progress',
+        'work_finished',
+        'ready_for_client_confirmation',
+        'client_confirmed',
+        'reviewed',
+        'completed',
+        'canceled',
+        'archived',
+      ],
+      'Invalid request status',
+    );
+    if (['canceled', 'archived'].includes(status)) this.requireReason(reason);
+    const request = await this.requests.adminSetStatus(
+      requestId,
+      status,
+      actorUserId,
+      reason,
+    );
+    await this.log(
+      actorUserId,
+      'request.status_changed',
+      'request',
+      requestId,
+      reason,
+      { status },
+    );
+    return request;
+  }
+
+  async interveneRequest(
+    actorUserId: number,
+    requestId: number,
+    action: 'cancel' | 'reopen',
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      action,
+      ['cancel', 'reopen'],
+      'Invalid intervention action',
+    );
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
+    const request = await this.requests.adminIntervene(
+      requestId,
+      actorUserId,
+      action,
+      reason.trim(),
+    );
+    await this.log(
+      actorUserId,
+      `request.${action}`,
+      'request',
+      requestId,
+      reason.trim(),
+      { action },
+    );
+    return request;
+  }
+
+  listMedia() {
+    return this.media.listAll();
+  }
+
+  listCategories() {
+    return this.catalog.listCatalog();
+  }
+
+  async upsertCategory(
+    actorUserId: number,
+    categoryKey: string,
+    input: CatalogCategoryInput,
+    reason?: string,
+  ) {
+    const category = await this.catalog.upsertCategory(
+      categoryKey,
+      input || {},
+    );
+    await this.log(
+      actorUserId,
+      'catalog.category_changed',
+      'repair_category',
+      categoryKey,
+      reason,
+      {
+        label: category.label,
+        isActive: category.isActive,
+        sortOrder: category.sortOrder,
+      },
+    );
+    return category;
+  }
+
+  async upsertActivity(
+    actorUserId: number,
+    categoryKey: string,
+    activityKey: string,
+    input: CatalogActivityInput,
+    reason?: string,
+  ) {
+    const activity = await this.catalog.upsertActivity(
+      categoryKey,
+      activityKey,
+      input || {},
+    );
+    await this.log(
+      actorUserId,
+      'catalog.activity_changed',
+      'repair_activity',
+      `${categoryKey}:${activityKey}`,
+      reason,
+      {
+        label: activity.label,
+        unitType: activity.unitType,
+        isActive: activity.isActive,
+        sortOrder: activity.sortOrder,
+      },
+    );
+    return activity;
+  }
+
+  listPricingRules() {
+    return this.catalog.listPricingRules();
+  }
+
+  async createPricingRule(
+    actorUserId: number,
+    input: PricingRuleInput,
+    reason?: string,
+  ) {
+    const rule = await this.catalog.createPricingRule(input || {});
+    await this.log(
+      actorUserId,
+      'pricing.rule_created',
+      'pricing_rule',
+      rule.id,
+      reason,
+      {
+        version: rule.version,
+        categoryKey: rule.categoryKey,
+        activityKey: rule.activityKey,
+        isActive: rule.isActive,
+      },
+    );
+    return rule;
+  }
+
+  async setPricingRuleActive(
+    actorUserId: number,
+    id: number,
+    isActive: boolean,
+    reason?: string,
+  ) {
+    const rule = await this.catalog.setPricingRuleActive(id, isActive);
+    await this.log(
+      actorUserId,
+      'pricing.rule_status_changed',
+      'pricing_rule',
+      id,
+      reason,
+      {
+        isActive: rule.isActive,
+        version: rule.version,
+      },
+    );
+    return rule;
+  }
+
+  async setMediaModeration(
+    actorUserId: number,
+    id: number,
+    moderationStatus: string,
+    reason?: string,
+  ) {
+    this.assertOneOf(
+      moderationStatus,
+      ['pending', 'approved', 'rejected'],
+      'Invalid moderation status',
+    );
+    if (moderationStatus === 'rejected') this.requireReason(reason);
+    const media = await this.media.setModerationStatus(id, moderationStatus);
+    await this.log(
+      actorUserId,
+      'media.moderation_changed',
+      'media',
+      id,
+      reason,
+      { moderationStatus },
+    );
+    if (moderationStatus === 'approved' && media?.requestId) {
+      await this.referrals.processCompletedRequest(Number(media.requestId));
+    }
+    return media;
+  }
+
+  async adjustCredits(
+    actorUserId: number,
+    workerUserId: number,
+    amount: number,
+    reason?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const wallet = await this.billing.adjustCredits(
+        workerUserId,
+        Number(amount),
+        actorUserId,
+        reason || 'admin_adjustment',
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'credits.adjusted',
+        'worker',
+        workerUserId,
+        reason,
+        { amount },
+        manager,
+      );
+      return wallet;
+    });
+  }
+
+  async setPlan(
+    actorUserId: number,
+    workerUserId: number,
+    planKey: string,
+    reason?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const plan = await this.billing.setPlan(
+        workerUserId,
+        planKey || 'free',
+        manager,
+      );
+      await this.log(
+        actorUserId,
+        'worker.plan_changed',
+        'worker',
+        workerUserId,
+        reason,
+        { planKey: plan.planKey },
+        manager,
+      );
+      return plan;
+    });
+  }
+
+  listReferrals() {
+    return this.referrals.adminList();
+  }
+
+  getReferral(id: number) {
+    return this.referrals.adminGet(id);
+  }
+
+  rejectReferral(actorUserId: number, id: number, reason: string) {
+    return this.referrals.reject(id, actorUserId, reason);
+  }
+
+  revokeReferralReward(actorUserId: number, id: number, reason: string) {
+    return this.referrals.revokeReward(id, actorUserId, reason);
+  }
+
+  restoreReferralReward(actorUserId: number, id: number, reason?: string) {
+    return this.referrals.restoreReward(
+      id,
+      actorUserId,
+      reason || 'admin_restore',
+    );
+  }
+
+  private async log(
+    adminUserId: number,
+    action: string,
+    targetType: string,
+    targetId: number | string,
+    reason?: string,
+    metadataJson?: Record<string, any>,
+    manager?: EntityManager,
+  ) {
+    const auditRepo = manager
+      ? manager.getRepository(AdminAuditLogEntity)
+      : this.auditRepo;
+    return auditRepo.save(
+      auditRepo.create({
+        adminUserId,
+        action,
+        targetType,
+        targetId: String(targetId),
+        reason: reason || null,
+        metadataJson: metadataJson || null,
+      }),
+    );
+  }
+
+  private assertOneOf(value: string, allowed: string[], message: string) {
+    if (!allowed.includes(String(value)))
+      throw new BadRequestException(message);
+  }
+
+  private requireReason(reason?: string) {
+    if (!reason?.trim()) throw new BadRequestException('Reason is required');
   }
 }

@@ -6,9 +6,9 @@ import { processUploadedImage } from './image-processing';
 
 export type StoredMedia = {
   url: string;
-  thumbnailUrl: string;
+  thumbnailUrl: string | null;
   storageKey: string;
-  thumbnailStorageKey: string;
+  thumbnailStorageKey: string | null;
   mimeType: 'image/webp';
   sizeBytes: number;
 };
@@ -18,30 +18,43 @@ export async function storeUploadedImage(
   directorySegments: string[],
   publicDirectory: string,
   filenamePrefix: string,
+  options: { createThumbnail?: boolean } = {},
 ): Promise<StoredMedia> {
   const optimized = await processUploadedImage(buffer);
   const targetDir = getUploadPath(...directorySegments);
   await mkdir(targetDir, { recursive: true });
   const stem = `${filenamePrefix}_${randomUUID()}`;
   const filename = `${stem}.webp`;
-  const thumbnailFilename = `${stem}_thumb.webp`;
+  const createThumbnail = options.createThumbnail !== false;
+  const thumbnailFilename = createThumbnail ? `${stem}_thumb.webp` : null;
   const absolutePath = join(targetDir, filename);
-  const thumbnailPath = join(targetDir, thumbnailFilename);
+  const thumbnailPath = thumbnailFilename
+    ? join(targetDir, thumbnailFilename)
+    : null;
 
   try {
     await writeFile(absolutePath, optimized.photo);
-    await writeFile(thumbnailPath, optimized.thumbnail);
+    if (thumbnailPath) await writeFile(thumbnailPath, optimized.thumbnail);
   } catch (error) {
-    await Promise.all([unlink(absolutePath).catch(() => undefined), unlink(thumbnailPath).catch(() => undefined)]);
+    await Promise.all([
+      unlink(absolutePath).catch(() => undefined),
+      thumbnailPath
+        ? unlink(thumbnailPath).catch(() => undefined)
+        : Promise.resolve(),
+    ]);
     throw error;
   }
 
   const storageDirectory = directorySegments.join('/');
   return {
     url: `${publicDirectory}/${filename}`,
-    thumbnailUrl: `${publicDirectory}/${thumbnailFilename}`,
+    thumbnailUrl: thumbnailFilename
+      ? `${publicDirectory}/${thumbnailFilename}`
+      : null,
     storageKey: `${storageDirectory}/${filename}`,
-    thumbnailStorageKey: `${storageDirectory}/${thumbnailFilename}`,
+    thumbnailStorageKey: thumbnailFilename
+      ? `${storageDirectory}/${thumbnailFilename}`
+      : null,
     mimeType: optimized.mimeType,
     sizeBytes: optimized.photo.length,
   };

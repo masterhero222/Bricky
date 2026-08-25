@@ -1,5 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
-import { RequestEntity } from '../requests/entities/request.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('users')
 export class UserEntity {
@@ -15,12 +20,24 @@ export class UserEntity {
   @Column()
   password: string;
 
+  @Column({ name: 'password_hash', type: 'varchar', nullable: true })
+  passwordHash: string | null;
+
   @Column({ default: 'client' })
   role: string;
 
-  @Column({ type: 'varchar', length: 30, default: 'active' })
-  accountStatus: 'active' | 'suspended';
+  @Column({ default: 'active' })
+  status: string;
 
-  @OneToMany(() => RequestEntity, (request) => request.client)
-  requests: RequestEntity[];
+  @Column({ name: 'auth_version', type: 'int', default: 0 })
+  authVersion: number;
+
+  @Column({ name: 'email_verified_at', type: 'datetime', nullable: true })
+  emailVerifiedAt: Date | null;
+
+  @CreateDateColumn({ name: 'created_at', nullable: true })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', nullable: true })
+  updatedAt: Date;
 }

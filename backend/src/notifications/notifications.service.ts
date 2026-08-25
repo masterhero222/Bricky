@@ -45,7 +45,10 @@ export class NotificationsService {
     if (!uid) throw new BadRequestException('Missing userId');
     if (!nid) throw new BadRequestException('Invalid notification id');
 
-    await this.repo.update({ id: nid, userId: uid }, { isRead: true });
+    await this.repo.update(
+      { id: nid, userId: uid },
+      { isRead: true, readAt: new Date() },
+    );
     return { ok: true };
   }
 }

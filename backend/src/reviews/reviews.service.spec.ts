@@ -1,69 +1,149 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
+import { RequestEventEntity } from '../requests/entities/request-event.entity';
+import { RequestLifecycleService } from '../requests/request-lifecycle.service';
+import { ReviewEntity } from './entities/review.entity';
 import { ReviewsService } from './reviews.service';
 
-describe('ReviewsService enforcement', () => {
-  const reviewsRepo: any = {
-    findOne: jest.fn(),
-    create: jest.fn((value) => value),
-    save: jest.fn((value) => Promise.resolve({ id: 1, ...value })),
-    find: jest.fn().mockResolvedValue([]),
-  };
-  const requestsRepo: any = { findOne: jest.fn() };
-  const usersRepo: any = { findOne: jest.fn() };
-  const service = new ReviewsService(reviewsRepo, requestsRepo, usersRepo);
+describe('ReviewsService request lifecycle', () => {
+  function setup(options: { existingReview?: any; request?: Record<string, any> } = {}) {
+    const request: any = {
+      id: 55,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'client_confirmed',
+      archivedAt: new Date('2026-07-19T10:00:00.000Z'),
+      archiveReason: 'completed',
+      ...options.request,
+    };
+    const manager = {
+      findOne: jest.fn(async (entity) => {
+        if (entity === RepairRequestEntity) return request;
+        if (entity === ReviewEntity) return options.existingReview || null;
+        return null;
+      }),
+      create: jest.fn((_entity, value) => ({ ...value })),
+      save: jest.fn(async (value) =>
+        Object.prototype.hasOwnProperty.call(value, 'rating')
+          ? { id: 77, ...value }
+          : value,
+      ),
+    };
+    const reviewsRepo = {
+      manager: {
+        transaction: jest.fn(async (work) => work(manager)),
+      },
+      find: jest.fn(),
+    };
+    return {
+      request,
+      manager,
+      reviewsRepo,
+      service: new ReviewsService(
+        reviewsRepo as any,
+        new RequestLifecycleService(),
+      ),
+    };
+  }
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    reviewsRepo.findOne.mockResolvedValue(null);
-    usersRepo.findOne.mockImplementation(({ where }: any) => Promise.resolve({
-      id: where.id,
-      role: where.id === 101 ? 'client' : 'worker',
-      accountStatus: 'active',
-    }));
+  it('atomically saves the review, advances the request and records an event', async () => {
+    const { request, manager, reviewsRepo, service } = setup();
+
+    const result = await service.createReview(
+      { requestId: 55, rating: 5, comment: ' Отлична работа ' },
+      101,
+    );
+
+    expect(reviewsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 77,
+        requestId: 55,
+        clientUserId: 101,
+        workerUserId: 201,
+        rating: 5,
+        comment: 'Отлична работа',
+      }),
+    );
+    expect(request.status).toBe('reviewed');
+    expect(manager.save).toHaveBeenCalledWith(request);
+    expect(manager.create).toHaveBeenCalledWith(
+      RequestEventEntity,
+      expect.objectContaining({
+        requestId: 55,
+        actorUserId: 101,
+        eventType: 'request.reviewed',
+        metadataJson: { reviewId: 77, rating: 5 },
+      }),
+    );
   });
 
-  it('rejects reviews for an unapproved request', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 7, client: { id: 101 }, assignedWorkerId: 201,
-      status: 'completed', completedAt: new Date(), moderationStatus: 'hidden',
+  it('rejects a second review without changing the request status', async () => {
+    const { request, manager, service } = setup({
+      existingReview: { id: 10, requestId: 55, clientUserId: 101 },
     });
 
-    await expect(service.createReview({ requestId: 7, rating: 5 } as any, 101))
-      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createReview({ requestId: 55, rating: 4 }, 101),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(request.status).toBe('client_confirmed');
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
-  it('rejects reviews when the assigned worker is suspended', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 7, client: { id: 101 }, assignedWorkerId: 201,
-      status: 'completed', completedAt: new Date(), moderationStatus: 'approved',
-    });
-    usersRepo.findOne.mockImplementation(({ where }: any) => Promise.resolve({
-      id: where.id,
-      role: where.id === 101 ? 'client' : 'worker',
-      accountStatus: where.id === 201 ? 'suspended' : 'active',
-    }));
-
-    await expect(service.createReview({ requestId: 7, rating: 5 } as any, 101))
-      .rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('creates a pending review only for an approved completed request and active accounts', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 7, client: { id: 101 }, assignedWorkerId: 201,
-      status: 'completed', completedAt: new Date(), moderationStatus: 'approved',
+  it('does not reopen a request after the worker already closed it', async () => {
+    const { request, manager, service } = setup({
+      request: {
+        status: 'completed',
+        archiveReason: 'closed_by_worker',
+      },
     });
 
-    const result = await service.createReview({ requestId: 7, rating: 5, comment: 'Done well' } as any, 101);
+    await expect(
+      service.createReview({ requestId: 55, rating: 5 }, 101),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(result).toEqual(expect.objectContaining({
-      requestId: 7, workerUserId: 201, clientUserId: 101, moderationStatus: 'pending_review',
-    }));
+    expect(request.status).toBe('completed');
+    expect(manager.save).not.toHaveBeenCalled();
   });
+});
 
-  it('hides public reviews when the worker is suspended', async () => {
-    usersRepo.findOne.mockResolvedValue({ id: 201, role: 'worker', accountStatus: 'suspended' });
+describe('ReviewsService public worker reviews', () => {
+  it('returns public review content without exposing client identifiers', async () => {
+    const reviewsRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          workerUserId: 201,
+          clientUserId: 101,
+          rating: 5,
+          comment: 'Отлична работа',
+          moderationStatus: 'approved',
+          created_at: new Date('2026-08-10T10:00:00Z'),
+        },
+        {
+          id: 2,
+          workerUserId: 201,
+          clientUserId: 102,
+          rating: 1,
+          comment: 'Скрит отзив',
+          moderationStatus: 'rejected',
+          created_at: new Date('2026-08-09T10:00:00Z'),
+        },
+      ]),
+    };
+    const service = new ReviewsService(
+      reviewsRepo as any,
+      new RequestLifecycleService(),
+    );
 
-    await expect(service.getByWorker(201)).rejects.toBeInstanceOf(ForbiddenException);
-    expect(reviewsRepo.find).not.toHaveBeenCalled();
+    const result = await service.getByWorker(201);
+
+    expect(result.total).toBe(1);
+    expect(result.average).toBe(5);
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 1, rating: 5, comment: 'Отлична работа' }),
+    ]);
+    expect(result.items[0]).not.toHaveProperty('clientUserId');
   });
 });

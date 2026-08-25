@@ -1,55 +1,10 @@
 # Next Session TODO
 
-## P0 - Sprint 2 Controlled Request Lifecycle (Sprint 3 blocker)
-
-- [x] Replace direct assigned-to-completed behavior with backend-enforced states.
-- [x] Add worker arrival, start, ready, and close actions.
-- [x] Require a persisted completion photo before work can be marked ready.
-- [x] Add client confirmation and dispute actions.
-- [x] Keep completion photos pending moderation until approved.
-- [x] Add shared WebP compression, 1920 px cap, 1 MB output cap, and thumbnails for request/gallery/avatar uploads.
-- [x] Add additive SQL migration and rollback for lifecycle timestamps and thumbnails.
-- [ ] Expand isolated-MySQL lifecycle E2E to cover every transition and invalid jump.
-- [ ] Add real multipart image assertions for request, completion, gallery, and avatar thumbnails.
-- [ ] Complete manual mock acceptance for approval, rejection/resubmit, hide, suspension/reactivation, dispute, and review moderation.
-- [ ] Run staging migration/rollback rehearsal and acceptance checks.
-- [ ] Start Sprint 3 only after every item above is green.
+> Canonical Before Production handoff: `docs/before-production-technical-director-handoff-2026-07-05.md`.
+> Updated on 2026-07-05 with the Sprint 1 release-candidate evidence. This file remains the historical detailed backlog; use the handoff's P0-P3 structure for planning and prioritization.
+> Sprint 1 candidate status: backend 7 suites / 29 tests, frontend pricing verification, frontend/backend builds, combined gate, and GitHub Actions pass. Production deployment and post-deploy acceptance are still pending.
 
 ## Highest Priority
-
-- P0 DONE IN CODE: Sprint 2.1 admin enforcement layer:
-  - DONE: suspended accounts are reloaded from the database and rejected on every protected request, including with existing JWTs;
-  - DONE: suspended workers are blocked from applications, assignment, completion, uploads, gallery deletion, profile changes, and reviews;
-  - DONE: suspended clients are blocked from request creation/resubmission, uploads, assignment, and reviews;
-  - DONE: suspended or unapproved workers are removed from public lists, profiles, batch lookups, and recommendation-oriented service results;
-  - DONE: non-approved requests cannot receive applications, assignment, completion, after-photos, or reviews;
-  - DONE: review creation requires an approved completed request and active client/worker accounts;
-  - DONE: reactivation restores normal permissions without changing historical data;
-  - DONE: mock admin decisions now enforce the same request/account/media visibility rules across client and worker mock screens;
-  - DONE: automated mock moderation contract test covers pending, approval, rejection, suspension, public visibility, and reactivation;
-  - DONE: clients cannot access the worker request map or worker-only profile/gallery/history endpoints;
-  - DONE: hidden completed requests and pending avatar/job media stay out of worker/public history surfaces;
-  - DONE locally: backend build and 63 unit tests pass;
-  - DONE: expanded MySQL lifecycle E2E passed in GitHub Actions run `28759468108`;
-  - NEXT RELEASE GATE: staging API/UI smoke tests and the production backup/deployment checklist;
-  - REFERENCE: `docs/sprint-2-1-enforcement-layer.md`;
-
-- P0 IMPLEMENTED: Sprint 2 admin moderation gate:
-  - DONE: separate request lifecycle status from publication moderation status;
-  - DONE: new requests and request images default to `pending_review`;
-  - DONE: worker feeds/map and public request media expose only approved content;
-  - DONE: JWT + admin-role protected request/media queues and audit log;
-  - DONE: `/admin` request/media queue with approve, reject, hide, reason, and counters;
-  - DONE: additive/idempotent migration and rollback package;
-  - DONE: worker profiles, avatars, gallery, completed-job media, and reviews require approval publicly;
-  - DONE: account suspend/activate actions and password-safe admin user listing;
-  - DONE: searchable/filterable audit-log tab with old/new values, reason, IP, and actor;
-  - DONE: queue search, status filters, pagination, and protected detail endpoints;
-  - DONE: suspended accounts lose access with already-issued JWT sessions;
-  - DESIGNED: canonical media asset/link model and additive migration sequence documented in `docs/canonical-media-model-proposal.md`; implementation remains a separate later migration;
-  - DONE: queue pagination/search and protected detail views;
-  - NEXT: add automated content-scanning hooks without bypassing human review or audit;
-  - OUT OF SCOPE for this sprint: payments, credits, and subscriptions.
 
 - IN PROGRESS in this session: database/request model stabilization:
   - backend repair catalog is being aligned with the 15 approved quick repair categories;
@@ -438,8 +393,8 @@
   - formula/version identifier so the shape is ready for later DB migration.
 - IN PROGRESS: move both mock calculator experiences to the same pricing engine/config:
   - DONE: request wizard estimate;
-  - DONE in Sprint 2: worker profile calculator now uses the shared v0.2 engine, 15-category catalog, activity selection, exact-area handling, and the two canonical pricing modes;
-  - DONE in Sprint 2: removed the duplicate price table, manual labor-per-square-meter input, BGN output, and direct pricing constants from `WorkerProfile.jsx`.
+  - NEXT: worker profile calculator;
+  - NEXT: remove the remaining duplicate pricing table and direct pricing constants from `WorkerProfile.jsx`.
 - DONE in mock v0.2: calculator result model exposes labor, material, expected, possible, and total ranges for the two current pricing modes.
 - HIGH: implement calculation multipliers:
   - size/quantity;
@@ -496,17 +451,6 @@
 - Keep payment/credits implementation behind calculator stabilization; do not build billing decisions on an unvalidated estimate model.
 
 ## Cleanup
-
-### Sprint 2 moderation gate
-
-- DONE: role-protected `/admin` and `/api/admin` surfaces.
-- DONE: separate lifecycle status from `pending_review`, `approved`, `rejected`, and `hidden` publication moderation.
-- DONE: moderate requests, request media, worker profiles, avatars, galleries, and reviews.
-- DONE: hide unapproved content from worker/public surfaces while preserving owner visibility.
-- DONE: client correction and resubmission after rejection.
-- DONE: dashboard counters, queues, detail view, search, status filters, pagination, approve/reject/hide, controlled request edit, and spam deletion.
-- DONE: immutable admin audit records include actor, action, target, old/new values, reason, request IP, and timestamp.
-- OPTIONAL NEXT: add standardized reason presets and a dedicated account-management tab in the admin UI.
 
 - DONE in mock v0.2: request browser geolocation permission when the client reaches the location step; store GPS coordinates when allowed and fall back to one exact-address field when denied or unavailable.
 - DONE in mock v0.2: remove the Sofia district dropdown so the client address is not classified under an incorrect neighborhood.

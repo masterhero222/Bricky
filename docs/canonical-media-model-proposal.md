@@ -105,4 +105,3 @@ Use a uniqueness constraint that prevents duplicate links for the same asset/ent
 - Owner APIs retain moderation reasons.
 - Admin approve/reject/hide and audit behavior works through one canonical media endpoint.
 - Request, map, worker profile, gallery, avatar, and completed-job E2E tests pass before removing legacy fallback.
-

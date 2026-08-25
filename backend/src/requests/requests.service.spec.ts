@@ -1,350 +1,977 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { RequestsService } from './requests.service';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { RequestLifecycleService } from './request-lifecycle.service';
+import { RequestsService } from './requests.service';
 
-describe('RequestsService', () => {
-  let service: RequestsService;
-  let requestsRepo: any;
-  let applicationsRepo: any;
-  let imagesRepo: any;
-  let usersRepo: any;
-  let workersRepo: any;
-  let queryBuilder: any;
+function repo(overrides: Record<string, any> = {}) {
+  const transactionManager = {
+    save: jest.fn(async (value) => value),
+  };
+  return {
+    findOne: jest.fn().mockResolvedValue(null),
+    find: jest.fn().mockResolvedValue([]),
+    save: jest.fn(),
+    create: jest.fn((value) => value),
+    update: jest.fn(),
+    manager: {
+      transaction: jest.fn(async (work) => work(transactionManager)),
+    },
+    ...overrides,
+  };
+}
 
-  beforeEach(() => {
-    queryBuilder = {
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      orWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([]),
-    };
-
-    requestsRepo = {
-      create: jest.fn((value) => value),
-      save: jest.fn(async (value) => ({ id: value.id ?? 7, ...value })),
-      find: jest.fn().mockResolvedValue([]),
-      findOne: jest.fn(),
-      createQueryBuilder: jest.fn(() => queryBuilder),
-    };
-
-    applicationsRepo = {
-      create: jest.fn((value) => value),
-      save: jest.fn(async (value) => ({ id: value.id ?? 1, ...value })),
-      findOne: jest.fn().mockResolvedValue(null),
-    };
-
-    imagesRepo = {
-      create: jest.fn((value) => value),
-      save: jest.fn(async (value) => value),
-      find: jest.fn().mockResolvedValue([]),
-      findOne: jest.fn(),
-      delete: jest.fn().mockResolvedValue({ affected: 1 }),
-      count: jest.fn().mockResolvedValue(0),
-    };
-
-    usersRepo = {
-      findOne: jest.fn().mockImplementation(({ where }: any) => Promise.resolve({
-        id: where.id,
-        role: where.id === 101 || where.id === 102 ? 'client' : 'worker',
-        accountStatus: 'active',
-      })),
-    };
-    workersRepo = {
-      findOne: jest.fn().mockImplementation(({ where }: any) => Promise.resolve({
-        id: 1, userId: where.userId, moderationStatus: 'approved',
-      })),
-    };
-
-    service = new RequestsService(
-      requestsRepo,
-      applicationsRepo,
-      imagesRepo,
-      usersRepo,
-      workersRepo,
-      { sendRequestConfirmation: jest.fn() } as any,
-      { create: jest.fn().mockResolvedValue({ id: 1 }) } as any,
+describe('RequestsService v2 data core', () => {
+  function serviceWith(overrides: Record<string, any> = {}) {
+    return new RequestsService(
+      (overrides.repairRequestsRepo || repo()) as any,
+      (overrides.applicationsRepo || repo()) as any,
+      (overrides.pricingSnapshotsRepo || repo()) as any,
+      (overrides.eventsRepo || repo({ save: jest.fn().mockResolvedValue({}) })) as any,
+      (overrides.usersRepo || repo()) as any,
+      (overrides.workerProfilesRepo || repo()) as any,
+      (overrides.clientProfilesRepo || repo()) as any,
+      {} as any,
+      (overrides.notifications || { create: jest.fn().mockResolvedValue({}) }) as any,
+      (overrides.media || {
+        createAsset: jest.fn(),
+        findByRequest: jest.fn().mockResolvedValue([]),
+        setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+      }) as any,
       new RequestLifecycleService(),
+      (overrides.referrals || {
+        processCompletedRequest: jest.fn().mockResolvedValue(null),
+      }) as any,
     );
-  });
+  }
 
-  it('rejects request creation without an authenticated client id', async () => {
-    await expect(service.create({} as any, 0)).rejects.toBeInstanceOf(UnauthorizedException);
-  });
-
-  it('creates a normalized request and persists before photos', async () => {
-    const dto = {
-      clientName: 'Client One',
-      email: 'client@example.com',
-      phone: '0888000001',
-      address: 'Sofia, Test 1',
-      categoryKey: 'vik',
-      description: 'Теч под мивката.',
-      latitude: 42.69,
-      longitude: 23.32,
-      locationSource: 'gps',
-      estimateMin: 100,
-      estimateMax: 180,
-      estimateCurrency: 'EUR',
-      photos: [{ name: 'before.jpg', url: '/uploads/before.jpg' }],
+  it('creates new requests as pending admin approval', async () => {
+    const savedRequests: any[] = [];
+    const repairRequestsRepo = repo({
+      save: jest.fn(async (request) => {
+        const saved = { id: request.id || 1, createdAt: new Date(), updatedAt: new Date(), ...request };
+        savedRequests.push(saved);
+        return saved;
+      }),
+    });
+    const pricingSnapshotsRepo = repo({
+      save: jest.fn(async (snapshot) => ({ id: 501, ...snapshot })),
+    });
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
     };
 
-    const result = await service.create(dto as any, 101);
-
-    expect(requestsRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        client: { id: 101 },
-        categoryKey: 'vik',
-        locationSource: 'gps',
-        estimateMin: '100',
-        estimateMax: '180',
-        estimateCurrency: 'EUR',
-      }),
-    );
-    expect(imagesRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 7, uploaderUserId: 101, kind: 'before' }),
-    );
-    expect(result.id).toBe(7);
-  });
-
-  it('loads only requests owned by the current client', async () => {
-    requestsRepo.find.mockResolvedValue([{ id: 3 }]);
-
-    const result = await service.getByClientUserId(101);
-
-    expect(requestsRepo.find).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { client: { id: 101 } } }),
-    );
-    expect(result).toEqual([{ id: 3, appliedWorkers: [] }]);
-  });
-
-  it('allows only workers to use the request map service', async () => {
-    const feed = jest.spyOn(service, 'getForWorkersFeed').mockResolvedValue([{ id: 4 }] as any);
-
-    await expect(service.getMapRequests({ id: 201, role: 'worker' })).resolves.toEqual([{ id: 4 }]);
-    await expect(service.getMapRequests({ id: 101, role: 'client' })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    expect(feed).toHaveBeenCalledTimes(1);
-  });
-
-  it('stores uploaded before images only for the owning client', async () => {
-    requestsRepo.findOne.mockResolvedValue({ id: 9, client: { id: 101 }, appliedWorkers: [] });
-    const photos = [
+    const service = serviceWith({ repairRequestsRepo, pricingSnapshotsRepo, media });
+    const created = await service.create(
       {
-        name: 'before.png',
-        url: '/uploads/requests/before.png',
-        storageKey: 'requests/before.png',
-        mimeType: 'image/png',
-        sizeBytes: 68,
+        category: 'ВиК',
+        description: 'Теч под мивката',
+        address: 'София',
+        photos: [{ url: '/uploads/request-before.jpg' }],
+      } as any,
+      101,
+    );
+
+    expect(savedRequests[0].status).toBe('pending_admin');
+    expect(created.statusKey).toBe('pending_admin');
+    expect(created.lifecycleStatusKey).toBe('pending_review');
+    expect(created.statusLabel).toBe('Чака одобрение');
+    expect(created).not.toHaveProperty('status');
+    expect(created.nextActor).toBe('admin');
+    expect(created.allowedActions).toEqual([]);
+    expect(created).not.toHaveProperty('assignedWorkerId');
+    expect(created).not.toHaveProperty('completedByWorkerId');
+    expect(media.createAsset).toHaveBeenCalledWith(expect.objectContaining({ kind: 'request_before', moderationStatus: 'pending' }));
+  });
+
+  it('hides pending and rejected media from the public worker request feed', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'vik',
+      title: 'ВиК',
+      status: 'published',
+      assignedWorkerUserId: null,
+      archivedAt: null,
+      createdAt: new Date('2026-07-19T08:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T08:00:00.000Z'),
+      client: {},
+    };
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([request]),
+    });
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          kind: 'request_before',
+          publicUrl: '/uploads/approved.jpg',
+          moderationStatus: 'approved',
+        },
+        {
+          id: 2,
+          kind: 'request_before',
+          publicUrl: '/uploads/pending.jpg',
+          moderationStatus: 'pending',
+        },
+        {
+          id: 3,
+          kind: 'request_before',
+          publicUrl: '/uploads/rejected.jpg',
+          moderationStatus: 'rejected',
+        },
+      ]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const service = serviceWith({
+      repairRequestsRepo,
+      usersRepo,
+      workerProfilesRepo,
+      media,
+    });
+
+    const [result] = await service.getForWorkersFeed(201);
+
+    expect(result.beforePhotos.map((photo) => photo.url)).toEqual([
+      '/uploads/approved.jpg',
+    ]);
+  });
+
+  it('hides unapproved client photos from the assigned worker but keeps their own pending after photos', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'vik',
+      title: 'VIK',
+      status: 'worker_selected',
+      assignedWorkerUserId: 201,
+      archivedAt: null,
+      createdAt: new Date('2026-07-19T08:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T08:00:00.000Z'),
+      client: {},
+    };
+    const repairRequestsRepo = repo({ find: jest.fn().mockResolvedValue([request]) });
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'private',
+      }),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/approved-before.jpg', moderationStatus: 'approved' },
+        { id: 2, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/rejected-before.jpg', moderationStatus: 'rejected' },
+        { id: 3, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/pending-before.jpg', moderationStatus: 'pending' },
+        { id: 4, ownerUserId: 201, kind: 'request_after', publicUrl: '/uploads/pending-after.jpg', moderationStatus: 'pending' },
+      ]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, usersRepo, workerProfilesRepo, media });
+
+    const [result] = await service.getForWorkersFeed(201);
+
+    expect(result.beforePhotos.map((photo) => photo.url)).toEqual(['/uploads/approved-before.jpg']);
+    expect(result.afterPhotos.map((photo) => photo.url)).toEqual(['/uploads/pending-after.jpg']);
+  });
+
+  it('hides client contact details and exact location until the selected worker confirms', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'painting',
+      title: 'Painting',
+      description: 'Paint one room',
+      addressText: 'Sofia, 100 Bulgaria Boulevard, entrance A',
+      addressVisibility: 'exact_after_assignment',
+      latitude: '42.6977000',
+      longitude: '23.3219000',
+      status: 'published',
+      assignedWorkerUserId: null,
+      archivedAt: null,
+      createdAt: new Date('2026-07-19T08:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T08:00:00.000Z'),
+      client: {
+        name: 'Private Client',
+        email: 'private-client@example.com',
       },
-    ];
+    };
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([request]),
+    });
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 201,
+        role: 'worker',
+        status: 'active',
+      }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const service = serviceWith({
+      repairRequestsRepo,
+      usersRepo,
+      workerProfilesRepo,
+      clientProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({ userId: 101, phonePrivate: '0888000000' }),
+      }),
+    });
 
-    await service.addUploadedImages(9, 101, 'client', 'before', photos);
+    const [beforeAssignment] = await service.getForWorkersFeed(201);
 
-    expect(imagesRepo.create).toHaveBeenCalledWith(
+    expect(beforeAssignment).toEqual(
       expect.objectContaining({
-        requestId: 9,
-        uploaderUserId: 101,
-        kind: 'before',
-        storageKey: 'requests/before.png',
-        mimeType: 'image/png',
-        sizeBytes: 68,
+        clientName: 'Клиент',
+        email: null,
+        phone: null,
+        address: 'Sofia',
+        addressText: 'Sofia',
+        addressPrecision: 'rough',
+        latitude: 42.7,
+        longitude: 23.32,
       }),
     );
-    await expect(service.addUploadedImages(9, 102, 'client', 'before', photos)).rejects.toBeInstanceOf(
-      ForbiddenException,
+
+    request.assignedWorkerUserId = 201;
+    request.status = 'worker_selected';
+    const [afterAssignment] = await service.getForWorkersFeed(201);
+
+    expect(afterAssignment).toEqual(
+      expect.objectContaining({
+        clientName: 'Private Client',
+        email: null,
+        phone: null,
+        address: 'Sofia',
+        addressText: 'Sofia',
+        addressPrecision: 'rough',
+        latitude: 42.7,
+        longitude: 23.32,
+      }),
+    );
+
+    request.status = 'worker_confirmed';
+    const [afterConfirmation] = await service.getForWorkersFeed(201);
+    expect(afterConfirmation).toEqual(
+      expect.objectContaining({
+        clientName: 'Private Client',
+        email: null,
+        phone: '0888000000',
+        address: 'Sofia, 100 Bulgaria Boulevard, entrance A',
+        addressPrecision: 'exact',
+      }),
     );
   });
 
-  it('builds the worker feed query and hydrates its results', async () => {
-    queryBuilder.getMany.mockResolvedValue([{ id: 4 }]);
-
-    const result = await service.getForWorkersFeed(201);
-
-    expect(requestsRepo.createQueryBuilder).toHaveBeenCalledWith('r');
-    expect(queryBuilder.getMany).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([{ id: 4, appliedWorkers: [] }]);
-  });
-
-  it('loads only approved completed requests for worker history', async () => {
-    requestsRepo.find.mockResolvedValue([]);
-
-    await service.getCompletedForWorker(201);
-
-    expect(requestsRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-      where: { assignedWorkerId: 201, statusKey: 'completed', moderationStatus: 'approved' },
-    }));
-  });
-
-  it('keeps duplicate applications idempotent in legacy and normalized storage', async () => {
-    const request = {
-      id: 9,
-      status: 'кандидатствана',
-      assignedWorkerId: null,
-      moderationStatus: 'approved',
-      appliedWorkers: ['201'],
-      client: { id: 101 },
+  it('stores client request uploads as pending before-media', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'painting',
+      title: 'Painting',
+      status: 'pending_admin',
+      assignedWorkerUserId: null,
+      archivedAt: null,
+      client: {},
     };
-    const application = { id: 5, requestId: 9, workerUserId: 201, status: 'applied' };
-    requestsRepo.findOne.mockResolvedValue(request);
-    applicationsRepo.findOne.mockResolvedValue(application);
-
-    const result = await service.applyToRequest(9, 201);
-
-    expect(request.appliedWorkers).toEqual([201]);
-    expect(result.appliedWorkers).toEqual([201]);
-    expect(applicationsRepo.create).not.toHaveBeenCalled();
-    expect(applicationsRepo.save).toHaveBeenCalledWith(application);
-  });
-
-  it('blocks a suspended worker before applying', async () => {
-    usersRepo.findOne.mockResolvedValue({ id: 201, role: 'worker', accountStatus: 'suspended' });
-
-    await expect(service.applyToRequest(9, 201)).rejects.toBeInstanceOf(ForbiddenException);
-    expect(requestsRepo.findOne).not.toHaveBeenCalled();
-  });
-
-  it('rejects assignment by a client who does not own the request', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9,
-      client: { id: 101 },
-      status: 'кандидатствана',
-      moderationStatus: 'approved',
-      appliedWorkers: [201],
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
     });
-
-    await expect(service.assignWorker(9, 102, 201)).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('rejects assignment when the worker has not applied', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9,
-      client: { id: 101 },
-      status: 'нова',
-      moderationStatus: 'approved',
-      appliedWorkers: [],
-    });
-
-    await expect(service.assignWorker(9, 101, 201)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it.each(['pending_review', 'rejected', 'hidden'])('rejects assignment while moderation is %s', async (moderationStatus) => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9,
-      client: { id: 101 },
-      status: 'кандидатствана',
-      moderationStatus,
-      appliedWorkers: [201],
-      assignedWorkerId: null,
-    });
-
-    await expect(service.assignWorker(9, 101, 201)).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('assigns an applicant selected by the owning client', async () => {
-    const request = {
-      id: 9,
-      client: { id: 101 },
-      status: 'кандидатствана',
-      moderationStatus: 'approved',
-      appliedWorkers: [201],
-      assignedWorkerId: null,
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
     };
-    requestsRepo.findOne.mockResolvedValue(request);
+    const service = serviceWith({ repairRequestsRepo, media });
 
-    const result = await service.assignWorker(9, 101, 201);
+    await service.addBeforeMedia(1, 101, [
+      {
+        url: '/uploads/requests/1/before/photo.jpg',
+        storageKey: 'requests/1/before/photo.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 123,
+      },
+    ]);
 
-    expect(result.assignedWorkerId).toBe(201);
-    expect(applicationsRepo.save).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 9, workerUserId: 201, status: 'assigned' }),
+    expect(media.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerUserId: 101,
+        requestId: 1,
+        kind: 'request_before',
+        moderationStatus: 'pending',
+      }),
     );
   });
 
-  it('rejects completion by a worker who is not assigned', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9,
-      assignedWorkerId: 201,
-      status: 'в процес',
-      moderationStatus: 'approved',
-      client: { id: 101 },
+  it('stores assigned worker uploads as pending after-media', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      categoryKey: 'painting',
+      title: 'Painting',
+      status: 'in_progress',
+      assignedWorkerUserId: 201,
+      archivedAt: null,
+      client: {},
+    };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
     });
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
 
-    await expect(service.completeRequest(9, 202)).rejects.toBeInstanceOf(ForbiddenException);
+    await service.addAfterMedia(1, 201, [
+      {
+        url: '/uploads/requests/1/after/photo.jpg',
+        storageKey: 'requests/1/after/photo.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 456,
+      },
+    ]);
+
+    expect(media.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerUserId: 201,
+        requestId: 1,
+        kind: 'request_after',
+        moderationStatus: 'pending',
+      }),
+    );
   });
 
-  it('completes only after the client has confirmed the work', async () => {
+  it('rejects applications from suspended workers', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'suspended',
+        visibilityStatus: 'hidden',
+      }),
+    });
+
+    const service = serviceWith({ usersRepo, workerProfilesRepo });
+
+    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('does not expose completed request contact details to suspended workers', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'suspended',
+        visibilityStatus: 'hidden',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      find: jest.fn(),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+
+    await expect(service.getCompletedForWorker(201)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repairRequestsRepo.find).not.toHaveBeenCalled();
+  });
+
+  it('blocks worker applications before admin approval', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'visible',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        status: 'pending_admin',
+        assignedWorkerUserId: null,
+      }),
+    });
+
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const referrals = {
+      processCompletedRequest: jest.fn().mockResolvedValue(null),
+    };
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      media,
+      referrals,
+    });
+
+    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('keeps repeated worker applications idempotent', async () => {
+    const request: any = {
+      id: 1,
+      status: 'applied',
+      assignedWorkerUserId: null,
+      client: {},
+    };
+    const existingApplication: any = {
+      id: 11,
+      requestId: 1,
+      workerUserId: 201,
+      status: 'applied',
+    };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'private',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+    });
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(existingApplication),
+      find: jest.fn().mockResolvedValue([existingApplication]),
+    });
+    const eventsRepo = repo({
+      save: jest.fn().mockResolvedValue({}),
+    });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      applicationsRepo,
+      eventsRepo,
+    });
+
+    const updated = await service.applyToRequest(1, 201);
+
+    expect(updated.applications).toEqual([
+      expect.objectContaining({ workerUserId: 201, status: 'applied' }),
+    ]);
+    expect(repairRequestsRepo.manager.transaction).not.toHaveBeenCalled();
+    expect(eventsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('blocks assignment before admin approval even when an application row exists', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: null,
+      status: 'pending_admin',
+      client: {},
+    };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+    });
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        requestId: 1,
+        workerUserId: 201,
+        status: 'applied',
+      }),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+
+    await expect(service.assignWorker(1, 101, 201)).rejects.toBeInstanceOf(BadRequestException);
+    expect(request.assignedWorkerUserId).toBeNull();
+  });
+
+  it('selects one applicant without rejecting the remaining applications before confirmation', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: null,
+      status: 'applied',
+      completedAt: null,
+      client: {},
+    };
+    const selected: any = {
+      id: 11,
+      requestId: 1,
+      workerUserId: 201,
+      status: 'applied',
+    };
+    const other: any = {
+      id: 12,
+      requestId: 1,
+      workerUserId: 202,
+      status: 'shortlisted',
+    };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn().mockImplementation(async (value) => value),
+    });
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(selected),
+      find: jest.fn().mockResolvedValue([selected, other]),
+      save: jest.fn().mockImplementation(async (value) => value),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+
+    const updated = await service.assignWorker(1, 101, 201);
+
+    expect(request.assignedWorkerUserId).toBe(201);
+    expect(request.status).toBe('worker_selected');
+    expect(selected.status).toBe('assigned');
+    expect(other.status).toBe('shortlisted');
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(updated.applications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workerUserId: 201, status: 'assigned' }),
+        expect.objectContaining({ workerUserId: 202, status: 'shortlisted' }),
+      ]),
+    );
+  });
+
+  it('keeps individual photo moderation decisions when admin publishes a request', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        status: 'pending_admin',
+        completedAt: null,
+      }),
+      save: jest.fn(async (request) => request),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'approved' },
+        { id: 2, kind: 'request_before', moderationStatus: 'rejected' },
+      ]),
+      setRequestMediaModeration: jest.fn().mockResolvedValue([]),
+    };
+
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    const updated = await service.adminSetStatus(1, 'published', 1, 'ok');
+
+    expect(updated.statusKey).toBe('published');
+    expect(media.setRequestMediaModeration).not.toHaveBeenCalled();
+  });
+
+  it('blocks request publishing until every request photo is moderated', async () => {
+    const request = { id: 1, status: 'pending_admin', completedAt: null };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'pending' },
+      ]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    await expect(service.adminSetStatus(1, 'published', 1, 'ok')).rejects.toBeInstanceOf(BadRequestException);
+    expect(repairRequestsRepo.save).not.toHaveBeenCalled();
+    expect(request.status).toBe('pending_admin');
+  });
+
+  it('returns an immutable admin timeline in chronological order', async () => {
     const request = {
-      id: 9,
-      assignedWorkerId: 201,
-      status: 'client_confirmed',
-      moderationStatus: 'approved',
-      client: { id: 101 },
-      workStartedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      id: 1,
+      status: 'published',
+      client: { name: 'Client', email: 'client@bricky.dev' },
+      createdAt: new Date('2026-07-19T09:00:00.000Z'),
     };
-    requestsRepo.findOne.mockResolvedValue(request);
+    const events = [
+      { id: 1, requestId: 1, eventType: 'request.created', createdAt: new Date('2026-07-19T09:00:00.000Z') },
+      { id: 2, requestId: 1, eventType: 'admin.status_changed', createdAt: new Date('2026-07-19T09:05:00.000Z') },
+    ];
+    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const eventsRepo = repo({ find: jest.fn().mockResolvedValue(events) });
+    const service = serviceWith({ repairRequestsRepo, eventsRepo });
 
-    const result = await service.completeRequest(9, 201);
+    const timeline = await service.adminGetTimeline(1);
 
-    expect(result.completedByWorkerId).toBe(201);
-    expect(result.statusKey).toBe('completed');
-    expect(result.durationDays).toBeGreaterThanOrEqual(1);
-  });
-
-  it('requires a persisted completion photo before marking work ready', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9, assignedWorkerId: 201, status: 'in_progress', moderationStatus: 'approved', client: { id: 101 },
+    expect(eventsRepo.find).toHaveBeenCalledWith({
+      where: { requestId: 1 },
+      order: { createdAt: 'ASC', id: 'ASC' },
     });
-    await expect(service.markWorkReady(9, 201)).rejects.toBeInstanceOf(BadRequestException);
-    imagesRepo.count.mockResolvedValue(1);
-    await expect(service.markWorkReady(9, 201)).resolves.toEqual(expect.objectContaining({ statusKey: 'waiting_client_confirmation' }));
+    expect(timeline.request.id).toBe(1);
+    expect(timeline.events).toEqual(events);
   });
 
-  it('enforces the complete worker and client lifecycle in order', async () => {
+  it('archives active work and waits for a review after client confirmation', async () => {
     const request: any = {
-      id: 9, assignedWorkerId: 201, status: 'assigned', moderationStatus: 'approved',
-      client: { id: 101 }, created_at: new Date(),
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'ready_for_client_confirmation',
+      createdAt: new Date('2026-07-18T08:00:00.000Z'),
+      completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
+      client: { name: 'Client', email: 'client@bricky.dev' },
     };
-    requestsRepo.findOne.mockImplementation(async () => request);
-    imagesRepo.count.mockResolvedValue(1);
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const service = serviceWith({ repairRequestsRepo });
 
-    await service.markWorkerArrived(9, 201);
-    expect(request.statusKey).toBe('worker_arrived');
-    await service.startWork(9, 201);
-    expect(request.statusKey).toBe('in_progress');
-    await service.markWorkReady(9, 201);
-    expect(request.statusKey).toBe('waiting_client_confirmation');
-    await service.confirmWork(9, 101);
-    expect(request.statusKey).toBe('client_confirmed');
-    await service.completeRequest(9, 201);
-    expect(request.statusKey).toBe('completed');
+    const updated = await service.clientConfirmWork(1, 101);
+
+    expect(updated.statusKey).toBe('client_confirmed');
+    expect(updated.lifecycleStatusKey).toBe('client_confirmed');
+    expect(updated.nextActor).toBe('client');
+    expect(updated.allowedActions).toContain('leave_review');
+    expect(updated.isArchived).toBe(true);
+    expect(request.clientConfirmedAt).toBeInstanceOf(Date);
+    expect(request.completedAt).toBeInstanceOf(Date);
+    expect(request.archivedAt).toBeInstanceOf(Date);
+    expect(request.archiveReason).toBe('completed');
+    expect(request.archiveSource).toBe('system');
+    expect(request.archivedByUserId).toBe(101);
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('moves a client problem report to disputed and blocks completion', async () => {
+  it('keeps final jobs out of the active feed but returns reviewed jobs for worker close', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          status: 'published',
+          assignedWorkerUserId: null,
+          archivedAt: null,
+          createdAt: new Date(),
+          client: {},
+        },
+        {
+          id: 2,
+          status: 'completed',
+          assignedWorkerUserId: 201,
+          archivedAt: new Date(),
+          createdAt: new Date(),
+          client: {},
+        },
+        {
+          id: 3,
+          status: 'reviewed',
+          assignedWorkerUserId: 201,
+          archivedAt: new Date(),
+          createdAt: new Date(),
+          client: {},
+        },
+      ]),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+
+    const feed = await service.getForWorkersFeed(201);
+
+    expect(feed.map((request) => request.id)).toEqual([1, 3]);
+    expect(feed[1].allowedActions).toContain('close');
+  });
+
+  it('lets a worker withdraw an application before being selected', async () => {
     const request: any = {
-      id: 9, assignedWorkerId: 201, status: 'waiting_client_confirmation',
-      moderationStatus: 'approved', client: { id: 101 }, created_at: new Date(),
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: null,
+      status: 'applied',
+      archivedAt: null,
+      createdAt: new Date(),
+      client: {},
     };
-    requestsRepo.findOne.mockImplementation(async () => request);
-    await service.disputeWork(9, 101, 'Работата не е довършена');
-    expect(request.statusKey).toBe('disputed');
-    await expect(service.completeRequest(9, 201)).rejects.toBeInstanceOf(BadRequestException);
+    const application: any = { requestId: 1, workerUserId: 201, status: 'applied' };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+      save: jest.fn(async (value) => value),
+    });
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(application),
+      find: jest.fn().mockResolvedValue([application]),
+      save: jest.fn(async (value) => value),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+
+    await service.withdrawApplication(1, 201);
+
+    expect(application.status).toBe('withdrawn');
+    expect(request.status).toBe('published');
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks completion when an assigned request is hidden', async () => {
-    requestsRepo.findOne.mockResolvedValue({
-      id: 9,
-      assignedWorkerId: 201,
-      status: 'в процес',
-      moderationStatus: 'hidden',
-      client: { id: 101 },
+  it('lets the selected worker decline before confirmation', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'worker_selected',
+        archivedAt: null,
+        client: {},
+      }),
+    });
+    const application: any = { id: 5, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const applicationsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(application),
+      find: jest.fn().mockResolvedValue([application]),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+
+    const result = await service.withdrawApplication(1, 201);
+    expect(application.status).toBe('withdrawn');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(result.statusKey).toBe('published');
+  });
+
+  it('blocks worker withdrawal after confirmation', async () => {
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'worker_confirmed',
+        archivedAt: null,
+        client: {},
+      }),
+    });
+    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+    await expect(service.withdrawApplication(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('blocks client unassign after the worker started work', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        clientUserId: 101,
+        assignedWorkerUserId: 201,
+        status: 'in_progress',
+        client: {},
+      }),
+    });
+    const service = serviceWith({ repairRequestsRepo });
+
+    await expect(service.unassignWorker(1, 101)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lets the client remove a selected worker before confirmation', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'worker_selected',
+      archivedAt: null,
+      client: {},
+    };
+    const application: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([application]) });
+    const service = serviceWith({ repairRequestsRepo, applicationsRepo });
+
+    const result = await service.unassignWorker(1, 101);
+
+    expect(result.statusKey).toBe('applied');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(application.status).toBe('applied');
+  });
+
+  it('requires admin intervention to reopen a confirmed request', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'worker_confirmed',
+      completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
+      client: {},
+    };
+    const selected: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const other: any = { id: 8, requestId: 1, workerUserId: 202, status: 'rejected' };
+    const withdrawn: any = { id: 9, requestId: 1, workerUserId: 203, status: 'withdrawn' };
+    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([selected, other, withdrawn]) });
+    const service = serviceWith({ repairRequestsRepo, applicationsRepo });
+
+    await expect(service.adminIntervene(1, 900, 'reopen', '')).rejects.toBeInstanceOf(BadRequestException);
+    const result = await service.adminIntervene(1, 900, 'reopen', 'Worker unavailable');
+
+    expect(result.statusKey).toBe('applied');
+    expect(result.assignedWorkerUserId).toBeNull();
+    expect(selected.status).toBe('withdrawn');
+    expect(other.status).toBe('applied');
+    expect(withdrawn.status).toBe('withdrawn');
+    expect(repairRequestsRepo.manager.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the compatibility worker steps through the canonical lifecycle', async () => {
+    const request: any = {
+      id: 1,
+      clientUserId: 101,
+      assignedWorkerUserId: 201,
+      status: 'worker_selected',
+      completedAt: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
+      createdAt: new Date('2026-07-19T08:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T08:00:00.000Z'),
+      client: {},
+    };
+    const usersRepo = repo({
+      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+    });
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 201,
+        approvalStatus: 'approved',
+        visibilityStatus: 'public',
+      }),
+    });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockImplementation(async () => request),
+      save: jest.fn().mockImplementation(async (value) => value),
+    });
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      setRequestMediaModeration: jest.fn(),
+    };
+    const referrals = {
+      processCompletedRequest: jest.fn().mockResolvedValue(null),
+    };
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      media,
+      referrals,
     });
 
-    await expect(service.completeRequest(9, 201)).rejects.toBeInstanceOf(ForbiddenException);
+    await service.workerConfirm(1, 201);
+    expect(request.status).toBe('worker_confirmed');
+
+    await service.markWorkerOnSite(1, 201);
+    expect(request.status).toBe('worker_on_site');
+
+    await service.markInspected(1, 201);
+    expect(request.status).toBe('inspected');
+
+    await service.startWork(1, 201);
+    expect(request.status).toBe('in_progress');
+
+    await service.finishWork(1, 201, [{ url: '/uploads/after.jpg' }]);
+    expect(request.status).toBe('work_finished');
+    expect(media.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'request_after',
+        moderationStatus: 'pending',
+      }),
+    );
+
+    await service.readyForClientConfirmation(1, 201);
+    expect(request.status).toBe('ready_for_client_confirmation');
+
+    const completed = await service.clientConfirmWork(1, 101);
+    expect(request.status).toBe('client_confirmed');
+    expect(completed.lifecycleStatusKey).toBe('client_confirmed');
+    expect(completed.allowedActions).toContain('leave_review');
+    expect(request.completedAt).toBeInstanceOf(Date);
+    expect(request.archivedAt).toBeInstanceOf(Date);
+
+    request.status = 'reviewed';
+    const closed = await service.completeRequest(1, 201);
+    expect(request.status).toBe('completed');
+    expect(request.archiveReason).toBe('closed_by_worker');
+    expect(request.archiveSource).toBe('worker');
+    expect(request.archivedByUserId).toBe(201);
+    expect(closed.lifecycleStatusKey).toBe('completed');
+    expect(referrals.processCompletedRequest).toHaveBeenCalledTimes(1);
+    expect(referrals.processCompletedRequest).toHaveBeenCalledWith(1);
   });
 });

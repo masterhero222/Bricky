@@ -10,6 +10,7 @@ import {
   VALID_PRICING_MODES,
 } from "../src/utils/repairPriceCalculator.js";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../src/utils/requestPresentation.js";
+import { calculateCatalogEstimate, catalogActivities, pricingQuantity } from "../src/utils/pricingCatalogAdapter.js";
 
 const rules = new Map(MATERIAL_QUANTITY_RULES.map((rule) => [rule.key, rule]));
 const materials = new Set(MATERIAL_PRICE_INDEX.map((item) => item.key));
@@ -190,18 +191,68 @@ assert.equal(getPricingActivity("vik", "leak_repair")?.label, "Отстраня�
 
 const requestSource = readFileSync(new URL("../src/pages/Requests.jsx", import.meta.url), "utf8");
 const workerProfileSource = readFileSync(new URL("../src/pages/workers/WorkerProfile.jsx", import.meta.url), "utf8");
+const workerCalculatorSource = readFileSync(new URL("../src/components/workers/WorkerCalculatorPanel.jsx", import.meta.url), "utf8");
 const engineSource = readFileSync(new URL("../src/utils/repairPriceCalculator.js", import.meta.url), "utf8");
 for (const deprecatedMode of ["labor_plus_consumables", "labor_plus_materials_estimate"]) {
   assert.equal(requestSource.includes(deprecatedMode), false, `Request flow still uses ${deprecatedMode}`);
   assert.equal(engineSource.includes(deprecatedMode), false, `Calculator engine still uses ${deprecatedMode}`);
 }
 assert.equal(requestSource.includes("estimateRepairPrice"), false, "Request flow uses deprecated category estimator");
-assert.equal(workerProfileSource.includes("PRICE_TABLE"), false, "Worker calculator still contains a duplicate price table");
-assert.equal(workerProfileSource.includes("laborPerM2"), false, "Worker calculator still accepts a manual labor price");
-assert.equal(workerProfileSource.includes("calculateRepairEstimate"), true, "Worker calculator must use the shared pricing engine");
-assert.equal(workerProfileSource.includes("REPAIR_CATEGORY_OPTIONS"), true, "Worker calculator must use the shared repair catalog");
-assert.equal(workerProfileSource.includes('["labor_only", "Труд"]'), true, "Worker calculator must expose labor-only mode");
-assert.equal(workerProfileSource.includes('["labor_plus_materials", "Труд + материали"]'), true, "Worker calculator must expose labor and materials mode");
+assert.equal(workerProfileSource.includes("WorkerCalculatorPanel"), true, "Worker profile must render the shared calculator panel");
+assert.equal(workerCalculatorSource.includes("PRICE_TABLE"), false, "Worker calculator still contains a duplicate price table");
+assert.equal(workerCalculatorSource.includes("laborPerM2"), false, "Worker calculator still accepts a manual labor price");
+assert.equal(workerCalculatorSource.includes("calculateRepairEstimate"), true, "Worker calculator must use the shared pricing engine");
+assert.equal(workerCalculatorSource.includes("REPAIR_CATEGORY_OPTIONS"), true, "Worker calculator must use the shared repair catalog");
+assert.equal(workerCalculatorSource.includes('"labor_only"'), true, "Worker calculator must expose labor-only mode");
+assert.equal(workerCalculatorSource.includes('"labor_plus_materials"'), true, "Worker calculator must expose labor and materials mode");
+assert.equal(requestSource.includes("calculateCatalogEstimate"), true, "Request flow must use the shared live catalog adapter");
+assert.equal(workerCalculatorSource.includes("calculateCatalogEstimate"), true, "Worker calculator must use the shared live catalog adapter");
+
+const liveCatalog = {
+  categories: [{
+    categoryKey: "vik",
+    isActive: true,
+    activities: [{ activityKey: "leak_repair", label: "Leak", unitType: "item", isActive: true }],
+  }],
+  pricingRules: [{
+    categoryKey: "vik",
+    activityKey: "leak_repair",
+    laborMin: "40.00",
+    laborMax: "60.00",
+    materialMin: "10.00",
+    materialMax: "20.00",
+    currency: "EUR",
+    version: "admin-2026-08-11",
+    isActive: true,
+  }],
+};
+const liveEstimate = calculateCatalogEstimate({
+  catalog: liveCatalog,
+  categoryKey: "vik",
+  selectedActivities: ["leak_repair"],
+  quantity: 2,
+  pricingMode: "labor_plus_materials",
+  fallbackEstimate: { totalMin: 1, totalMax: 2, expectedMin: 1, expectedMax: 2 },
+});
+assert.equal(liveEstimate.source, "live");
+assert.deepEqual(
+  [liveEstimate.laborMin, liveEstimate.laborMax, liveEstimate.materialMin, liveEstimate.materialMax],
+  [80, 120, 20, 40],
+);
+assert.deepEqual([liveEstimate.expectedMin, liveEstimate.expectedMax], [100, 160]);
+assert.equal(liveEstimate.pricingVersion, "admin-2026-08-11");
+assert.equal(catalogActivities(liveCatalog, "vik")[0].activityKey, "leak_repair");
+assert.equal(pricingQuantity("m2", "up to 20", 24), 24);
+
+const incompleteCatalogEstimate = calculateCatalogEstimate({
+  catalog: liveCatalog,
+  categoryKey: "vik",
+  selectedActivities: ["leak_repair", "mixer_replacement"],
+  quantity: 2,
+  pricingMode: "labor_only",
+  fallbackEstimate: { totalMin: 50, totalMax: 70, expectedMin: 50, expectedMax: 70 },
+});
+assert.equal(incompleteCatalogEstimate.source, "fallback", "Partial live pricing must not create a mixed estimate");
 
 const oldDescription = [
   "Тип ремонт: Плочки",

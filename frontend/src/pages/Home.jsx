@@ -1,118 +1,108 @@
-import React from "react";
-import { motion } from "framer-motion";
-import { Wrench, CheckCircle, Mail } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { createElement } from 'react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  ClipboardList,
+  UserCheck,
+  Wrench,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import useDocumentMeta from '../hooks/useDocumentMeta';
 
+const steps = [
+  {
+    icon: ClipboardList,
+    title: 'Опишете ремонта',
+    text: 'Добавете ясна заявка и снимки. Данните минават през проверка преди публикуване.',
+  },
+  {
+    icon: UserCheck,
+    title: 'Сравнете кандидатите',
+    text: 'Вие избирате майстор по профил, реални обекти, рейтинг и кандидатура.',
+  },
+  {
+    icon: Wrench,
+    title: 'Проследете работата',
+    text: 'Заявката има ясни етапи от потвърждението до завършването и ревюто.',
+  },
+];
 
 export default function Home() {
-  const navigate = useNavigate();
+  useDocumentMeta({
+    title: 'Bricky | Майстори и ремонтни заявки на едно място',
+    description:
+      'Създайте ремонтна заявка, сравнете проверени профили и проследете работата до нейното завършване.',
+    canonicalPath: '/',
+    image: '/media_files/deal_client.png',
+  });
 
   return (
-    <div className="relative bg-gray-950 text-white min-h-screen flex flex-col overflow-hidden">
+    <div className="bg-[#07111f] text-white">
+      <section className="relative flex min-h-[calc(100vh-118px)] items-center overflow-hidden border-b border-slate-400/15">
+        <div className="absolute inset-0 bg-[#030912]" aria-hidden="true" />
 
-      {/* 🎥 VIDEO BACKGROUND */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute w-full h-full object-cover"
-      >
-        <source src="/src/media_files/loop.mp4" type="video/mp4" />
-      </video>
-
-      {/* 🔳 DARK OVERLAY */}
-      <div className="absolute inset-0 bg-black/60 z-0"></div>
-
-      {/* 🧱 HERO SECTION */}
-      <section className="relative z-10 flex flex-col items-center justify-center flex-1 text-center px-6 py-16">
-        <motion.h1
-          className="text-4xl md:text-6xl font-bold mb-4"
-          initial={{ opacity: 0, y: -40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          Добре дошъл в <span className="text-blue-500">Bricky</span>
-        </motion.h1>
-
-        <motion.p
-          className="text-lg md:text-xl text-gray-300 max-w-2xl mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        >
-          Свързваме клиенти и майстори — бързо, лесно и надеждно.
-          Без излишни обаждания и хаос.
-        </motion.p>
-
-        <motion.div
-          className="flex flex-col md:flex-row gap-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-        >
-          <button
-            onClick={() => navigate("/requests")}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold transition"
-          >
-            Създай заявка 🧱
-          </button>
-          <button
-            onClick={() => navigate("/workers")}
-            className="bg-gray-800 hover:bg-gray-700 text-white px-8 py-3 rounded-xl text-lg font-semibold transition"
-          >
-            Стани майстор 🔧
-          </button>
-        </motion.div>
-      </section>
-
-      {/* ⚙️ HOW IT WORKS */}
-      <section className="relative z-10 bg-gray-900/80 py-16">
-        <div className="max-w-5xl mx-auto text-center px-6">
-          <h2 className="text-3xl font-bold mb-10">Как работи?</h2>
-
-          <div className="grid md:grid-cols-3 gap-10">
-            {[
-              {
-                icon: <Mail size={40} className="text-blue-400 mb-4" />,
-                title: "Изпращаш заявка",
-                desc: "Клиентът описва ремонта и оставя контакт.",
-              },
-              {
-                icon: <Wrench size={40} className="text-green-400 mb-4" />,
-                title: "Намираме майстор",
-                desc: "Bricky избира подходящия специалист за задачата.",
-              },
-              {
-                icon: <CheckCircle size={40} className="text-yellow-400 mb-4" />,
-                title: "Проследяваш процеса",
-                desc: "Получаваш обратна връзка и сигурност до завършването.",
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={i}
-                className="bg-gray-800/80 p-8 rounded-2xl shadow-lg hover:shadow-blue-500/20 transition"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.2 }}
+        <div className="bricky-container relative z-10 py-20">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 border-l-2 border-emerald-400 bg-black/35 px-4 py-2 text-sm font-bold text-emerald-200">
+              <BadgeCheck size={18} /> 30 дни безплатен достъп при публичния
+              старт
+            </div>
+            <h1 className="mt-7 text-5xl font-extrabold leading-tight sm:text-6xl lg:text-7xl">
+              Bricky
+            </h1>
+            <p className="mt-5 max-w-2xl text-xl leading-8 text-slate-200 sm:text-2xl">
+              Ремонтни заявки, проверени профили и ясен процес от първата снимка
+              до завършения обект.
+            </p>
+            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+              <Link
+                to="/auth/register?role=client"
+                className="bricky-button-primary"
               >
-                <div className="flex flex-col items-center">
-                  {step.icon}
-                  <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
-                  <p className="text-gray-400">{step.desc}</p>
-                </div>
-              </motion.div>
-            ))}
+                Създай заявка <ArrowRight size={19} />
+              </Link>
+              <Link to="/workers" className="bricky-button-secondary">
+                Разгледай майстори
+              </Link>
+            </div>
+            <p className="mt-5 text-sm text-slate-400">
+              Без платежна карта и без автоматично таксуване през стартовия
+              период.
+            </p>
           </div>
         </div>
       </section>
 
-      
-
-      {/* ⚒️ FOOTER */}
-      <footer className="relative z-10 bg-gray-950/90 border-t border-gray-800 py-6 text-center text-gray-400 text-sm">
-        © {new Date().getFullYear()} Bricky — Свързваме клиенти и майстори с доверие.
-      </footer>
+      <section className="py-16 sm:py-20" aria-labelledby="how-it-works-title">
+        <div className="bricky-container">
+          <div className="max-w-2xl">
+            <p className="font-bold text-emerald-300">Как работи</p>
+            <h2
+              id="how-it-works-title"
+              className="mt-2 text-3xl font-extrabold sm:text-4xl"
+            >
+              Вие избирате. Bricky пази процеса подреден.
+            </h2>
+          </div>
+          <div className="mt-9 grid gap-5 md:grid-cols-3">
+            {steps.map(({ icon, title, text }, index) => (
+              <article key={title} className="bricky-card rounded-lg p-6">
+                <div className="flex items-center justify-between">
+                  {createElement(icon, {
+                    className: 'text-cyan-300',
+                    size: 27,
+                  })}
+                  <span className="text-sm font-extrabold text-slate-500">
+                    0{index + 1}
+                  </span>
+                </div>
+                <h3 className="mt-7 text-xl font-extrabold">{title}</h3>
+                <p className="mt-3 leading-7 text-slate-400">{text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

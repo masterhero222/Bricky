@@ -1,128 +1,603 @@
 import { WorkersService } from './workers.service';
+import { WorkerProfileCompletionService } from './worker-profile-completion.service';
 
-describe('WorkersService request history media', () => {
-  it('hydrates completed request media with one batched image query', async () => {
-    const completedAt = new Date('2026-07-05T10:00:00.000Z');
-    const requests = [
-      {
-        id: 11,
-        status: 'completed',
-        assignedWorkerId: 7,
-        completedAt,
-        moderationStatus: 'approved',
-        beforePhotos: null,
-        afterPhotos: null,
-        photos: null,
-      },
-      {
-        id: 12,
-        status: 'completed',
-        assignedWorkerId: 7,
-        completedAt,
-        moderationStatus: 'approved',
-        beforePhotos: [{ id: 'legacy', url: '/legacy.jpg' }],
-        afterPhotos: null,
-        photos: null,
-      },
-    ];
-    const requestRepo = {
-      find: jest.fn().mockResolvedValue(requests),
-    };
-    const requestImageRepo = {
-      find: jest.fn().mockResolvedValue([
+function repo(overrides: Record<string, any> = {}) {
+  return {
+    findOne: jest.fn().mockResolvedValue(null),
+    find: jest.fn().mockResolvedValue([]),
+    save: jest.fn(async (value) => value),
+    create: jest.fn((value) => value),
+    update: jest.fn(),
+    delete: jest.fn(),
+    ...overrides,
+  };
+}
+
+function serviceWith(overrides: Record<string, any> = {}) {
+  return new WorkersService(
+    (overrides.workerRepository || repo()) as any,
+    (overrides.galleryRepo || repo()) as any,
+    (overrides.workerProfilesRepo || repo()) as any,
+    (overrides.workerSkillsRepo || repo()) as any,
+    (overrides.repairRequestsRepo || repo()) as any,
+    (overrides.referralRewardsRepo || repo()) as any,
+    (overrides.media || {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    }) as any,
+    (overrides.users || {
+      findOne: jest.fn().mockResolvedValue({ id: 201, status: 'active' }),
+      findByIds: jest.fn(async (ids: number[]) =>
+        ids.map((id) => ({ id, status: 'active' })),
+      ),
+    }) as any,
+    new WorkerProfileCompletionService(),
+  );
+}
+
+describe('WorkersService media moderation', () => {
+  it('stores newly uploaded worker gallery images as pending moderation', async () => {
+    const media = {
+      createAsset: jest.fn().mockResolvedValue({}),
+      findByWorker: jest.fn().mockResolvedValue([
         {
-          id: 101,
-          requestId: 11,
-          kind: 'before',
-          name: 'before.jpg',
-          url: '/uploads/requests/before.jpg',
-          sortOrder: 0,
-        },
-        {
-          id: 102,
-          requestId: 11,
-          kind: 'after',
-          name: 'after.jpg',
-          url: '/uploads/requests/after.jpg',
-          sortOrder: 0,
-        },
-        {
-          id: 103,
-          requestId: 12,
-          kind: 'after',
-          name: 'after-2.jpg',
-          url: '/uploads/requests/after-2.jpg',
-          sortOrder: 0,
+          id: 10,
+          workerUserId: 201,
+          ownerUserId: 201,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/201/gallery/new.jpg',
+          storageKey: '/uploads/workers/201/gallery/new.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-18T10:00:00Z'),
         },
       ]),
+      deleteAsset: jest.fn(),
     };
+    const service = serviceWith({ media, galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }) });
 
-    const service = new WorkersService(
-      {} as any,
-      {} as any,
-      requestRepo as any,
-      requestImageRepo as any,
-      { find: jest.fn().mockResolvedValue([{ id: 7, role: 'worker', accountStatus: 'active' }]) } as any,
-    );
+    const result = await service.addGalleryImages(201, ['/uploads/workers/201/gallery/new.jpg']);
 
-    const history = await service.getHistoryByUserId(7);
-
-    expect(requestImageRepo.find).toHaveBeenCalledTimes(1);
-    expect(requestImageRepo.find).toHaveBeenCalledWith(
+    expect(media.createAsset).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ requestId: expect.anything() }),
+        ownerUserId: 201,
+        workerUserId: 201,
+        kind: 'worker_gallery',
+        moderationStatus: 'pending',
       }),
     );
-    expect(history[0].beforePhotos).toEqual([
+    expect(result).toEqual([expect.objectContaining({ moderationStatus: 'pending' })]);
+  });
+
+  it('hides pending and rejected worker gallery media from public gallery responses', async () => {
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/201/gallery/approved.jpg',
+          storageKey: '/uploads/workers/201/gallery/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-18T10:00:00Z'),
+        },
+        {
+          id: 2,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/201/gallery/pending.jpg',
+          storageKey: '/uploads/workers/201/gallery/pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-18T10:01:00Z'),
+        },
+        {
+          id: 3,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/201/gallery/rejected.jpg',
+          storageKey: '/uploads/workers/201/gallery/rejected.jpg',
+          moderationStatus: 'rejected',
+          createdAt: new Date('2026-07-18T10:02:00Z'),
+        },
+      ]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ media, galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }) });
+
+    const publicGallery = await service.getGalleryByUserId(201);
+    const ownGallery = await service.getGalleryByUserId(201, { includeUnapprovedMedia: true });
+
+    expect(publicGallery.map((photo) => photo.id)).toEqual([1]);
+    expect(ownGallery.map((photo) => photo.id)).toEqual([1, 2, 3]);
+  });
+
+  it('uses only approved avatar media for worker profile summaries', async () => {
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 11,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/pending.jpg',
+          storageKey: '/uploads/users/201/avatar/pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-18T10:02:00Z'),
+        },
+        {
+          id: 10,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/approved.jpg',
+          storageKey: '/uploads/users/201/avatar/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-18T10:00:00Z'),
+        },
+      ]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({
+      media,
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({
+          userId: 201,
+          publicName: 'Елена Георгиева',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-18T09:00:00Z'),
+        }),
+      }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      requestRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      referralRewardsRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+    });
+
+    const worker = await service.findByUserId(201);
+
+    expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/approved.jpg');
+  });
+
+  it('keeps the previous approved avatar on legacy worker summaries while a new avatar is pending', async () => {
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 11,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/new-pending.jpg',
+          storageKey: '/uploads/users/201/avatar/new-pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-18T10:02:00Z'),
+        },
+        {
+          id: 10,
+          kind: 'worker_avatar',
+          publicUrl: '/uploads/users/201/avatar/old-approved.jpg',
+          storageKey: '/uploads/users/201/avatar/old-approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-18T10:00:00Z'),
+        },
+      ]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({
+      media,
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerProfilesRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+      workerRepository: repo({
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          userId: 201,
+          fullName: 'Legacy Worker',
+          email: 'private@example.test',
+          phone: '0888000000',
+          password: 'private-password-hash',
+          avatarUrl: '/uploads/users/201/avatar/very-old.jpg',
+        }),
+      }),
+      requestRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+    });
+
+    const worker = await service.findByUserId(201);
+
+    expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/old-approved.jpg');
+    expect(worker).not.toHaveProperty('email');
+    expect(worker).not.toHaveProperty('phone');
+    expect(worker).not.toHaveProperty('password');
+  });
+
+  it('saves an allowed worker banner immediately', async () => {
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 202,
+        publicName: 'Electrical Worker',
+        profileBannerKey: 'blueprint_general_v1',
+      }),
+      update: jest.fn(),
+    });
+    const workerSkillsRepo = repo({
+      find: jest.fn().mockResolvedValue([{ workerUserId: 202, categoryKey: 'electro', activityKey: null }]),
+    });
+    const service = serviceWith({ workerProfilesRepo, workerSkillsRepo });
+
+    const result = await service.updateAppearanceByUserId(202, {
+      profileBannerKey: 'blueprint_electrical_v1',
+    });
+
+    expect(result).toEqual({ profileBannerKey: 'blueprint_electrical_v1' });
+    expect(workerProfilesRepo.update).toHaveBeenCalledWith(
+      { userId: 202 },
+      { profileBannerKey: 'blueprint_electrical_v1' },
+    );
+  });
+
+  it('allows any trusted Bricky banner regardless of worker categories', async () => {
+    const workerProfilesRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        userId: 202,
+        publicName: 'Electrical Worker',
+        profileBannerKey: 'blueprint_general_v1',
+      }),
+      update: jest.fn(),
+    });
+    const service = serviceWith({
+      workerProfilesRepo,
+      workerSkillsRepo: repo({
+        find: jest.fn().mockResolvedValue([{ workerUserId: 202, categoryKey: 'electro', activityKey: null }]),
+      }),
+    });
+
+    const result = await service.updateAppearanceByUserId(202, {
+      profileBannerKey: 'blueprint_plumbing_v1',
+    });
+
+    expect(result).toEqual({ profileBannerKey: 'blueprint_plumbing_v1' });
+    expect(workerProfilesRepo.update).toHaveBeenCalledWith(
+      { userId: 202 },
+      { profileBannerKey: 'blueprint_plumbing_v1' },
+    );
+  });
+
+  it('falls back to the universal banner for unknown stored values', async () => {
+    const service = serviceWith({
+      media: { createAsset: jest.fn(), findByWorker: jest.fn().mockResolvedValue([]), deleteAsset: jest.fn() },
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerProfilesRepo: repo({
+        findOne: jest.fn().mockResolvedValue({
+          userId: 203,
+          publicName: 'Worker',
+          profileBannerKey: 'https://bad.example/banner.jpg',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-18T09:00:00Z'),
+        }),
+      }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      requestRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      referralRewardsRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+    });
+
+    const worker = await service.findByUserId(203);
+
+    expect(worker.profileBannerKey).toBe('blueprint_general_v1');
+  });
+
+  it('builds public completed-project history from v2 requests and approved media only', async () => {
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 91,
+          assignedWorkerUserId: 201,
+          categoryKey: 'painting',
+          addressText: 'Sofia, private address',
+          addressVisibility: 'exact_after_assignment',
+          description: 'Painting',
+          status: 'completed',
+          completedAt: new Date('2026-07-19T12:00:00Z'),
+          archivedAt: new Date('2026-07-19T12:05:00Z'),
+          createdAt: new Date('2026-07-17T12:00:00Z'),
+        },
+      ]),
+    });
+    const media = {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          kind: 'request_before',
+          publicUrl: '/uploads/requests/91/before/approved.jpg',
+          storageKey: 'requests/91/before/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-17T12:00:00Z'),
+        },
+        {
+          id: 2,
+          kind: 'request_after',
+          publicUrl: '/uploads/requests/91/after/pending.jpg',
+          storageKey: 'requests/91/after/pending.jpg',
+          moderationStatus: 'pending',
+          createdAt: new Date('2026-07-19T11:00:00Z'),
+        },
+        {
+          id: 3,
+          kind: 'request_after',
+          publicUrl: '/uploads/requests/91/after/approved.jpg',
+          storageKey: 'requests/91/after/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-19T11:05:00Z'),
+        },
+      ]),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    const result = await service.getHistoryByUserId(201);
+
+    expect(repairRequestsRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 101,
-        kind: 'before',
-        url: '/uploads/requests/before.jpg',
+        where: expect.objectContaining({
+          assignedWorkerUserId: 201,
+          status: 'completed',
+        }),
+      }),
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        requestId: 91,
+        categoryKey: 'painting',
+        address: null,
+        beforePhotos: [expect.objectContaining({ id: 1 })],
+        afterPhotos: [expect.objectContaining({ id: 3 })],
       }),
     ]);
-    expect(history[0].afterPhotos).toEqual([
+  });
+});
+
+describe('WorkersService v2 independence from legacy tables', () => {
+  const missingTableError = Object.assign(new Error("Table 'worker' doesn't exist"), {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+  });
+
+  it('returns v2 workers when the legacy worker table is absent', async () => {
+    const workerRepository = repo({
+      find: jest.fn().mockRejectedValue(missingTableError),
+    });
+    const workerProfilesRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          userId: 301,
+          publicName: 'V2 Worker',
+          city: 'Sofia',
+          bio: 'Professional worker',
+          experience: '8 years',
+          equipment: 'Own equipment',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          profileBannerKey: 'blueprint_general_v1',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+    });
+    const service = serviceWith({
+      workerRepository,
+      workerProfilesRepo,
+      galleryRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      repairRequestsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      referralRewardsRepo: repo({ findOne: jest.fn().mockResolvedValue(null) }),
+    });
+
+    const workers = await service.getAll();
+
+    expect(workers).toEqual([
       expect.objectContaining({
-        id: 102,
-        kind: 'after',
-        url: '/uploads/requests/after.jpg',
+        userId: 301,
+        workerUserId: 301,
+        fullName: 'V2 Worker',
       }),
     ]);
-    expect(history[0].photos).toEqual(history[0].beforePhotos);
-    expect(history[1].beforePhotos).toEqual([
-      { id: 'legacy', url: '/legacy.jpg' },
+    expect(workers[0]).not.toHaveProperty('email');
+    expect(workers[0]).not.toHaveProperty('phone');
+    expect(workers[0]).not.toHaveProperty('password');
+    expect(workerRepository.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a worker to persist the order of approved media from their completed project', async () => {
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue({
+        id: 91,
+        assignedWorkerUserId: 201,
+        archivedAt: new Date('2026-08-10T10:00:00Z'),
+      }),
+    });
+    const media = {
+      findByWorker: jest.fn().mockResolvedValue([]),
+      findByRequest: jest.fn().mockResolvedValue([
+        { id: 1, kind: 'request_before', moderationStatus: 'approved' },
+        { id: 2, kind: 'request_after', moderationStatus: 'approved' },
+        { id: 3, kind: 'request_after', moderationStatus: 'rejected' },
+      ]),
+      setDisplayOrder: jest.fn().mockResolvedValue({ ok: true }),
+      createAsset: jest.fn(),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ repairRequestsRepo, media });
+
+    await expect(service.reorderPortfolioMedia(201, 91, [2, 1])).resolves.toEqual({
+      ok: true,
+      mediaIds: [2, 1],
+    });
+    expect(media.setDisplayOrder).toHaveBeenCalledWith([2, 1]);
+  });
+
+  it('returns only active, approved and public workers from batch lookup', async () => {
+    const workerProfilesRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          userId: 301,
+          publicName: 'Public worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 302,
+          publicName: 'Pending worker',
+          approvalStatus: 'pending',
+          visibilityStatus: 'private',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 303,
+          publicName: 'Private worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'private',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+        {
+          userId: 304,
+          publicName: 'Blocked worker',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+    });
+    const workerRepository = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 51,
+          userId: 305,
+          fullName: 'Approved legacy worker',
+          isApproved: true,
+        },
+        {
+          id: 52,
+          userId: 306,
+          fullName: 'Unapproved legacy worker',
+          isApproved: false,
+        },
+      ]),
+    });
+    const users = {
+      findOne: jest.fn().mockResolvedValue({ id: 301, status: 'active' }),
+      findByIds: jest.fn().mockResolvedValue([
+        { id: 301, status: 'active' },
+        { id: 302, status: 'active' },
+        { id: 303, status: 'active' },
+        { id: 304, status: 'blocked' },
+        { id: 305, status: 'active' },
+        { id: 306, status: 'active' },
+      ]),
+    };
+    const service = serviceWith({
+      workerProfilesRepo,
+      workerRepository,
+      users,
+    });
+
+    const workers = await service.findByUserIds([
+      301, 302, 303, 304, 305, 306,
     ]);
-    expect(history[1].afterPhotos).toEqual([
+
+    expect(workers.map((worker) => Number(worker.userId))).toEqual([301, 305]);
+  });
+
+  it('returns v2 gallery media when the legacy gallery table is absent', async () => {
+    const galleryRepo = repo({
+      find: jest.fn().mockRejectedValue({
+        driverError: { code: 'ER_NO_SUCH_TABLE', errno: 1146 },
+      }),
+    });
+    const media = {
+      createAsset: jest.fn(),
+      findByWorker: jest.fn().mockResolvedValue([
+        {
+          id: 41,
+          kind: 'worker_gallery',
+          publicUrl: '/uploads/workers/301/gallery/approved.jpg',
+          storageKey: 'workers/301/gallery/approved.jpg',
+          moderationStatus: 'approved',
+          createdAt: new Date('2026-07-20T08:00:00Z'),
+        },
+      ]),
+      findByRequest: jest.fn().mockResolvedValue([]),
+      deleteAsset: jest.fn(),
+    };
+    const service = serviceWith({ galleryRepo, media });
+
+    const gallery = await service.getGalleryByUserId(301);
+
+    expect(gallery).toEqual([
       expect.objectContaining({
-        id: 103,
-        kind: 'after',
-        url: '/uploads/requests/after-2.jpg',
+        id: 41,
+        moderationStatus: 'approved',
       }),
     ]);
   });
 
-  it('removes suspended workers from the public list', async () => {
-    const workerRepository = {
-      find: jest.fn().mockResolvedValue([
-        { id: 1, userId: 201, moderationStatus: 'approved' },
-        { id: 2, userId: 202, moderationStatus: 'approved' },
-      ]),
-    };
-    const galleryRepo = { find: jest.fn().mockResolvedValue([]) };
-    const requestRepo = { find: jest.fn().mockResolvedValue([]) };
-    const requestImageRepo = { find: jest.fn().mockResolvedValue([]) };
-    const usersRepo = {
-      find: jest.fn().mockResolvedValue([{ id: 201, role: 'worker', accountStatus: 'active' }]),
-    };
-    const service = new WorkersService(
-      workerRepository as any,
-      galleryRepo as any,
-      requestRepo as any,
-      requestImageRepo as any,
-      usersRepo as any,
-    );
+  it('does not hide non-legacy database failures', async () => {
+    const connectionError = Object.assign(new Error('Database connection lost'), {
+      code: 'PROTOCOL_CONNECTION_LOST',
+    });
+    const service = serviceWith({
+      workerRepository: repo({
+        find: jest.fn().mockRejectedValue(connectionError),
+      }),
+      workerProfilesRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+    });
 
-    const result = await service.getAll();
+    await expect(service.getAll()).rejects.toBe(connectionError);
+  });
+});
 
-    expect(result.map((worker) => worker.userId)).toEqual([201]);
+describe('WorkersService admin worker privacy', () => {
+  const profile = {
+    userId: 401,
+    publicName: 'Админ тест майстор',
+    phonePrivate: '+359888123456',
+    city: 'София',
+    approvalStatus: 'approved',
+    visibilityStatus: 'public',
+    onboardingStep: 1,
+    createdAt: new Date('2026-08-25T08:00:00Z'),
+  };
+
+  it('keeps private contact data out of the admin list response', async () => {
+    const service = serviceWith({
+      workerProfilesRepo: repo({ find: jest.fn().mockResolvedValue([profile]) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      users: {
+        findByIds: jest.fn().mockResolvedValue([
+          { id: 401, status: 'active', email: 'private@example.com' },
+        ]),
+      },
+    });
+
+    const [worker] = await service.getAllForAdmin();
+
+    expect(worker.hasPhone).toBe(true);
+    expect(worker).not.toHaveProperty('phonePrivate');
+    expect(worker).not.toHaveProperty('email');
+  });
+
+  it('returns private contact only from the dedicated admin detail method', async () => {
+    const service = serviceWith({
+      workerProfilesRepo: repo({ findOne: jest.fn().mockResolvedValue(profile) }),
+      workerSkillsRepo: repo({ find: jest.fn().mockResolvedValue([]) }),
+      users: {
+        findOne: jest.fn().mockResolvedValue({
+          id: 401,
+          status: 'active',
+          email: 'private@example.com',
+          createdAt: new Date('2026-08-25T08:00:00Z'),
+        }),
+      },
+    });
+
+    const worker = await service.getAdminDetail(401);
+
+    expect(worker.phonePrivate).toBe('+359888123456');
+    expect(worker.email).toBe('private@example.com');
   });
 });

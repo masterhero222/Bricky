@@ -145,4 +145,32 @@ select:focus {
 
 @media (max-width: 768px) {
   .bricky-container { width: min(calc(100% - 28px), var(--bricky-container)); }
+
+  body {
+    background-attachment: scroll;
+    background: linear-gradient(180deg, #08111f 0%, #0b1424 52%, #08111f 100%);
+  }
+
+  .bricky-card {
+    content-visibility: auto;
+    contain-intrinsic-block-size: 320px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2);
+  }
+
+  .backdrop-blur-xl,
+  .backdrop-blur-md {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
