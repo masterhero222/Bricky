@@ -23,7 +23,8 @@ export default function BlogArticle() {
     description:
       article?.metaDescription || 'Тази Bricky статия не беше намерена.',
     canonicalPath: article ? `/blog/${article.slug}` : '/blog',
-    robots: 'noindex,follow',
+    robots: article ? 'index,follow' : 'noindex,follow',
+    image: article ? getArticleCover(article) : undefined,
   });
 
   if (!article) return <BlogNotFound />;

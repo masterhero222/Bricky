@@ -3,6 +3,8 @@ import { Box, LogOut, Menu, UserRound, X } from 'lucide-react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { clearAuthSession } from '../../utils/authSession';
 
+const BLOG_ENABLED = import.meta.env.VITE_ENABLE_BLOG === 'true';
+
 const navClass = ({ isActive }) =>
   `relative flex min-h-[78px] items-center px-4 font-bold transition-colors ${
     isActive
@@ -77,6 +79,7 @@ export default function Navbar() {
               Карта
             </NavLink>
           )}
+          {BLOG_ENABLED && <NavLink to="/blog" className={navClass}>Блог</NavLink>}
           <NavLink to="/about" className={navClass}>
             За нас
           </NavLink>
@@ -151,6 +154,11 @@ export default function Navbar() {
                 className="rounded-lg px-4 py-3 hover:bg-slate-800"
               >
                 Карта
+              </Link>
+            )}
+            {BLOG_ENABLED && (
+              <Link to="/blog" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">
+                Блог
               </Link>
             )}
             <Link

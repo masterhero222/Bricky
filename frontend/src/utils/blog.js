@@ -1,16 +1,22 @@
-import { BLOG_CATEGORIES, BLOG_FALLBACK_COVER, blogArticles } from "../data/blogArticles";
+import { BLOG_CATEGORIES, BLOG_FALLBACK_COVER, blogArticles } from "../data/blogArticles.js";
+
+export function getPublishedBlogArticles(articles = blogArticles) {
+  return articles.filter((article) => article.status === 'published');
+}
 
 export function getBlogArticleBySlug(slug) {
-  return blogArticles.find((article) => article.slug === slug) || null;
+  return getPublishedBlogArticles().find((article) => article.slug === slug) || null;
 }
 
 export function getFeaturedBlogArticle() {
-  return blogArticles.find((article) => article.featured) || blogArticles[0] || null;
+  const published = getPublishedBlogArticles();
+  return published.find((article) => article.featured) || published[0] || null;
 }
 
 export function getBlogArticlesByCategory(categoryKey) {
-  if (!categoryKey || categoryKey === "all") return blogArticles;
-  return blogArticles.filter((article) => article.categoryKey === categoryKey);
+  const published = getPublishedBlogArticles();
+  if (!categoryKey || categoryKey === "all") return published;
+  return published.filter((article) => article.categoryKey === categoryKey);
 }
 
 export function getRelatedBlogArticles(article, limit = 3) {
@@ -21,7 +27,7 @@ export function getRelatedBlogArticles(article, limit = 3) {
 
   if (related.length >= limit) return related;
 
-  const fill = blogArticles
+  const fill = getPublishedBlogArticles()
     .filter((item) => item.slug !== article?.slug && !related.some((relatedItem) => relatedItem.slug === item.slug))
     .slice(0, limit - related.length);
 
