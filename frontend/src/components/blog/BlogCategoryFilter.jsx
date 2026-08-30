@@ -1,19 +1,20 @@
 import { BLOG_CATEGORIES } from "../../data/blogArticles";
+import { Link } from 'react-router-dom';
+import { blogRubricPath } from '../../data/blogRubrics';
 
-export default function BlogCategoryFilter({ selectedCategory, onChange }) {
+export default function BlogCategoryFilter({ selectedCategory, counts }) {
   return (
-    <div className="blog-filter" aria-label="Филтър по категория">
+    <nav className="blog-filter" aria-label="Рубрики в блога">
       {BLOG_CATEGORIES.map((category) => (
-        <button
+        <Link
           key={category.key}
-          type="button"
+          to={blogRubricPath(category.key)}
           className={selectedCategory === category.key ? "is-active" : ""}
-          aria-pressed={selectedCategory === category.key}
-          onClick={() => onChange(category.key)}
+          aria-current={selectedCategory === category.key ? 'page' : undefined}
         >
-          {category.label}
-        </button>
+          {category.label} <span className="blog-rubric-count">{counts[category.key] || 0}</span>
+        </Link>
       ))}
-    </div>
+    </nav>
   );
 }

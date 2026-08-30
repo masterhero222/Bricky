@@ -1,3 +1,3 @@
-// Add reviewed articles here using docs/marketing/blog-publishing-guide.md.
-// Public selectors only expose entries whose status is "published".
-export const editorialBlogArticles = [];
+import articles from './blogContent.generated.json' with { type: 'json' };
+
+export const editorialBlogArticles = articles;
