@@ -65,7 +65,7 @@ export default function Navbar() {
         </Link>
 
         <nav
-          className="hidden items-center md:flex"
+          className="hidden items-center xl:flex"
           aria-label="Основна навигация"
         >
           <NavLink to="/" end className={navClass}>
@@ -79,13 +79,13 @@ export default function Navbar() {
               Карта
             </NavLink>
           )}
-          {BLOG_ENABLED && <NavLink to="/blog" className={navClass}>Блог</NavLink>}
+          {BLOG_ENABLED && <NavLink to="/knowledge" className={navClass}>Център за ремонти</NavLink>}
           <NavLink to="/about" className={navClass}>
             За нас
           </NavLink>
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-3 xl:flex">
           {!role ? (
             <>
               <button
@@ -121,7 +121,7 @@ export default function Navbar() {
 
         <button
           onClick={() => setOpen((value) => !value)}
-          className="grid h-11 w-11 place-items-center rounded-xl border border-slate-400/15 bg-slate-800/70 text-white md:hidden"
+          className="grid h-11 w-11 place-items-center rounded-xl border border-slate-400/15 bg-slate-800/70 text-white xl:hidden"
           aria-label={open ? 'Затвори менюто' : 'Отвори менюто'}
           aria-expanded={open}
           aria-controls="primary-mobile-navigation"
@@ -131,7 +131,7 @@ export default function Navbar() {
       </div>
 
       {open && (
-        <div id="primary-mobile-navigation" className="fixed inset-x-0 top-[78px] max-h-[calc(100dvh-78px)] overflow-y-auto border-t border-slate-400/20 bg-[#07101d] px-5 py-5 shadow-2xl shadow-black/60 md:hidden">
+        <div id="primary-mobile-navigation" className="fixed inset-x-0 top-[78px] max-h-[calc(100dvh-78px)] overflow-y-auto border-t border-slate-400/20 bg-[#07101d] px-5 py-5 shadow-2xl shadow-black/60 xl:hidden">
           <nav className="flex flex-col gap-1 font-bold text-slate-200">
             <Link
               to="/"
@@ -157,8 +157,8 @@ export default function Navbar() {
               </Link>
             )}
             {BLOG_ENABLED && (
-              <Link to="/blog" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">
-                Блог
+              <Link to="/knowledge" onClick={() => setOpen(false)} className="rounded-lg px-4 py-3 hover:bg-slate-800">
+                Център за ремонти
               </Link>
             )}
             <Link

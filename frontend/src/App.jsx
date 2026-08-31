@@ -9,8 +9,10 @@ import Layout from './layouts/Layout';
 
 const Home = lazy(() => import('./pages/Home'));
 const AboutUs = lazy(() => import('./pages/AboutUs'));
-const BlogIndex = lazy(() => import('./pages/blog/BlogIndex'));
-const BlogArticle = lazy(() => import('./pages/blog/BlogArticle'));
+const BlogIndex = lazy(() => import('./pages/knowledge/KnowledgeIndex').then(module => ({ default: module.LegacyBlogIndex })));
+const BlogArticle = lazy(() => import('./pages/knowledge/KnowledgeArticle'));
+const KnowledgeIndex = lazy(() => import('./pages/knowledge/KnowledgeIndex'));
+const KnowledgeAdmin = lazy(() => import('./pages/knowledge/KnowledgeAdmin'));
 const BlogUnavailable = lazy(() => import('./pages/blog/BlogUnavailable'));
 const AuthGate = lazy(() => import('./pages/AuthGate'));
 const Login = lazy(() => import('./pages/Login'));
@@ -49,6 +51,10 @@ export default function App() {
               element={<LegalPage pageKey="moderation-rules" />}
             />
             <Route path="/support" element={<LegalPage pageKey="support" />} />
+            <Route path="/knowledge" element={BLOG_ENABLED ? <KnowledgeIndex /> : <BlogUnavailable />} />
+            <Route path="/knowledge/:section" element={BLOG_ENABLED ? <KnowledgeIndex /> : <BlogUnavailable />} />
+            <Route path="/knowledge/repairs/:repairKey" element={BLOG_ENABLED ? <KnowledgeIndex /> : <BlogUnavailable />} />
+            <Route path="/admin/knowledge" element={<RequireAdmin><KnowledgeAdmin /></RequireAdmin>} />
             <Route
               path="/blog"
               element={BLOG_ENABLED ? <BlogIndex /> : <BlogUnavailable />}

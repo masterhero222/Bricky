@@ -8,3 +8,4 @@ Disallow: /repair-map
 Disallow: /reset-password
 
 Sitemap: https://bricky.bg/sitemap.xml
+Sitemap: https://bricky.bg/api/knowledge/sitemap.xml

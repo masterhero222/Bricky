@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -216,7 +217,10 @@ export default function AdminBackoffice() {
               Sprint 3 v2 data core operations
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/admin/knowledge" className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 px-4 py-2 text-sm font-semibold text-emerald-200">
+              <Plus size={16} /> Център за ремонти
+            </Link>
             <button
               onClick={load}
               className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold"
