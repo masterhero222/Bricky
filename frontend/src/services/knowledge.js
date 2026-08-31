@@ -1,8 +1,9 @@
 import api from './api';
+import { localizeKnowledgeMetadata } from '../components/knowledge/metadata';
 
 // CMS always uses the authenticated backend, never the legacy localStorage mock.
 export const knowledgeApi = {
-  metadata: (admin = false, signal) => api.get(`${admin ? '/admin' : ''}/knowledge/metadata`, { signal }).then(r => r.data),
+  metadata: (admin = false, signal) => api.get(`${admin ? '/admin' : ''}/knowledge/metadata`, { signal }).then(r => localizeKnowledgeMetadata(r.data)),
   list: (params = {}, admin = false, signal) => api.get(`${admin ? '/admin' : ''}/knowledge/articles`, { params, signal }).then(r => r.data),
   article: (slug, signal) => api.get(`/knowledge/articles/${encodeURIComponent(slug)}`, { signal }).then(r => r.data),
   edit: id => api.get(`/admin/knowledge/articles/${id}`).then(r => r.data),

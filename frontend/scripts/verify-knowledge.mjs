@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { localizeKnowledgeMetadata } from '../src/components/knowledge/metadata.js';
 import { articleOutline, articlePath, calculatorPath, newTextBlock, readingMinutes, safeImage, splitTextWithImage } from '../src/components/knowledge/content.js';
+
+test('production catalog labels are localized without replacing IDs or unknown categories', () => {
+  const category = { id: 42, categoryKey: 'bathroom_renovation', label: 'Bathroom renovation', description: '', isActive: true };
+  const custom = { id: 73, categoryKey: 'custom', label: 'Custom' };
+  const data = { rubrics: [], categories: [category, custom] };
+  const result = localizeKnowledgeMetadata(data);
+  assert.equal(result.categories[0].label, 'Ремонт на баня');
+  assert.equal(result.categories[0].id, 42);
+  assert.equal(result.categories[1], custom);
+  assert.equal(data.categories[0].label, 'Bathroom renovation');
+  assert.equal(localizeKnowledgeMetadata({categories:[{...category,label:'Баня по поръчка'}]}).categories[0].label, 'Баня по поръчка');
+});
 
 test('outline uses real Markdown headings, excluding fenced examples', () => {
   const blocks = [{ id: 'text-1', type: 'text', markdown: '# Start\n\n```md\n## Hidden\n```\n\n## Real **heading**\n\n### Detail' }, { id: 'image-1', type: 'image' }];
