@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Eye, FilePlus2, Pencil, Save, Search, Trash2, X } from 'lucide-react';
-import { knowledgeApi, knowledgeError } from '../../services/knowledge';
+import { knowledgeApi, knowledgeError, validateKnowledgeArticle } from '../../services/knowledge';
 import { articlePath, contentTypeLabels, newTextBlock } from '../../components/knowledge/content';
 import ContentEditor, { ImageFields, ToolButton, UploadButton } from '../../components/knowledge/ContentEditor';
 import KnowledgeArticleView from '../../components/knowledge/KnowledgeArticleView';
@@ -59,8 +59,11 @@ export default function KnowledgeAdmin() {
   async function edit(id) { setBusy(true); setError(''); try { open(await knowledgeApi.edit(id)); } catch (e) { setError(knowledgeError(e)); } finally { setBusy(false); } }
   async function save(status) {
     if (status === 'draft' && article.status === 'published' && !window.confirm('Да сваля ли статията от публичния сайт?')) return;
+    const nextArticle = { ...payload(article), status };
+    const validationError = validateKnowledgeArticle(nextArticle);
+    if (validationError) { setError(validationError); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setBusy(true); setError(''); setNotice('');
-    try { const saved = editable(await knowledgeApi.save({ ...payload(article), status })); setArticle(saved); setBaseline(JSON.stringify(saved)); setNotice(status === 'published' ? 'Статията е публикувана.' : 'Черновата е запазена.'); await load(); }
+    try { const saved = editable(await knowledgeApi.save(nextArticle)); setArticle(saved); setBaseline(JSON.stringify(saved)); setNotice(status === 'published' ? 'Статията е публикувана.' : 'Черновата е запазена.'); await load(); }
     catch (e) { setError(knowledgeError(e)); } finally { setBusy(false); }
   }
   async function remove(item) {
@@ -87,7 +90,7 @@ export default function KnowledgeAdmin() {
     {!metadata ? <div className="knowledge-empty">{loading ? 'Зареждане...' : <button onClick={load}>Опитай отново</button>}</div> : article ? <>
       <div className="cms-editor-bar"><button disabled={busy} onClick={close}><ArrowLeft size={17} />Статии</button><span className={`cms-status ${article.status}`}>{article.status === 'published' ? 'Публикувана' : 'Чернова'}{dirty ? ' · Незапазени промени' : ''}</span><div className="cms-editor-actions"><button disabled={busy} onClick={() => setPreview(v => !v)}><Eye size={17} />{preview ? 'Редактирай' : 'Преглед'}</button><button disabled={busy} onClick={() => save(article.status)}><Save size={17} />Запази</button>{article.status === 'draft' ? <button className="cms-primary" disabled={busy} onClick={() => save('published')}><Check size={17} />Публикувай</button> : <button disabled={busy} onClick={() => save('draft')}>Свали от сайта</button>}</div></div>
       {preview ? <section className="cms-preview"><KnowledgeArticleView article={payload(article)} metadata={metadata} preview /></section> : <fieldset className="cms-editor-fieldset" disabled={busy}><div className="cms-editor-layout"><div className="cms-editor-content">
-        <section className="cms-editor-section"><label className="cms-title-label">Заглавие<input value={article.title} maxLength={240} onChange={e => change('title', e.target.value)} /></label><label>Кратко описание<textarea rows={3} maxLength={1000} value={article.excerpt} onChange={e => change('excerpt', e.target.value)} /></label></section>
+        <section className="cms-editor-section"><label className="cms-title-label">Заглавие<input value={article.title} maxLength={240} onChange={e => change('title', e.target.value)} /></label><label>Кратко описание<textarea rows={3} maxLength={1000} value={article.excerpt} onChange={e => change('excerpt', e.target.value)} /><span className="cms-muted">{article.excerpt.length} / 1000 знака</span></label></section>
         <section className="cms-editor-section"><div className="cms-section-heading"><h2>Основно изображение</h2>{article.heroImage && <ToolButton icon={Trash2} label="Премахни основното изображение" onClick={() => change('heroImage', null)} />}</div>{article.heroImage && <ImageFields image={article.heroImage} onChange={image => change('heroImage', image)} />}<UploadButton label={article.heroImage ? 'Замени изображението' : 'Качи основно изображение'} onUpload={async files => { const images = await upload(files.slice(0, 1)); if (images) change('heroImage', images[0]); }} /></section>
         <ContentEditor blocks={article.blocks} onChange={blocks => change('blocks', blocks)} upload={upload} busy={busy} />
       </div><aside className="cms-editor-sidebar">

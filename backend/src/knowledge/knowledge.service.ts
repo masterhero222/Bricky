@@ -114,7 +114,12 @@ export class KnowledgeService {
   }
 
   async saveRubric(adminUserId: number, body: any, id?: number) {
-    const value = { slug: slug(body?.slug, 80), label: text(body?.label, 140, true), description: text(body?.description ?? '', 1000), sortOrder: Number(body?.sortOrder || 0) };
+    const value = {
+      slug: slug(body?.slug, 80),
+      label: text(body?.label, 140, true, 'Името на рубриката'),
+      description: text(body?.description ?? '', 1000, false, 'Описанието на рубриката'),
+      sortOrder: Number(body?.sortOrder || 0),
+    };
     if (!Number.isSafeInteger(value.sortOrder) || Math.abs(value.sortOrder) > 10000 || ['articles', 'metadata', 'sitemap'].includes(value.slug)) throw new BadRequestException('Невалидна рубрика');
     return this.db.transaction(async manager => {
       const repo = manager.getRepository(KnowledgeRubric);

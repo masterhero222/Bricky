@@ -35,6 +35,11 @@ describe('Knowledge validation', () => {
     expect(result.map(b => b.id)).toEqual(['a', 'b']);
     expect((result[0] as any).image.caption).toBe('Преди ремонта');
   });
+  it('identifies the exact field and limit in validation errors', () => {
+    expect(() => articleInput({ ...draft(), excerpt: 'а'.repeat(1001) })).toThrow('Краткото описание е до 1000 знака (в момента: 1001)');
+    expect(() => articleInput({ ...draft(), tags: ['а'.repeat(101)] })).toThrow('Етикетите, запис 1 е до 100 знака (в момента: 101)');
+    expect(() => articleInput({ ...draft(), status: 'published', excerpt: 'Описание', heroImage: { ...photo(), alt: '' } })).toThrow('Основното изображение: описанието (alt) е задължително');
+  });
 });
 
 describe('Knowledge admin guard', () => {
