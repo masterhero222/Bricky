@@ -8,6 +8,8 @@ import {
 } from '../utils/passwordPolicy';
 
 import { REPAIR_CATEGORY_OPTIONS } from '../constants/repairCatalog';
+import { PRIVACY_VERSION, TERMS_VERSION } from '../constants/legal';
+import { Link } from 'react-router-dom';
 
 const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
   key: category.key,
@@ -33,12 +35,18 @@ export default function Register() {
     phone: '',
     city: '',
     skills: [],
+    legalAccepted: false,
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const change = (e) =>
+    setForm({
+      ...form,
+      [e.target.name]:
+        e.target.type === 'checkbox' ? e.target.checked : e.target.value,
+    });
 
   const toggleSkill = (s) => {
     const exists = form.skills.includes(s);
@@ -75,6 +83,9 @@ export default function Register() {
             name: form.name,
             email: form.email,
             password: form.password,
+            legalAccepted: form.legalAccepted,
+            termsVersion: TERMS_VERSION,
+            privacyVersion: PRIVACY_VERSION,
           }
         : {
             role: 'worker',
@@ -84,6 +95,9 @@ export default function Register() {
             phone: form.phone,
             city: form.city,
             skills: form.skills,
+            legalAccepted: form.legalAccepted,
+            termsVersion: TERMS_VERSION,
+            privacyVersion: PRIVACY_VERSION,
           };
 
     if (referralCode.trim()) payload.referralCode = referralCode.trim();
@@ -266,8 +280,30 @@ export default function Register() {
           required
         />
 
+        <label className="flex items-start gap-3 rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+          <input
+            name="legalAccepted"
+            type="checkbox"
+            checked={form.legalAccepted}
+            onChange={change}
+            className="mt-1 h-4 w-4 accent-emerald-500"
+            required
+          />
+          <span>
+            Прочетох и приемам{' '}
+            <Link className="font-bold text-emerald-300 underline" to="/terms" target="_blank">
+              Условията за ползване
+            </Link>{' '}
+            и{' '}
+            <Link className="font-bold text-emerald-300 underline" to="/privacy" target="_blank">
+              Политиката за поверителност
+            </Link>
+            .
+          </span>
+        </label>
+
         <button
-          disabled={submitting || Boolean(success)}
+          disabled={submitting || Boolean(success) || !form.legalAccepted}
           className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 p-3 rounded font-bold"
         >
           {submitting ? 'Регистриране...' : 'Регистрация'}

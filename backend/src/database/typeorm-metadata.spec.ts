@@ -22,6 +22,9 @@ import { RequestPricingSnapshotEntity } from '../requests/entities/request-prici
 import { ReviewEntity } from '../reviews/entities/review.entity';
 import { ClientProfileEntity } from '../users/client-profile.entity';
 import { UserEntity } from '../users/user.entity';
+import { DataSubjectRequestEntity } from '../privacy/data-subject-request.entity';
+import { PrivacyPreferenceEntity } from '../privacy/privacy-preference.entity';
+import { UserLegalAcceptanceEntity } from '../privacy/user-legal-acceptance.entity';
 import { WorkerGalleryImage } from '../workers/worker-gallery-image.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 import { WorkerSkillEntity } from '../workers/worker-skill.entity';
@@ -53,6 +56,9 @@ const activeEntities: EntityTarget<ObjectLiteral>[] = [
   ReferralRewardEntity,
   AdminAuditLogEntity,
   PasswordResetTokenEntity,
+  UserLegalAcceptanceEntity,
+  PrivacyPreferenceEntity,
+  DataSubjectRequestEntity,
 ];
 
 describe('TypeORM application metadata', () => {
@@ -88,6 +94,9 @@ describe('TypeORM application metadata', () => {
     );
     expect(dataSource.getMetadata(AdminAuditLogEntity).tableName).toBe(
       'admin_action_audit_logs',
+    );
+    expect(dataSource.getMetadata(DataSubjectRequestEntity).tableName).toBe(
+      'data_subject_requests',
     );
   });
 });

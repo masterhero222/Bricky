@@ -8,6 +8,8 @@ import {
 } from '../../utils/passwordPolicy';
 
 import { REPAIR_CATEGORY_OPTIONS } from '../../constants/repairCatalog';
+import { PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
+import { Link } from 'react-router-dom';
 
 const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
   key: category.key,
@@ -26,13 +28,18 @@ export default function WorkersRegister() {
     phone: '',
     city: '',
     skills: [],
+    legalAccepted: false,
   });
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm({
+      ...form,
+      [e.target.name]:
+        e.target.type === 'checkbox' ? e.target.checked : e.target.value,
+    });
   };
 
   const handleSkillToggle = (skill) => {
@@ -77,6 +84,9 @@ export default function WorkersRegister() {
       phone: form.phone,
       city: form.city,
       skills: form.skills,
+      legalAccepted: form.legalAccepted,
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
     };
     if (referralCode.trim()) payload.referralCode = referralCode.trim();
 
@@ -99,6 +109,7 @@ export default function WorkersRegister() {
         phone: '',
         city: '',
         skills: [],
+        legalAccepted: false,
       });
     } catch {
       setError('Грешка при регистрацията');
@@ -217,8 +228,23 @@ export default function WorkersRegister() {
         {error && <p className="text-red-400">{error}</p>}
         {success && <p className="text-green-400">{success}</p>}
 
+        <label className="flex items-start gap-3 rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+          <input
+            name="legalAccepted"
+            type="checkbox"
+            checked={form.legalAccepted}
+            onChange={handleChange}
+            className="mt-1 h-4 w-4 accent-emerald-500"
+            required
+          />
+          <span>
+            Приемам <Link to="/terms" target="_blank" className="font-bold text-emerald-300 underline">Условията</Link> и <Link to="/privacy" target="_blank" className="font-bold text-emerald-300 underline">Политиката за поверителност</Link>.
+          </span>
+        </label>
+
         <button
           type="submit"
+          disabled={!form.legalAccepted}
           className="w-full bg-blue-600 py-3 rounded font-bold"
         >
           Регистрация

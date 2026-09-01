@@ -13,6 +13,7 @@ const BlogIndex = lazy(() => import('./pages/knowledge/KnowledgeIndex').then(mod
 const BlogArticle = lazy(() => import('./pages/knowledge/KnowledgeArticle'));
 const KnowledgeIndex = lazy(() => import('./pages/knowledge/KnowledgeIndex'));
 const KnowledgeAdmin = lazy(() => import('./pages/knowledge/KnowledgeAdmin'));
+const PrivacyAdmin = lazy(() => import('./pages/PrivacyAdmin'));
 const BlogUnavailable = lazy(() => import('./pages/blog/BlogUnavailable'));
 const AuthGate = lazy(() => import('./pages/AuthGate'));
 const Login = lazy(() => import('./pages/Login'));
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/knowledge/:section" element={BLOG_ENABLED ? <KnowledgeIndex /> : <BlogUnavailable />} />
             <Route path="/knowledge/repairs/:repairKey" element={BLOG_ENABLED ? <KnowledgeIndex /> : <BlogUnavailable />} />
             <Route path="/admin/knowledge" element={<RequireAdmin><KnowledgeAdmin /></RequireAdmin>} />
+            <Route path="/admin/privacy" element={<RequireAdmin><PrivacyAdmin /></RequireAdmin>} />
             <Route
               path="/blog"
               element={BLOG_ENABLED ? <BlogIndex /> : <BlogUnavailable />}

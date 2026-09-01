@@ -25,6 +25,9 @@ describe('Bricky password policy', () => {
       name: 'Test Client',
       email: 'client@example.com',
       password,
+      legalAccepted: true,
+      termsVersion: '2026-09-01',
+      privacyVersion: '2026-09-01',
     });
     const reset = Object.assign(new ResetPasswordDto(), {
       token: 'a'.repeat(64),

@@ -13,6 +13,7 @@ import { MailService } from '../mail/mail.service';
 import { PasswordResetTokenEntity } from './password-reset-token.entity';
 import { UserEntity } from '../users/user.entity';
 import { EmailVerificationTokenEntity } from './email-verification-token.entity';
+import { PrivacyService } from '../privacy/privacy.service';
 
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -34,9 +35,14 @@ export class AuthService {
     private readonly passwordResetTokens: Repository<PasswordResetTokenEntity>,
     @InjectRepository(EmailVerificationTokenEntity)
     private readonly emailVerificationTokens: Repository<EmailVerificationTokenEntity>,
+    private readonly privacy: PrivacyService,
   ) {}
 
-  async register(dto: RegisterUserDto) {
+  async register(
+    dto: RegisterUserDto,
+    context: { ip?: string | null; userAgent?: string | null } = {},
+  ) {
+    this.privacy.assertCurrentAcceptance(dto);
     const exists = await this.users.findByEmail(dto.email);
     if (exists) throw new BadRequestException('Имейлът вече съществува');
 
@@ -75,6 +81,11 @@ export class AuthService {
           created.id,
           'client',
           manager,
+        );
+        await this.privacy.recordRegistrationAcceptance(
+          manager,
+          created.id,
+          context,
         );
         return created;
       });
@@ -131,6 +142,11 @@ export class AuthService {
           created.id,
           'worker',
           manager,
+        );
+        await this.privacy.recordRegistrationAcceptance(
+          manager,
+          created.id,
+          context,
         );
         return created;
       });

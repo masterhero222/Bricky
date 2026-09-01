@@ -20,7 +20,7 @@ export class AuthController {
   @Post('register')
   register(@Body() dto: RegisterUserDto, @Req() request: Request) {
     this.limit(request, 'register', 5, 60 * 60_000);
-    return this.auth.register(dto);
+    return this.auth.register(dto, this.registrationContext(request));
   }
 
   @Post('dev-login')
@@ -79,7 +79,10 @@ export class AuthController {
     @Req() request: Request,
   ) {
     this.limit(request, 'register', 5, 60 * 60_000);
-    return this.auth.register({ ...dto, role: 'client' });
+    return this.auth.register(
+      { ...dto, role: 'client' },
+      this.registrationContext(request),
+    );
   }
 
   @Post('register-worker')
@@ -88,7 +91,10 @@ export class AuthController {
     @Req() request: Request,
   ) {
     this.limit(request, 'register', 5, 60 * 60_000);
-    return this.auth.register({ ...dto, role: 'worker' });
+    return this.auth.register(
+      { ...dto, role: 'worker' },
+      this.registrationContext(request),
+    );
   }
 
   private limit(
@@ -99,5 +105,12 @@ export class AuthController {
   ) {
     const tracker = request.ip || request.socket.remoteAddress || 'unknown';
     this.rateLimit.consume(scope, tracker, limit, windowMs);
+  }
+
+  private registrationContext(request: Request) {
+    return {
+      ip: request.ip || request.socket.remoteAddress || null,
+      userAgent: request.get('user-agent') || null,
+    };
   }
 }

@@ -221,6 +221,9 @@ export default function AdminBackoffice() {
             <Link to="/admin/knowledge" className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 px-4 py-2 text-sm font-semibold text-emerald-200">
               <Plus size={16} /> Център за ремонти
             </Link>
+            <Link to="/admin/privacy" className="inline-flex items-center gap-2 rounded-md border border-cyan-500/40 px-4 py-2 text-sm font-semibold text-cyan-200">
+              <Save size={16} /> GDPR заявки
+            </Link>
             <button
               onClick={load}
               className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold"

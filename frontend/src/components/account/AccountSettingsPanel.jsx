@@ -10,6 +10,7 @@ import {
   Phone,
   Save,
   ShieldAlert,
+  FileText,
   UserRound,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut } from '../../services/api';
@@ -42,6 +43,11 @@ export default function AccountSettingsPanel({
   const [deactivationConfirmed, setDeactivationConfirmed] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [privacy, setPrivacy] = useState(null);
+  const [privacySaving, setPrivacySaving] = useState(false);
+  const [privacyRequestType, setPrivacyRequestType] = useState('access');
+  const [privacyRequestDetails, setPrivacyRequestDetails] = useState('');
+  const [privacyRequesting, setPrivacyRequesting] = useState(false);
 
   async function loadAccount() {
     setLoading(true);
@@ -67,7 +73,17 @@ export default function AccountSettingsPanel({
 
   useEffect(() => {
     loadAccount();
+    loadPrivacy();
   }, []);
+
+  async function loadPrivacy() {
+    try {
+      const response = await apiGet('/privacy/status');
+      setPrivacy(response.data);
+    } catch (requestError) {
+      setError(messageFrom(requestError, 'Настройките за поверителност не могат да бъдат заредени.'));
+    }
+  }
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -139,7 +155,7 @@ export default function AccountSettingsPanel({
     setError('');
     setExporting(true);
     try {
-      const response = await apiGet('/account/export');
+      const response = await apiGet('/privacy/export');
       const blob = new Blob([JSON.stringify(response.data, null, 2)], {
         type: 'application/json;charset=utf-8',
       });
@@ -156,6 +172,59 @@ export default function AccountSettingsPanel({
       setError(messageFrom(requestError, 'Данните не могат да бъдат изтеглени.'));
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function savePrivacyPreferences() {
+    setPrivacySaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await apiPut('/privacy/preferences', {
+        analyticsConsent: Boolean(privacy?.preferences?.analyticsConsent),
+        marketingConsent: Boolean(privacy?.preferences?.marketingConsent),
+      });
+      setPrivacy(response.data);
+      setMessage('Изборът за поверителност е запазен.');
+    } catch (requestError) {
+      setError(messageFrom(requestError, 'Изборът не можа да бъде запазен.'));
+    } finally {
+      setPrivacySaving(false);
+    }
+  }
+
+  async function acceptCurrentDocuments() {
+    setPrivacySaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await apiPost('/privacy/accept-current');
+      setPrivacy(response.data);
+      setMessage('Актуалните правни документи са отбелязани като прочетени и приети.');
+    } catch (requestError) {
+      setError(messageFrom(requestError, 'Приемането не можа да бъде записано.'));
+    } finally {
+      setPrivacySaving(false);
+    }
+  }
+
+  async function submitPrivacyRequest(event) {
+    event.preventDefault();
+    setPrivacyRequesting(true);
+    setMessage('');
+    setError('');
+    try {
+      await apiPost('/privacy/requests', {
+        requestType: privacyRequestType,
+        details: privacyRequestDetails,
+      });
+      setPrivacyRequestDetails('');
+      await loadPrivacy();
+      setMessage('Заявката е регистрирана. Ще получите отговор обичайно до един месец.');
+    } catch (requestError) {
+      setError(messageFrom(requestError, 'Заявката не можа да бъде регистрирана.'));
+    } finally {
+      setPrivacyRequesting(false);
     }
   }
 
@@ -426,6 +495,19 @@ export default function AccountSettingsPanel({
           <ShieldAlert className="text-cyan-300" /> Данни и поверителност
         </h2>
         <div className="mt-5 grid gap-6 lg:grid-cols-2">
+          {privacy && !privacy.acceptances?.some((item) => item.documentType === 'privacy' && item.documentVersion === privacy.versions?.privacyVersion) && (
+            <div className="rounded-xl border border-amber-400/25 bg-amber-500/5 p-5 lg:col-span-2">
+              <h3 className="font-extrabold text-amber-100">Актуализирани правни документи</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                Прегледайте актуалните Условия за ползване и Политика за поверителност. Незадължителните съгласия се управляват отделно по-долу.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <a href="/terms" target="_blank" rel="noreferrer" className="bricky-button-secondary">Условия</a>
+                <a href="/privacy" target="_blank" rel="noreferrer" className="bricky-button-secondary">Поверителност</a>
+                <button type="button" onClick={acceptCurrentDocuments} disabled={privacySaving} className="bricky-button-primary">Прочетох и приемам</button>
+              </div>
+            </div>
+          )}
           <div className="rounded-xl border border-slate-400/15 bg-slate-950/25 p-5">
             <h3 className="font-extrabold text-slate-100">Копие на данните</h3>
             <p className="mt-2 text-sm leading-6 text-slate-400">
@@ -442,6 +524,65 @@ export default function AccountSettingsPanel({
               {exporting ? 'Подготовка...' : 'Изтегли моите данни'}
             </button>
           </div>
+
+          <div className="rounded-xl border border-slate-400/15 bg-slate-950/25 p-5">
+            <h3 className="font-extrabold text-slate-100">Незадължително проследяване</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              В момента рекламни и незадължителни аналитични инструменти не се зареждат. Изборът ви се пази за бъдеща интеграция и може да бъде променен по всяко време.
+            </p>
+            {['analyticsConsent', 'marketingConsent'].map((key) => (
+              <label key={key} className="mt-4 flex items-center justify-between gap-4 text-sm font-bold text-slate-200">
+                {key === 'analyticsConsent' ? 'Аналитика' : 'Маркетингови съобщения'}
+                <input
+                  type="checkbox"
+                  checked={Boolean(privacy?.preferences?.[key])}
+                  onChange={(event) =>
+                    setPrivacy((current) => ({
+                      ...current,
+                      preferences: { ...current?.preferences, [key]: event.target.checked },
+                    }))
+                  }
+                  className="h-5 w-5 accent-emerald-500"
+                />
+              </label>
+            ))}
+            <button type="button" onClick={savePrivacyPreferences} disabled={privacySaving || !privacy} className="bricky-button-secondary mt-5">
+              <Save size={18} /> {privacySaving ? 'Запазване...' : 'Запази избора'}
+            </button>
+          </div>
+
+          <form onSubmit={submitPrivacyRequest} className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-5 lg:col-span-2">
+            <h3 className="flex items-center gap-2 font-extrabold text-slate-100"><FileText size={18} /> Искане относно лични данни</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Подайте проследимо искане за достъп, корекция, заличаване, ограничаване или възражение. Може да поискаме допълнително потвърждение на самоличността.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-[240px_1fr]">
+              <select value={privacyRequestType} onChange={(event) => setPrivacyRequestType(event.target.value)} className="min-h-12 rounded-lg border border-slate-400/20 bg-slate-950 px-3 text-slate-100">
+                <option value="access">Достъп</option>
+                <option value="rectification">Корекция</option>
+                <option value="erasure">Заличаване</option>
+                <option value="restriction">Ограничаване</option>
+                <option value="objection">Възражение</option>
+              </select>
+              <textarea value={privacyRequestDetails} onChange={(event) => setPrivacyRequestDetails(event.target.value)} minLength={5} maxLength={2000} required placeholder="Опишете точно какво искате..." className="min-h-28 rounded-lg border border-slate-400/20 bg-slate-950 p-3 text-slate-100" />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <a href="/privacy" className="text-sm font-bold text-cyan-300 underline">Прочети политиката</a>
+              <button type="submit" disabled={privacyRequesting || privacyRequestDetails.trim().length < 5} className="bricky-button-primary">
+                {privacyRequesting ? 'Изпращане...' : 'Регистрирай искането'}
+              </button>
+            </div>
+            {privacy?.requests?.length > 0 && (
+              <div className="mt-5 divide-y divide-slate-400/15 border-t border-slate-400/15">
+                {privacy.requests.slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
+                    <span>#{item.id} · {item.requestType}</span>
+                    <span className="font-bold text-cyan-200">{item.status} · срок {dateLabel(item.dueAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </form>
 
           <form
             onSubmit={deactivateAccount}
@@ -464,7 +605,7 @@ export default function AccountSettingsPanel({
                 value={deactivationPassword}
                 onChange={(event) => setDeactivationPassword(event.target.value)}
                 autoComplete="current-password"
-                minLength={8}
+                minLength={6}
                 required
                 className="min-h-12 w-full rounded-xl border border-slate-400/20 bg-slate-950/35 px-4 text-slate-100 outline-none focus:border-red-300/60"
               />
@@ -485,7 +626,7 @@ export default function AccountSettingsPanel({
               disabled={
                 deactivating ||
                 !deactivationConfirmed ||
-                deactivationPassword.length < 8
+                deactivationPassword.length < 6
               }
               className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-red-600 px-4 font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >

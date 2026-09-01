@@ -7,6 +7,7 @@ import {
   IsEnum,
   Matches,
   MaxLength,
+  IsBoolean,
 } from 'class-validator';
 import {
   BRICKY_PASSWORD_MAX_LENGTH,
@@ -59,4 +60,15 @@ export class RegisterUserDto {
   @MaxLength(BRICKY_PASSWORD_MAX_LENGTH)
   @Matches(BRICKY_PASSWORD_PATTERN, { message: BRICKY_PASSWORD_MESSAGE })
   password: string;
+
+  @IsBoolean()
+  legalAccepted: boolean;
+
+  @IsString()
+  @MaxLength(40)
+  termsVersion: string;
+
+  @IsString()
+  @MaxLength(40)
+  privacyVersion: string;
 }

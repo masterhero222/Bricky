@@ -10,6 +10,7 @@ describe('AuthService registration', () => {
   let mail: any;
   let passwordResetTokens: any;
   let emailVerificationTokens: any;
+  let privacy: any;
   let service: AuthService;
 
   beforeEach(() => {
@@ -65,6 +66,10 @@ describe('AuthService registration', () => {
         createdAt: new Date(),
       })),
     };
+    privacy = {
+      assertCurrentAcceptance: jest.fn(),
+      recordRegistrationAcceptance: jest.fn().mockResolvedValue(undefined),
+    };
     service = new AuthService(
       users,
       workers,
@@ -74,6 +79,7 @@ describe('AuthService registration', () => {
       mail,
       passwordResetTokens,
       emailVerificationTokens,
+      privacy,
     );
   });
 
@@ -100,6 +106,11 @@ describe('AuthService registration', () => {
       42,
       'client',
       manager,
+    );
+    expect(privacy.recordRegistrationAcceptance).toHaveBeenCalledWith(
+      manager,
+      42,
+      {},
     );
     expect(result.user.id).toBe(42);
   });
@@ -175,6 +186,24 @@ describe('AuthService registration', () => {
 
     expect(dataSource.transaction).not.toHaveBeenCalled();
     expect(users.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects registration when the current legal documents are not accepted', async () => {
+    privacy.assertCurrentAcceptance.mockImplementation(() => {
+      throw new BadRequestException('legal acceptance required');
+    });
+
+    await expect(
+      service.register({
+        role: 'client',
+        email: 'new@bricky.bg',
+        password: 'Password1',
+        profile: { displayName: 'Клиент' },
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(users.findByEmail).not.toHaveBeenCalled();
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('never exposes password fields after registration', async () => {

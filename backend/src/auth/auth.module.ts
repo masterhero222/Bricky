@@ -16,6 +16,7 @@ import { PasswordResetTokenEntity } from './password-reset-token.entity';
 import { MailModule } from '../mail/mail.module';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { EmailVerificationTokenEntity } from './email-verification-token.entity';
+import { PrivacyModule } from '../privacy/privacy.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EmailVerificationTokenEntity } from './email-verification-token.entity'
     WorkersModule,
     ReferralsModule,
     MailModule,
+    PrivacyModule,
     TypeOrmModule.forFeature([
       PasswordResetTokenEntity,
       EmailVerificationTokenEntity,
