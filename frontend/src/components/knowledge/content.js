@@ -2,7 +2,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import { toString } from 'mdast-util-to-string';
 
-export const contentTypeLabels = { ARTICLE: 'Статия', REPAIR_GUIDE: 'Ремонтно ръководство', PRICE_GUIDE: 'Ценово ръководство', REAL_PROJECT: 'Реален обект', RED_FLAG: 'Червен флаг', HOW_TO: 'Как се прави', BRICKY_GUIDE: 'Как работи Bricky' };
+export const contentTypeLabels = { ARTICLE: 'Статия', REPAIR_GUIDE: 'Ремонтно ръководство', TECHNICAL_GUIDE: 'Техническо ръководство', PRICE_GUIDE: 'Ценово ръководство', REAL_PROJECT: 'Реален обект', RED_FLAG: 'Червен флаг', HOW_TO: 'Как се прави', BRICKY_GUIDE: 'Как работи Bricky' };
 export const articlePath = article => `/blog/${article.slug}`;
 export const newTextBlock = (markdown = '') => ({ id: crypto.randomUUID(), type: 'text', markdown });
 export function splitTextWithImage(block, image, cursor) {

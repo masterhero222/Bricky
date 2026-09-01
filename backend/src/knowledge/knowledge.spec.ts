@@ -13,6 +13,7 @@ describe('Knowledge validation', () => {
     expect(() => articleInput({ ...draft(), status: 'published' })).toThrow(BadRequestException);
     expect(() => articleInput({ ...draft(), status: 'published', excerpt: 'Описание', blocks: [] })).toThrow(BadRequestException);
     expect(articleInput({ ...draft(), status: 'published', excerpt: 'Описание' }).status).toBe('published');
+    expect(articleInput({ ...draft(), contentType: 'TECHNICAL_GUIDE' }).contentType).toBe('TECHNICAL_GUIDE');
   });
   it('rejects HTML paths, remote image URLs, SVG and traversal', () => {
     for (const url of ['javascript:alert(1)', 'https://evil.test/image.jpg', '/uploads/knowledge/../secret.webp', '/uploads/knowledge/a.svg', '//evil.test/a.webp']) expect(() => image({ ...photo(), url })).toThrow(BadRequestException);

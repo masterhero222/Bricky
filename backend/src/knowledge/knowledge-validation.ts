@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { ContentBlock, EditorialImage } from './knowledge.entity';
 
-export const CONTENT_TYPES = ['ARTICLE', 'REPAIR_GUIDE', 'PRICE_GUIDE', 'REAL_PROJECT', 'RED_FLAG', 'HOW_TO', 'BRICKY_GUIDE'];
+export const CONTENT_TYPES = ['ARTICLE', 'REPAIR_GUIDE', 'TECHNICAL_GUIDE', 'PRICE_GUIDE', 'REAL_PROJECT', 'RED_FLAG', 'HOW_TO', 'BRICKY_GUIDE'];
 export function text(value: unknown, max: number, required = false, field = 'Полето'): string {
   if (typeof value !== 'string') throw new BadRequestException(`${field} е невалидно`);
   if (value.length > max) throw new BadRequestException(`${field} е до ${max} знака (в момента: ${value.length})`);
