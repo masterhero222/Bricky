@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Eye, FilePlus2, Pencil, Save, Search, Trash2, X } from 'lucide-react';
 import { knowledgeApi, knowledgeError, validateKnowledgeArticle } from '../../services/knowledge';
+import { clearKnowledgeDraft, readKnowledgeDraft, writeKnowledgeDraft } from '../../services/knowledgeDraft';
 import { articlePath, contentTypeLabels, newTextBlock } from '../../components/knowledge/content';
 import ContentEditor, { ImageFields, ToolButton, UploadButton } from '../../components/knowledge/ContentEditor';
 import KnowledgeArticleView from '../../components/knowledge/KnowledgeArticleView';
@@ -48,14 +49,25 @@ export default function KnowledgeAdmin() {
   }, [relatedQuery, editingId]);
   useEffect(() => {
     if (!dirty) return;
-    const unload = e => { e.preventDefault(); e.returnValue = ''; };
+    const backup = () => {
+      if (!writeKnowledgeDraft(window.sessionStorage, article)) setNotice('Браузърът не успя да запази резервно копие. Не затваряйте редактора преди записване.');
+    };
+    const timer = setTimeout(backup, 400);
+    const unload = e => { backup(); e.preventDefault(); e.returnValue = ''; };
     const leave = e => { const anchor = e.target.closest?.('a'); if (anchor && anchor.target !== '_blank' && !anchor.getAttribute('href')?.startsWith('#') && !window.confirm('Има незапазени промени. Да напусна ли редактора?')) { e.preventDefault(); e.stopPropagation(); } };
     window.addEventListener('beforeunload', unload); document.addEventListener('click', leave, true);
-    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('click', leave, true); };
-  }, [dirty]);
+    return () => { clearTimeout(timer); window.removeEventListener('beforeunload', unload); document.removeEventListener('click', leave, true); };
+  }, [dirty, article]);
   const change = (key, value) => { setNotice(''); setArticle(current => ({ ...current, [key]: value })); };
-  function open(value) { const next = editable(value); setArticle(next); setBaseline(JSON.stringify(next)); setError(''); setNotice(''); setPreview(false); }
-  function close() { if (busy || dirty && !window.confirm('Да затворя ли без записване?')) return; setArticle(null); setError(''); setNotice(''); setPreview(false); }
+  function open(value) {
+    const next = editable(value);
+    const recovered = readKnowledgeDraft(window.sessionStorage, next.slug);
+    const restore = recovered && JSON.stringify(recovered) !== JSON.stringify(next) && window.confirm('Има незапазена редакция в този таб. Да я възстановя ли?');
+    setArticle(restore ? { ...next, ...recovered, id: next.id, slug: next.slug, publishedAt: next.publishedAt } : next);
+    setBaseline(JSON.stringify(next)); setError(''); setNotice(restore ? 'Редакцията е възстановена. Проверете я и натиснете „Запази“.' : ''); setPreview(false);
+    if (!restore) clearKnowledgeDraft(window.sessionStorage, next.slug);
+  }
+  function close() { if (busy || dirty && !window.confirm('Да затворя ли без записване?')) return; clearKnowledgeDraft(window.sessionStorage, article.slug); setArticle(null); setError(''); setNotice(''); setPreview(false); }
   async function edit(id) { setBusy(true); setError(''); try { open(await knowledgeApi.edit(id)); } catch (e) { setError(knowledgeError(e)); } finally { setBusy(false); } }
   async function save(status) {
     if (status === 'draft' && article.status === 'published' && !window.confirm('Да сваля ли статията от публичния сайт?')) return;
@@ -63,7 +75,7 @@ export default function KnowledgeAdmin() {
     const validationError = validateKnowledgeArticle(nextArticle);
     if (validationError) { setError(validationError); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setBusy(true); setError(''); setNotice('');
-    try { const saved = editable(await knowledgeApi.save(nextArticle)); setArticle(saved); setBaseline(JSON.stringify(saved)); setNotice(status === 'published' ? 'Статията е публикувана.' : 'Черновата е запазена.'); await load(); }
+    try { const saved = editable(await knowledgeApi.save(nextArticle)); clearKnowledgeDraft(window.sessionStorage, article.slug); setArticle(saved); setBaseline(JSON.stringify(saved)); setNotice(status === 'published' ? 'Статията е публикувана.' : 'Черновата е запазена.'); await load(); }
     catch (e) { setError(knowledgeError(e)); } finally { setBusy(false); }
   }
   async function remove(item) {

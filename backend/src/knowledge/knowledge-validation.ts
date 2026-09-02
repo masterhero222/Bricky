@@ -2,6 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { ContentBlock, EditorialImage } from './knowledge.entity';
 
 export const CONTENT_TYPES = ['ARTICLE', 'REPAIR_GUIDE', 'TECHNICAL_GUIDE', 'PRICE_GUIDE', 'REAL_PROJECT', 'RED_FLAG', 'HOW_TO', 'BRICKY_GUIDE'];
+// UTF-8 limits leave room below the existing 1 MiB HTTP body limit.
+export const MAX_KNOWLEDGE_BLOCKS = 1000;
+export const MAX_KNOWLEDGE_BLOCK_BYTES = 900000;
+export const MAX_KNOWLEDGE_ARTICLE_BYTES = 950000;
 export function text(value: unknown, max: number, required = false, field = 'Полето'): string {
   if (typeof value !== 'string') throw new BadRequestException(`${field} е невалидно`);
   if (value.length > max) throw new BadRequestException(`${field} е до ${max} знака (в момента: ${value.length})`);
@@ -35,7 +39,9 @@ export function stringList(value: unknown, max = 30, field = 'Списъкът')
   return [...new Set(value.map((item, index) => text(item, 100, true, `${field}, запис ${index + 1}`)))];
 }
 export function blocks(value: unknown, published: boolean): ContentBlock[] {
-  if (!Array.isArray(value) || value.length > 100 || JSON.stringify(value).length > 200000) throw new BadRequestException('Статията е прекалено голяма');
+  if (!Array.isArray(value)) throw new BadRequestException('Невалидно съдържание на статията');
+  if (value.length > MAX_KNOWLEDGE_BLOCKS) throw new BadRequestException(`Статията може да съдържа до ${MAX_KNOWLEDGE_BLOCKS} блока (в момента: ${value.length}).`);
+  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_KNOWLEDGE_BLOCK_BYTES) throw new BadRequestException('Съдържанието надвишава 900 KB. Разделете материала на отделни статии.');
   const ids = new Set<string>();
   const result: ContentBlock[] = value.map((block: any, index) => {
     const id = text(block?.id, 80, true, `Блок ${index + 1}: идентификаторът`);
@@ -51,6 +57,7 @@ export function blocks(value: unknown, published: boolean): ContentBlock[] {
 }
 export function articleInput(body: any) {
   if (!body || typeof body !== 'object') throw new BadRequestException('Невалидна статия');
+  if (Buffer.byteLength(JSON.stringify(body), 'utf8') > MAX_KNOWLEDGE_ARTICLE_BYTES) throw new BadRequestException('Общият размер на статията надвишава 950 KB.');
   if (!['draft', 'published'].includes(body.status) || !CONTENT_TYPES.includes(body.contentType)) throw new BadRequestException('Невалиден статус или тип');
   const published = body.status === 'published';
   const rubricId = Number(body.rubricId);

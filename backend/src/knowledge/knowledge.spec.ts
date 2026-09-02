@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import sharp from 'sharp';
-import { articleInput, blocks, image, slug } from './knowledge-validation';
+import { articleInput, blocks, image, slug, MAX_KNOWLEDGE_BLOCKS } from './knowledge-validation';
 import { KnowledgeAdminGuard } from './knowledge-admin.guard';
 import { KnowledgeService } from './knowledge.service';
 
@@ -25,7 +25,7 @@ describe('Knowledge validation', () => {
     expect(() => blocks([{ id: 'a', type: 'text', markdown: 'a' }, { id: 'a', type: 'image', image: photo() }], false)).toThrow(BadRequestException);
   });
   it('rejects excessive blocks, galleries, tag lists and invalid foreign ids', () => {
-    expect(() => blocks(Array(101).fill({ id: 'a', type: 'text', markdown: '' }), false)).toThrow();
+    expect(() => blocks(Array.from({ length: MAX_KNOWLEDGE_BLOCKS + 1 }, (_, i) => ({ id: `b-${i}`, type: 'text', markdown: '' })), false)).toThrow('до 1000 блока');
     expect(() => blocks([{ id: 'a', type: 'gallery', images: [] }], false)).toThrow();
     expect(() => articleInput({ ...draft(), tags: 'string' })).toThrow();
     expect(() => articleInput({ ...draft(), rubricId: '1 OR 1=1' })).toThrow();
@@ -35,6 +35,20 @@ describe('Knowledge validation', () => {
     const result = blocks([{ id: 'a', type: 'image', image: { ...photo(), caption: 'Преди ремонта', align: 'right', kind: 'infographic' } }, ...draft().blocks.map(b => ({ ...b, id: 'b' }))], true);
     expect(result.map(b => b.id)).toEqual(['a', 'b']);
     expect((result[0] as any).image.caption).toBe('Преди ремонта');
+  });
+  it.each([101, 250, 1000])('saves and publishes illustrated guides with %i blocks without truncation', count => {
+    const content = Array.from({ length: count }, (_, i) => i % 2
+      ? { id: `b-${i}`, type: 'image', image: photo() }
+      : { id: `b-${i}`, type: 'text', markdown: '## Покрив\n\nПроверка на основата.' });
+    for (const status of ['draft', 'published']) {
+      expect(articleInput({ ...draft(), status, excerpt: 'Ръководство', blocks: content }).blocks).toEqual(content);
+    }
+  });
+  it('bounds UTF-8 content and complete payloads below the HTTP limit', () => {
+    const content = Array.from({ length: 4 }, (_, i) => ({ id: `b-${i}`, type: 'text', markdown: 'я'.repeat(100000) }));
+    expect(blocks(content, true)).toHaveLength(4);
+    expect(() => blocks([...content, { id: 'extra', type: 'text', markdown: 'я'.repeat(60000) }], true)).toThrow('900 KB');
+    expect(() => articleInput({ ...draft(), extra: 'я'.repeat(475000) })).toThrow('950 KB');
   });
   it('identifies the exact field and limit in validation errors', () => {
     expect(() => articleInput({ ...draft(), excerpt: 'а'.repeat(1001) })).toThrow('Краткото описание е до 1000 знака (в момента: 1001)');
