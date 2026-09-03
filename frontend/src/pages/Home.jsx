@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import useDocumentMeta from '../hooks/useDocumentMeta';
+import './Home.css';
 
 const steps = [
   {
@@ -33,28 +34,30 @@ export default function Home() {
     description:
       'Създайте ремонтна заявка, сравнете проверени профили и проследете работата до нейното завършване.',
     canonicalPath: '/',
-    image: '/media_files/deal_client.png',
+    image: '/assets/home/bricky-home-1672.webp',
   });
 
   return (
     <div className="bg-[#07111f] text-white">
-      <section className="relative flex min-h-[calc(100vh-118px)] items-center overflow-hidden border-b border-slate-400/15">
-        <div className="absolute inset-0 bg-[#030912]" aria-hidden="true" />
+      <section className="home-hero" aria-labelledby="home-title">
+        <div className="home-hero-art" aria-hidden="true">
+          <img src="/assets/home/bricky-home-1672.webp" srcSet="/assets/home/bricky-home-960.webp 960w, /assets/home/bricky-home-1672.webp 1672w" sizes="(max-width: 767px) 700px, (max-width: 1200px) 1000px, 1672px" width="1672" height="941" alt="" fetchPriority="high" decoding="async" />
+        </div>
 
-        <div className="bricky-container relative z-10 py-20">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 border-l-2 border-emerald-400 bg-black/35 px-4 py-2 text-sm font-bold text-emerald-200">
+        <div className="bricky-container home-hero-content">
+          <div className="home-hero-copy">
+            <div className="home-hero-trial">
               <BadgeCheck size={18} /> 30 дни безплатен достъп при публичния
               старт
             </div>
-            <h1 className="mt-7 text-5xl font-extrabold leading-tight sm:text-6xl lg:text-7xl">
+            <h1 id="home-title">
               Bricky
             </h1>
-            <p className="mt-5 max-w-2xl text-xl leading-8 text-slate-200 sm:text-2xl">
+            <p className="home-hero-description">
               Ремонтни заявки, проверени профили и ясен процес от първата снимка
               до завършения обект.
             </p>
-            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+            <div className="home-hero-actions">
               <Link
                 to="/auth/register?role=client"
                 className="bricky-button-primary"
@@ -65,7 +68,7 @@ export default function Home() {
                 Разгледай майстори
               </Link>
             </div>
-            <p className="mt-5 text-sm text-slate-400">
+            <p className="home-hero-note">
               Без платежна карта и без автоматично таксуване през стартовия
               период.
             </p>
