@@ -10,21 +10,23 @@
 
 .home-hero-art {
   position: absolute;
-  inset: 0 0 0 180px;
+  inset: 0 0 0 max(540px, calc((100% - 1440px) / 2 + 540px));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   pointer-events: none;
-  mask-image: linear-gradient(to right, transparent, black 18%), linear-gradient(to bottom, transparent, black 18%);
-  mask-composite: intersect;
+  mix-blend-mode: lighten;
 }
 
 .home-hero-art img {
-  position: absolute;
-  right: 0;
-  bottom: 0;
+  display: block;
+  flex: none;
   width: auto;
-  height: 110%;
+  height: auto;
   max-width: 100%;
-  object-fit: contain;
-  object-position: right bottom;
+  max-height: 100%;
+  mask-image: linear-gradient(to right, transparent, black 5%, black 98%, transparent), linear-gradient(to bottom, transparent, black 4%, black 98%, transparent);
+  mask-composite: intersect;
 }
 
 .home-hero-content { position: relative; z-index: 1; padding-block: 64px; }
@@ -38,13 +40,9 @@
 .home-hero-actions a:focus-visible { outline: 2px solid white; outline-offset: 5px; }
 .home-hero-note { max-width: 510px; margin-top: 22px; font-size: 13px; line-height: 1.6; color: #9caec1; }
 
-@media (min-width: 1800px) {
-  .home-hero-art { left: 220px; }
-}
-
 @media (min-width: 768px) and (max-width: 1199px) {
   .home-hero { min-height: min(820px, calc(100svh - 118px)); }
-  .home-hero-art { left: 180px; }
+  .home-hero-art { left: 390px; }
   .home-hero-copy { max-width: 350px; }
   .home-hero h1 { font-size: 56px; }
   .home-hero-description { font-size: 19px; }
@@ -64,8 +62,7 @@
   .home-hero-actions a { min-height: 48px; padding: 8px; font-size: 13px; line-height: 1.4; gap: 6px; text-align: center; }
   .home-hero-actions svg { width: 16px; flex-shrink: 0; }
   .home-hero-note { margin-top: 14px; font-size: 11px; line-height: 1.5; }
-  .home-hero-art { position: relative; inset: auto; order: 1; width: 100%; height: clamp(180px, calc(100svh - 470px), 290px); margin-top: 8px; mask-image: linear-gradient(to bottom, transparent, black 12%); }
-  .home-hero-art img { height: 100%; max-width: none; }
+  .home-hero-art { position: relative; inset: auto; order: 1; width: 100%; height: clamp(180px, calc(100svh - 470px), 290px); margin-top: 8px; justify-content: center; }
 }
 
 @media (max-width: 767px) and (max-height: 700px) {

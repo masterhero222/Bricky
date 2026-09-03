@@ -34,14 +34,14 @@ export default function Home() {
     description:
       'Създайте ремонтна заявка, сравнете проверени профили и проследете работата до нейното завършване.',
     canonicalPath: '/',
-    image: '/assets/home/bricky-home-1672.webp',
+    image: '/assets/home/bricky-home-v2-1536.webp',
   });
 
   return (
     <div className="bg-[#07111f] text-white">
       <section className="home-hero" aria-labelledby="home-title">
         <div className="home-hero-art" aria-hidden="true">
-          <img src="/assets/home/bricky-home-1672.webp" srcSet="/assets/home/bricky-home-960.webp 960w, /assets/home/bricky-home-1672.webp 1672w" sizes="(max-width: 767px) 700px, (max-width: 1200px) 1000px, 1672px" width="1672" height="941" alt="" fetchPriority="high" decoding="async" />
+          <img src="/assets/home/bricky-home-v2-1536.webp" srcSet="/assets/home/bricky-home-v2-960.webp 960w, /assets/home/bricky-home-v2-1536.webp 1536w" sizes="(max-width: 767px) 440px, (max-width: 1200px) 700px, 1200px" width="1536" height="1024" alt="" fetchPriority="high" decoding="async" />
         </div>
 
         <div className="bricky-container home-hero-content">

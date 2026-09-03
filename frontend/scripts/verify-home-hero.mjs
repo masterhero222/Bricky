@@ -26,8 +26,8 @@ try {
       const rect = image.getBoundingClientRect();
       const drawnWidth = Math.min(rect.width, rect.height * image.naturalWidth / image.naturalHeight);
       const drawnHeight = drawnWidth * image.naturalHeight / image.naturalWidth;
-      const subjectLeft = rect.right - drawnWidth * 0.705;
-      const subjectTop = rect.bottom - drawnHeight * 0.57;
+      const subjectLeft = rect.right - drawnWidth * 0.97;
+      const subjectTop = rect.bottom - drawnHeight * 0.99;
       return { overflow: document.documentElement.scrollWidth > innerWidth + 1, heroBottom: hero.bottom, nextSectionVisible: hero.bottom < innerHeight, artWidth: drawnWidth, imageLoaded: image.naturalWidth > 0, textOnSubject: copy.bottom > subjectTop && copy.right > subjectLeft && copy.top < rect.bottom, copyBottom: copy.bottom, subjectTop };
     });
     assert.equal(layout.overflow, false, `${width}: overflow`);
