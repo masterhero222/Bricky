@@ -6,7 +6,6 @@ import { apiGet, apiPost, apiPut } from '../../services/api';
 import {
   isDevMockToken,
   saveDevWorkerProfile,
-  updateDevWorkerAppearance,
   uploadDevWorkerAvatar,
   uploadDevWorkerGallery,
 } from '../../services/devMockApi';
@@ -21,7 +20,6 @@ import {
   cleanRequestDescription,
   formatRequestExpectedRange,
 } from '../../utils/requestPresentation';
-import { DEFAULT_WORKER_BANNER_KEY } from '../../constants/workerBannerCatalog';
 import AccountSettingsPanel from '../../components/account/AccountSettingsPanel';
 import ReportContentButton from '../../components/ReportContentButton';
 import {
@@ -141,7 +139,6 @@ export default function WorkerProfile() {
     equipment: '',
     avatar: null,
     avatarUrl: '',
-    profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
     skills: [],
     skillKeys: [],
     approvalStatus: '',
@@ -359,7 +356,6 @@ export default function WorkerProfile() {
         experience: w.experience || '',
         equipment: w.equipment || '',
         avatarUrl: w.avatarUrl || '',
-        profileBannerKey: w.profileBannerKey || DEFAULT_WORKER_BANNER_KEY,
         skills: Array.isArray(w.skills) ? w.skills : [],
         skillKeys: Array.isArray(w.skillKeys) ? w.skillKeys : [],
         approvalStatus:
@@ -553,6 +549,7 @@ export default function WorkerProfile() {
     if (!file) return;
     setPreviewAvatar(URL.createObjectURL(file));
     setProfile((p) => ({ ...p, avatar: file }));
+    e.target.value = '';
   };
 
   async function uploadAvatarIfNeeded() {
@@ -581,7 +578,6 @@ export default function WorkerProfile() {
     const res = await axios.post(`${getApiBase()}/workers/me/avatar`, fd, {
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data',
       },
     });
 
@@ -613,10 +609,6 @@ export default function WorkerProfile() {
           description: profile.description,
           experience: profile.experience,
           skills: profile.skills,
-          profileBannerKey: profile.profileBannerKey,
-        });
-        await updateDevWorkerAppearance({
-          profileBannerKey: profile.profileBannerKey,
         });
       } else {
         const res = await apiPut('/workers/me', {
@@ -638,12 +630,6 @@ export default function WorkerProfile() {
         equipment: updated?.equipment || p.equipment,
         avatarUrl: updated?.avatarUrl || p.avatarUrl,
       }));
-
-      if (!isDevMockToken()) {
-        await apiPut('/workers/me/appearance', {
-          profileBannerKey: profile.profileBannerKey,
-        });
-      }
 
       if (updated?.avatarUrl && !profile.avatar)
         setPreviewAvatar(absUrl(updated.avatarUrl));
@@ -726,7 +712,6 @@ export default function WorkerProfile() {
       await axios.post(`${getApiBase()}/workers/me/gallery`, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
         },
       });
 

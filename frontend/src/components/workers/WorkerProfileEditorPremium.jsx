@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BriefcaseBusiness,
   Camera,
@@ -13,15 +13,21 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { getAllowedBanners, resolveWorkerBanner } from "../../constants/workerBannerCatalog";
 import "./WorkerProfileEditorPremium.css";
 
-const EDITABLE_KEYS = ["fullName", "city", "description", "experience", "profileBannerKey", "skills"];
+const EDITABLE_KEYS = ["fullName", "city", "description", "experience", "skills", "avatar"];
+
+function snapshotValue(key, value) {
+  if (key === "avatar" && value) {
+    return `${value.name || "image"}:${value.size || 0}:${value.lastModified || 0}`;
+  }
+  return Array.isArray(value) ? [...value].sort() : value || "";
+}
 
 function snapshot(profile) {
   return JSON.stringify(
     Object.fromEntries(
-      EDITABLE_KEYS.map((key) => [key, Array.isArray(profile?.[key]) ? [...profile[key]].sort() : profile?.[key] || ""]),
+      EDITABLE_KEYS.map((key) => [key, snapshotValue(key, profile?.[key])]),
     ),
   );
 }
@@ -48,7 +54,6 @@ export default function WorkerProfileEditorPremium({
   const [tab, setTab] = useState("main");
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [saveState, setSaveState] = useState("idle");
-  const banners = useMemo(() => getAllowedBanners(), []);
   const currentSnapshot = snapshot(profile);
   const dirty = Boolean(savedSnapshot) && currentSnapshot !== savedSnapshot;
   const rating = Number(ratingInfo?.average || 0).toFixed(1);
@@ -72,7 +77,7 @@ export default function WorkerProfileEditorPremium({
     setSaveState("saving");
     const ok = await onSave();
     if (ok) {
-      setSavedSnapshot(snapshot(profile));
+      setSavedSnapshot(snapshot({ ...profile, avatar: null }));
       setSaveState("saved");
     } else {
       setSaveState("error");
@@ -111,7 +116,6 @@ export default function WorkerProfileEditorPremium({
         <aside className="wpe-preview-panel">
           <h2><Eye size={19} /> Публичен изглед</h2>
           <div className="wpe-preview">
-            <div className="wpe-preview-banner"><img src={resolveWorkerBanner(profile.profileBannerKey).src} alt="" /></div>
             <div className="wpe-preview-body">
               <img className="wpe-preview-avatar" src={avatarSrc} alt="Профилна снимка" onError={avatarFallback} />
               <h3>{profile.fullName || "Вашето име"}</h3>
@@ -133,10 +137,9 @@ export default function WorkerProfileEditorPremium({
           <div className="wpe-editor-body">
             {tab === "main" && <>
               <div className="wpe-section">
-                <h3>Профилна снимка и банер</h3>
+                <h3>Профилна снимка</h3>
                 <div className="wpe-media-grid">
                   <div className="wpe-avatar-picker"><img src={avatarSrc} alt="Профилна снимка" onError={avatarFallback} /><label className="wpe-button wpe-button-secondary wpe-button-small"><Camera size={16} />Смени снимката<input type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarChange} /></label></div>
-                  <div><strong className="wpe-field-caption">Банер <span>(видим в публичния профил)</span></strong><div className="wpe-banner-options">{banners.map((banner) => <button key={banner.key} type="button" className={profile.profileBannerKey === banner.key ? "is-selected" : ""} onClick={() => update("profileBannerKey", banner.key)} aria-label={banner.label}><img src={banner.src} alt="" />{profile.profileBannerKey === banner.key && <CheckCircle2 size={22} />}</button>)}</div></div>
                 </div>
               </div>
               <div className="wpe-section"><h3>Професионална информация</h3><div className="wpe-field-grid"><label><span><UserRound size={17} />Име</span><input value={profile.fullName} onChange={(event) => update("fullName", event.target.value)} /></label><label><span><MapPin size={17} />Град</span><input value={profile.city} onChange={(event) => update("city", event.target.value)} /></label><label className="wpe-field-wide"><span><BriefcaseBusiness size={17} />Опит</span><input value={profile.experience} onChange={(event) => update("experience", event.target.value)} placeholder="Например: 8 години" /></label></div></div>

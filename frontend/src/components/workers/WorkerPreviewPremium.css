@@ -938,3 +938,9 @@
     animation: none;
   }
 }
+
+/* Profile banners were removed; keep a compact verification header. */
+.wpp-header{min-height:64px;display:flex;align-items:center;justify-content:flex-end;padding:8px 30px;overflow:visible}
+.wpp-verified{grid-column:auto;grid-row:auto;align-self:auto;justify-self:auto;margin:0}
+@media(max-width:920px){.wpp-header{display:flex;padding:10px 22px}}
+@media(max-width:640px){.wpp-header{padding:8px 10px}}

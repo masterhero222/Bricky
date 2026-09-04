@@ -446,15 +446,25 @@ function writeDb(db) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(lean));
       return;
     } catch {
-      const minimal = {
+      const compact = {
         ...lean,
-        workers: (lean.workers || []).map((worker) => ({
-          ...worker,
-          gallery: [],
-        })),
+        workers: (lean.workers || []).map((worker) => ({ ...worker, gallery: [] })),
       };
+      const removable = (compact.media || [])
+        .filter((item) => String(item.publicUrl || '').startsWith('data:'))
+        .sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(minimal));
+      for (const item of removable) {
+        compact.media = compact.media.filter((entry) => entry !== item);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+          return;
+        } catch {
+          // Keep removing the oldest local preview until the mock database fits.
+        }
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
     }
   }
 }
@@ -568,7 +578,7 @@ export async function uploadDevWorkerAvatar(file) {
     createdAt: nowIso(),
   });
   writeDb(db);
-  return publicUser(worker, db);
+  return { ...publicUser(worker, db), avatarUrl: url, avatarModerationStatus: "pending" };
 }
 
 export async function uploadDevWorkerGallery(files = []) {
@@ -584,7 +594,7 @@ export async function uploadDevWorkerGallery(files = []) {
       workerUserId: worker.userId,
       userId: worker.userId,
       fileName: file.name,
-      publicUrl: await fileToDataUrl(file),
+      publicUrl: await fileToDataUrl(file, 520, 0.58),
       storageKey: file.name,
       moderationStatus: "pending",
       created_at: nowIso(),
@@ -957,6 +967,23 @@ function publicUser(user, db = null) {
       ? user.profileBannerKey
       : DEFAULT_WORKER_BANNER_KEY,
   };
+}
+
+function ownerWorkerUser(user, db) {
+  const result = publicUser(user, db);
+  if (!result) return result;
+  const latestAvatar = (Array.isArray(db?.media) ? db.media : [])
+    .filter((item) => item.kind === "worker_avatar")
+    .filter((item) => Number(item.workerUserId || item.ownerUserId) === Number(user.userId || user.id))
+    .filter((item) => item.moderationStatus !== "rejected")
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  return latestAvatar
+    ? {
+        ...result,
+        avatarUrl: latestAvatar.publicUrl || latestAvatar.url || result.avatarUrl,
+        avatarModerationStatus: latestAvatar.moderationStatus || "pending",
+      }
+    : result;
 }
 
 function publicWorker(user, db) {
@@ -2001,7 +2028,7 @@ export async function mockRequest(method, url, data) {
     return response(mockWorkerOnboardingState(db, worker));
   }
 
-  if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId), db));
+  if (method === "get" && path === "/workers/me") return response(ownerWorkerUser(db.workers.find((w) => Number(w.userId) === userId), db));
   if (method === "get" && path === "/workers") {
     return response(
       db.workers

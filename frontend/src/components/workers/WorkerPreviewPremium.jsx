@@ -8,7 +8,6 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import WorkerBlueprintBanner from "./WorkerBlueprintBanner";
 import "./WorkerPreviewPremium.css";
 
 function Stars({ value = 0 }) {
@@ -73,7 +72,6 @@ function FeaturedProject({ project, onOpen }) {
 export default function WorkerPreviewPremium({
   worker,
   avatarSrc,
-  bannerKey,
   ratingInfo,
   detailsLoading = false,
   completedProjects = [],
@@ -99,8 +97,6 @@ export default function WorkerPreviewPremium({
     <main className="wpp-page worker-profile-premium">
       <article className="wpp-shell">
         <header className="wpp-header">
-          <WorkerBlueprintBanner bannerKey={bannerKey} />
-
           <div className="wpp-verified">
             <ShieldCheck aria-hidden="true" />
             <span>{approved ? "Проверен майстор" : "Профил в проверка"}</span>

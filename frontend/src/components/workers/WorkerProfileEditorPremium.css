@@ -2,3 +2,11 @@
 @media(max-width:1100px){.wpe-header,.wpe-heading{align-items:stretch;flex-direction:column}.wpe-actions .wpe-button{flex:1}.wpe-layout{grid-template-columns:1fr}.wpe-preview-panel{position:static}.wpe-preview{display:grid;grid-template-columns:40% 60%}.wpe-preview-banner{height:100%;min-height:470px}.wpe-preview-body{padding-top:95px}.wpe-preview-avatar{top:18px;width:120px;height:120px}}
 @media(max-width:720px){.wpe-heading h1{font-size:28px}.wpe-actions{display:grid}.wpe-completion{width:100%}.wpe-preview{display:block}.wpe-preview-banner{height:150px;min-height:0}.wpe-preview-body{padding:64px 18px 24px}.wpe-preview-avatar{top:-58px;width:116px;height:116px}.wpe-tabs{display:flex;overflow-x:auto}.wpe-tabs button{flex:0 0 138px}.wpe-media-grid,.wpe-field-grid,.wpe-rating-info{grid-template-columns:1fr}.wpe-avatar-picker{padding:0 0 16px;border-right:0;border-bottom:1px solid #294158}.wpe-field-wide{grid-column:auto}.wpe-banner-options{grid-template-columns:1fr 1fr}.wpe-rating-info>div:last-child{flex-wrap:wrap}.wpe-rating-info>div:last-child>span:last-child{width:100%}}
 @media(max-width:390px){.wpe-header{gap:15px}.wpe-actions{gap:8px}.wpe-preview-panel{padding:8px}.wpe-editor-body{padding:8px}.wpe-section{padding:13px}.wpe-banner-options{grid-template-columns:1fr}.wpe-field-grid label{grid-template-columns:1fr}.wpe-field-grid label>span{min-height:30px;border-right:0;border-bottom:1px solid #294158}.wpe-field-grid input{min-height:42px}}
+
+/* The profile uses one clear identity image; decorative profile banners are retired. */
+.wpe-preview-body{position:static;padding:34px;text-align:center}
+.wpe-preview-avatar{position:static;width:144px;height:144px;margin:0 auto 18px;transform:none}
+.wpe-media-grid{display:flex;align-items:center}
+.wpe-avatar-picker{padding-right:0;border-right:0}
+@media(max-width:1100px){.wpe-preview{display:block}.wpe-preview-body{padding-top:34px}.wpe-preview-avatar{width:120px;height:120px}}
+@media(max-width:720px){.wpe-preview-body{padding:28px 18px 24px}.wpe-preview-avatar{width:116px;height:116px}.wpe-media-grid{display:flex}.wpe-avatar-picker{padding-bottom:0;border-bottom:0}}

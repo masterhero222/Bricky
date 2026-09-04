@@ -151,8 +151,15 @@ describe('WorkersService media moderation', () => {
     });
 
     const worker = await service.findByUserId(201);
+    const ownerWorker = await service.findByUserId(201, {
+      includeUnapprovedMedia: true,
+    });
 
     expect(worker.avatarUrl).toBe('/uploads/users/201/avatar/approved.jpg');
+    expect(ownerWorker.avatarUrl).toBe(
+      '/uploads/users/201/avatar/pending.jpg',
+    );
+    expect(ownerWorker.avatarModerationStatus).toBe('pending');
   });
 
   it('keeps the previous approved avatar on legacy worker summaries while a new avatar is pending', async () => {

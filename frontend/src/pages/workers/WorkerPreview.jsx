@@ -4,7 +4,6 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost } from '../../services/api';
 import { mediaUrl, photoMediaUrl } from '../../utils/mediaUrls';
 import WorkerPreviewPremium from '../../components/workers/WorkerPreviewPremium';
-import { bannerKeyForCategory } from '../../constants/workerBannerCatalog';
 import ReportContentButton from '../../components/ReportContentButton';
 import useDocumentMeta from '../../hooks/useDocumentMeta';
 
@@ -149,12 +148,6 @@ export default function WorkerPreview() {
     return url || '/media_files/Snejan.jpg';
   }, [worker]);
 
-  const bannerKey = useMemo(() => {
-    const profileKey = worker?.profileBannerKey || worker?.bannerKey;
-    if (profileKey) return profileKey;
-    return bannerKeyForCategory(worker?.skillKeys?.[0] || worker?.categoryKey);
-  }, [worker]);
-
   const workerAlbums = useMemo(() => {
     const cleanPhotos = (items = []) =>
       (Array.isArray(items) ? items : [])
@@ -256,7 +249,6 @@ export default function WorkerPreview() {
       <WorkerPreviewPremium
         worker={worker}
         avatarSrc={avatarSrc}
-        bannerKey={bannerKey}
         ratingInfo={ratingInfo}
         detailsLoading={detailsLoading}
         completedProjects={workerAlbums}

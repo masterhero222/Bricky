@@ -847,12 +847,17 @@ export class WorkersService {
       this.getHistoryByUserId(userId).catch(() => []),
       this.media.findByWorker(userId).catch(() => [] as any[]),
     ]);
-    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
+    const avatar = mediaRows
+      .filter((row) => row.kind === 'worker_avatar')
+      .filter((row) => options.includeUnapprovedMedia || row.moderationStatus === 'approved')
+      .filter((row) => row.moderationStatus !== 'rejected')
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
     const publicWorker = this.withoutPrivateWorkerFields(worker);
 
     return {
       ...publicWorker,
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
+      avatarModerationStatus: avatar?.moderationStatus || 'approved',
       profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
       gallery,
       completedJobs,
@@ -879,7 +884,11 @@ export class WorkersService {
         .catch(() => null),
     ]);
 
-    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
+    const avatar = mediaRows
+      .filter((row) => row.kind === 'worker_avatar')
+      .filter((row) => options.includeUnapprovedMedia || row.moderationStatus === 'approved')
+      .filter((row) => row.moderationStatus !== 'rejected')
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
     const boostApplies =
       !!activeBoost && profile.approvalStatus === 'approved' && profile.visibilityStatus !== 'hidden';
 
@@ -898,6 +907,7 @@ export class WorkersService {
       equipment: profile.equipment,
       profileBannerKey: resolveWorkerBannerKey(profile.profileBannerKey),
       avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl),
+      avatarModerationStatus: avatar?.moderationStatus || null,
       isApproved: profile.approvalStatus === 'approved',
       approvalStatus: profile.approvalStatus,
       visibilityStatus: profile.visibilityStatus,
