@@ -359,6 +359,63 @@ describe('RequestsService v2 data core', () => {
     );
   });
 
+  it('includes an approved private applicant for the client who owns the request', async () => {
+    const request: any = {
+      id: 8,
+      clientUserId: 101,
+      categoryKey: 'bathroom_renovation',
+      title: 'Bathroom renovation',
+      status: 'published',
+      assignedWorkerUserId: null,
+      archivedAt: null,
+      createdAt: new Date('2026-09-04T10:00:00.000Z'),
+      updatedAt: new Date('2026-09-04T10:00:00.000Z'),
+      client: { name: 'Client' },
+    };
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([request]),
+    });
+    const applicationsRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 91,
+          requestId: 8,
+          workerUserId: 1050,
+          status: 'applied',
+        },
+      ]),
+    });
+    const workerProfilesRepo = repo({
+      find: jest.fn().mockResolvedValue([
+        {
+          userId: 1050,
+          publicName: 'Private applicant',
+          city: 'Sofia',
+          bio: 'Bathroom specialist',
+          experience: '5 years',
+          approvalStatus: 'approved',
+          visibilityStatus: 'private',
+        },
+      ]),
+    });
+    const service = serviceWith({
+      repairRequestsRepo,
+      applicationsRepo,
+      workerProfilesRepo,
+    });
+
+    const [result] = await service.getByClientUserId(101);
+
+    expect(result.applications[0].worker).toEqual(
+      expect.objectContaining({
+        userId: 1050,
+        fullName: 'Private applicant',
+        city: 'Sofia',
+        isListed: false,
+      }),
+    );
+  });
+
   it('stores client request uploads as pending before-media', async () => {
     const request: any = {
       id: 1,

@@ -2112,7 +2112,26 @@ export async function mockRequest(method, url, data) {
       if (Number(r.clientUserId) !== userId) return false;
       return scope === "history" ? Boolean(r.archivedAt) : !r.archivedAt;
     });
-    return response(sortNewest(items));
+    return response(
+      sortNewest(items).map((request) => ({
+        ...request,
+        applications: mockRequestApplications(request).map((application) => {
+          const worker = db.workers.find(
+            (item) => Number(item.userId) === Number(application.workerUserId),
+          );
+          return {
+            ...application,
+            worker:
+              worker && worker.status === "active" && worker.approvalStatus === "approved"
+                ? {
+                    ...publicWorker(worker, db),
+                    isListed: worker.visibilityStatus === "public",
+                  }
+                : null,
+          };
+        }),
+      })),
+    );
   }
 
   if (method === "get" && path === "/requests/map") {

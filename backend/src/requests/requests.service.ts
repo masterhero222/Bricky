@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import {
   RepairRequestEntity,
   RepairRequestStatus,
@@ -1398,6 +1398,23 @@ export class RequestsService {
       viewerRole === 'client' &&
       viewerUserId > 0 &&
       Number(request.clientUserId) === viewerUserId;
+    const canViewCandidateProfiles = isClientOwner || isAdmin;
+    const applicantUserIds = Array.from(
+      new Set(
+        applications
+          .map((application) => Number(application.workerUserId))
+          .filter((userId) => Number.isFinite(userId) && userId > 0),
+      ),
+    );
+    const candidateProfiles =
+      canViewCandidateProfiles && applicantUserIds.length
+        ? await this.workerProfilesRepo
+            .find({ where: { userId: In(applicantUserIds) } })
+            .catch(() => [] as WorkerProfileEntity[])
+        : [];
+    const candidateProfilesByUserId = new Map(
+      candidateProfiles.map((profile) => [Number(profile.userId), profile]),
+    );
     const isAssignedWorker =
       viewerRole === 'worker' &&
       viewerUserId > 0 &&
@@ -1467,16 +1484,37 @@ export class RequestsService {
       statusLabel: this.lifecycle.label(lifecycleStatusKey),
       nextActor: this.lifecycle.nextActor(lifecycleStatusKey),
       allowedActions: this.allowedActionsFor(request, applications, options),
-      applications: applications.map((application) => ({
-        id: application.id,
-        workerUserId: application.workerUserId,
-        status: application.status,
-        offerMin: application.offerMin,
-        offerMax: application.offerMax,
-        message: application.message,
-        createdAt: application.created_at,
-        updatedAt: application.updated_at,
-      })),
+      applications: applications.map((application) => {
+        const profile = candidateProfilesByUserId.get(
+          Number(application.workerUserId),
+        );
+        return {
+          id: application.id,
+          workerUserId: application.workerUserId,
+          status: application.status,
+          offerMin: application.offerMin,
+          offerMax: application.offerMax,
+          message: application.message,
+          createdAt: application.created_at,
+          updatedAt: application.updated_at,
+          worker: profile
+            ? {
+                id: profile.userId,
+                userId: profile.userId,
+                workerUserId: profile.userId,
+                fullName: profile.publicName,
+                publicName: profile.publicName,
+                city: profile.city,
+                description: profile.bio,
+                bio: profile.bio,
+                experience: profile.experience,
+                isListed:
+                  profile.approvalStatus === 'approved' &&
+                  profile.visibilityStatus === 'public',
+              }
+            : null,
+        };
+      }),
       assignedWorkerUserId: request.assignedWorkerUserId,
       completedAt: request.completedAt,
       clientConfirmedAt: request.clientConfirmedAt,

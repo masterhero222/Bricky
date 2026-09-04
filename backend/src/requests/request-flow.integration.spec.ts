@@ -111,6 +111,16 @@ describe('Sprint 3 canonical request flow', () => {
       ),
     };
     const workerProfilesRepo = {
+      find: jest.fn(async () => [
+        {
+          id: 301,
+          userId: 201,
+          fullName: 'Test Worker',
+          city: 'Sofia',
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+        },
+      ]),
       findOne: jest.fn(async ({ where }: any) =>
         Number(where.userId) === 201
           ? {

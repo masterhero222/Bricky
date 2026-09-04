@@ -171,12 +171,24 @@ export default function ClientProfile() {
 
   async function hydrateWorkers(reqs) {
     const needed = new Set();
+    const embeddedWorkers = {};
 
     reqs.forEach((r) => {
       requestApplicantIds(r).forEach((n) => needed.add(n));
+      (Array.isArray(r?.applications) ? r.applications : []).forEach((application) => {
+        const worker = application?.worker;
+        const workerUserId = Number(worker?.userId || application?.workerUserId);
+        if (worker && Number.isFinite(workerUserId) && workerUserId > 0) {
+          embeddedWorkers[workerUserId] = worker;
+        }
+      });
       const assigned = Number(r.assignedWorkerUserId);
       if (Number.isFinite(assigned) && assigned > 0) needed.add(assigned);
     });
+
+    if (Object.keys(embeddedWorkers).length) {
+      setWorkersMap((prev) => ({ ...prev, ...embeddedWorkers }));
+    }
 
     const ids = Array.from(needed);
     if (ids.length === 0) return;
@@ -534,6 +546,9 @@ export default function ClientProfile() {
                               const w = workersMap[workerUserId];
                               const key = `${r.id}:${workerUserId}`;
                               const isAssigned = assignedUserId === workerUserId;
+                              const isListed = Boolean(
+                                w && (w.isListed ?? w.visibilityStatus === "public"),
+                              );
 
                               return (
                                 <div
@@ -554,16 +569,18 @@ export default function ClientProfile() {
                                       </div>
 
                                       <div className="flex gap-2 mt-3">
-                                        <a
-                                          href={
-                                            canChooseCandidate
-                                              ? `/worker-preview?requestId=${r.id}&userId=${workerUserId}`
-                                              : `/worker-preview?userId=${workerUserId}`
-                                          }
-                                          className="inline-block bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded font-bold"
-                                        >
-                                          Виж профил
-                                        </a>
+                                        {isListed && (
+                                          <a
+                                            href={
+                                              canChooseCandidate
+                                                ? `/worker-preview?requestId=${r.id}&userId=${workerUserId}`
+                                                : `/worker-preview?userId=${workerUserId}`
+                                            }
+                                            className="inline-block bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded font-bold"
+                                          >
+                                            Виж профил
+                                          </a>
+                                        )}
 
                                         {canChooseCandidate && (
                                           <button
@@ -585,8 +602,21 @@ export default function ClientProfile() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="text-sm text-gray-400 mt-2">
-                                      Нямаме данни за този майстор (още). Ако /workers връща профили, hydrate ще го напълни.
+                                    <div className="mt-2 space-y-3 text-sm text-gray-400">
+                                      <p>Майсторът е кандидатствал за тази заявка.</p>
+                                      {canChooseCandidate && (
+                                        <button
+                                          onClick={() => chooseWorker(r.id, workerUserId)}
+                                          disabled={assigningKey === key}
+                                          className={
+                                            assigningKey === key
+                                              ? "rounded bg-gray-700 px-3 py-2 font-bold cursor-not-allowed"
+                                              : "rounded bg-green-600 px-3 py-2 font-bold text-white hover:bg-green-700"
+                                          }
+                                        >
+                                          {assigningKey === key ? "Назначавам..." : "Избери"}
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </div>
