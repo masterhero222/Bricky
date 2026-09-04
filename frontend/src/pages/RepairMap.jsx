@@ -276,6 +276,15 @@ function SofiaTileMap({ requests, activeId, expandedClusterId, onSelect, onClust
         <button type="button" onClick={() => zoomBy(1)} className="px-4 py-2 hover:bg-cyan-900/60 font-black">+</button>
         <button type="button" onClick={() => zoomBy(-1)} className="px-4 py-2 hover:bg-cyan-900/60 font-black">-</button>
       </div>
+      <a
+        href="https://www.openstreetmap.org/copyright"
+        target="_blank"
+        rel="noreferrer"
+        onPointerDown={(event) => event.stopPropagation()}
+        className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 rounded bg-black/70 px-2 py-1 text-[10px] text-slate-300 hover:text-white"
+      >
+        © OpenStreetMap contributors
+      </a>
     </div>
   );
 }

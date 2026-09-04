@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
-import { RepairRequestEntity, RepairRequestStatus } from './entities/repair-request.entity';
+import {
+  RepairRequestEntity,
+  RepairRequestStatus,
+} from './entities/repair-request.entity';
 import { RequestApplicationEntity } from './entities/request-application.entity';
 import { RequestEventEntity } from './entities/request-event.entity';
 import { RequestPricingSnapshotEntity } from './entities/request-pricing-snapshot.entity';
@@ -34,6 +37,7 @@ import {
 } from './request-lifecycle';
 import { RequestLifecycleService } from './request-lifecycle.service';
 import { ReferralsService } from '../referrals/referrals.service';
+import { GeocodingService } from './geocoding.service';
 
 type RequestDtoOptions = {
   includeUnapprovedMedia?: boolean;
@@ -47,7 +51,9 @@ function extractResponseText(data: any): string {
   const chunks = Array.isArray(data?.output) ? data.output : [];
   for (const item of chunks) {
     const content = Array.isArray(item?.content) ? item.content : [];
-    const text = content.find((part: any) => typeof part?.text === 'string')?.text;
+    const text = content.find(
+      (part: any) => typeof part?.text === 'string',
+    )?.text;
     if (text) return text;
   }
 
@@ -57,7 +63,8 @@ function extractResponseText(data: any): string {
 function completionDurationDays(createdAt: any, completedAt: Date): number {
   const start = new Date(createdAt || completedAt).getTime();
   const end = completedAt.getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 1;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+    return 1;
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 }
 
@@ -71,7 +78,9 @@ function normalizePhotos(arr: any): any[] {
       url: photo.url,
       storageKey: photo.storageKey || photo.url,
       mimeType: photo.mimeType || null,
-      sizeBytes: Number.isFinite(Number(photo.sizeBytes)) ? Number(photo.sizeBytes) : null,
+      sizeBytes: Number.isFinite(Number(photo.sizeBytes))
+        ? Number(photo.sizeBytes)
+        : null,
       created_at: photo.created_at || new Date().toISOString(),
     }))
     .filter((photo) => !/^data:/i.test(String(photo.url || '').trim()));
@@ -99,7 +108,12 @@ export class RequestsService {
     private readonly media: MediaService,
     private readonly lifecycle: RequestLifecycleService,
     private readonly referrals: ReferralsService,
+    private readonly geocoding: GeocodingService,
   ) {}
+
+  geocodeAddress(address: string) {
+    return this.geocoding.geocode(address);
+  }
 
   async draftRequest(prompt: string, address?: string) {
     const trimmedPrompt = (prompt || '').trim();
@@ -139,7 +153,10 @@ export class RequestsService {
                 type: 'object',
                 additionalProperties: false,
                 properties: {
-                  categoryKey: { type: 'string', enum: [...REPAIR_CATEGORY_KEYS] },
+                  categoryKey: {
+                    type: 'string',
+                    enum: [...REPAIR_CATEGORY_KEYS],
+                  },
                   description: { type: 'string', maxLength: 800 },
                   questions: {
                     type: 'array',
@@ -148,7 +165,12 @@ export class RequestsService {
                   },
                   confidence: { type: 'number', minimum: 0, maximum: 1 },
                 },
-                required: ['categoryKey', 'description', 'questions', 'confidence'],
+                required: [
+                  'categoryKey',
+                  'description',
+                  'questions',
+                  'confidence',
+                ],
               },
             },
           },
@@ -166,8 +188,13 @@ export class RequestsService {
         category: REPAIR_CATEGORY_BY_KEY[categoryKey],
         categoryKey,
         description: this.cleanDescription(parsed?.description, trimmedPrompt),
-        questions: Array.isArray(parsed?.questions) ? parsed.questions.slice(0, 3) : [],
-        confidence: typeof parsed?.confidence === 'number' ? parsed.confidence : fallback.confidence,
+        questions: Array.isArray(parsed?.questions)
+          ? parsed.questions.slice(0, 3)
+          : [],
+        confidence:
+          typeof parsed?.confidence === 'number'
+            ? parsed.confidence
+            : fallback.confidence,
         source: 'openai',
       };
     } catch {
@@ -177,6 +204,17 @@ export class RequestsService {
 
   async create(dto: CreateRequestDto, clientUserId: number) {
     if (!clientUserId) throw new UnauthorizedException('Not logged in');
+
+    const address = String(dto.address || '').trim();
+    if (!address) {
+      throw new BadRequestException('Въведете адреса на обекта.');
+    }
+    const suppliedCoordinates =
+      Number.isFinite(dto.latitude) && Number.isFinite(dto.longitude)
+        ? { latitude: Number(dto.latitude), longitude: Number(dto.longitude) }
+        : null;
+    const coordinates =
+      suppliedCoordinates || (await this.geocoding.geocode(address));
 
     const categoryKey = dto.categoryKey
       ? normalizeRepairCategoryKey(dto.categoryKey)
@@ -188,10 +226,12 @@ export class RequestsService {
         categoryKey,
         title: REPAIR_CATEGORY_BY_KEY[categoryKey],
         description: dto.description || null,
-        addressText: dto.address || null,
-        latitude: dto.latitude == null ? null : String(dto.latitude),
-        longitude: dto.longitude == null ? null : String(dto.longitude),
-        locationSource: dto.locationSource || 'manual',
+        addressText: address,
+        latitude: String(coordinates.latitude),
+        longitude: String(coordinates.longitude),
+        locationSource: suppliedCoordinates
+          ? dto.locationSource || 'address_geocode'
+          : 'address_geocode',
         addressVisibility: 'exact_after_assignment',
         status: 'pending_admin',
         estimateMin: dto.estimateMin == null ? null : String(dto.estimateMin),
@@ -209,7 +249,9 @@ export class RequestsService {
     );
 
     const suppliedSnapshot = dto.pricingSnapshot || {};
-    const snapshotVersion = String(suppliedSnapshot.pricingVersion || 'v2-fallback').slice(0, 80);
+    const snapshotVersion = String(
+      suppliedSnapshot.pricingVersion || 'v2-fallback',
+    ).slice(0, 80);
     const activityKeys = Array.isArray(suppliedSnapshot.selectedActivityKeys)
       ? suppliedSnapshot.selectedActivityKeys
           .map((value: unknown) => String(value || '').trim())
@@ -246,8 +288,29 @@ export class RequestsService {
     request.pricingSnapshotId = snapshot.id;
     await this.repairRequestsRepo.save(request);
 
-    await this.saveMedia(request.id, clientUserId, 'request_before', dto.photos || [], 'pending');
-    await this.addEvent(request.id, clientUserId, 'request.created', { categoryKey });
+    await this.saveMedia(
+      request.id,
+      clientUserId,
+      'request_before',
+      dto.photos || [],
+      'pending',
+    );
+    await this.addEvent(request.id, clientUserId, 'request.created', {
+      categoryKey,
+    });
+
+    const [client, clientProfile] = await Promise.all([
+      this.usersRepo.findOne({ where: { id: clientUserId } }),
+      this.clientProfilesRepo.findOne({ where: { userId: clientUserId } }),
+    ]);
+    await this.mailService.sendNewRequestNotification({
+      requestId: request.id,
+      category: REPAIR_CATEGORY_BY_KEY[categoryKey],
+      clientName: clientProfile?.displayName || client?.name,
+      phone: clientProfile?.phonePrivate,
+      email: client?.email,
+      address,
+    });
 
     return this.toDto(request, {
       includeUnapprovedMedia: true,
@@ -256,11 +319,7 @@ export class RequestsService {
     });
   }
 
-  async addBeforeMedia(
-    requestId: number,
-    clientUserId: number,
-    photos: any[],
-  ) {
+  async addBeforeMedia(requestId: number, clientUserId: number, photos: any[]) {
     const request = await this.repairRequestsRepo.findOne({
       where: { id: requestId },
       relations: ['client'],
@@ -297,11 +356,7 @@ export class RequestsService {
     });
   }
 
-  async addAfterMedia(
-    requestId: number,
-    workerUserId: number,
-    photos: any[],
-  ) {
+  async addAfterMedia(requestId: number, workerUserId: number, photos: any[]) {
     const request = await this.repairRequestsRepo.findOne({
       where: { id: requestId },
       relations: ['client'],
@@ -390,8 +445,16 @@ export class RequestsService {
 
     const requests = await this.repairRequestsRepo.find({
       where: [
-        { assignedWorkerUserId: IsNull(), status: Not('pending_admin'), archivedAt: IsNull() },
-        { assignedWorkerUserId: workerUserId, status: Not('completed'), archivedAt: IsNull() },
+        {
+          assignedWorkerUserId: IsNull(),
+          status: Not('pending_admin'),
+          archivedAt: IsNull(),
+        },
+        {
+          assignedWorkerUserId: workerUserId,
+          status: Not('completed'),
+          archivedAt: IsNull(),
+        },
         { assignedWorkerUserId: workerUserId, status: 'reviewed' },
       ],
       relations: ['client'],
@@ -402,8 +465,14 @@ export class RequestsService {
       requests
         .filter((request) => {
           if (request.archivedAt && request.status !== 'reviewed') return false;
-          if (['canceled', 'archived', 'draft', 'pending_admin'].includes(request.status)) return false;
-          if (!request.assignedWorkerUserId) return ['published', 'applied'].includes(request.status);
+          if (
+            ['canceled', 'archived', 'draft', 'pending_admin'].includes(
+              request.status,
+            )
+          )
+            return false;
+          if (!request.assignedWorkerUserId)
+            return ['published', 'applied'].includes(request.status);
           return Number(request.assignedWorkerUserId) === Number(workerUserId);
         })
         .map((request) =>
@@ -421,7 +490,11 @@ export class RequestsService {
     if (!workerUserId) throw new BadRequestException('Missing worker id');
     await this.assertWorkerCanTakeJobs(workerUserId);
     const requests = await this.repairRequestsRepo.find({
-      where: { assignedWorkerUserId: workerUserId, status: 'completed', archivedAt: Not(IsNull()) },
+      where: {
+        assignedWorkerUserId: workerUserId,
+        status: 'completed',
+        archivedAt: Not(IsNull()),
+      },
       relations: ['client'],
       order: { completedAt: 'DESC', id: 'DESC' },
     });
@@ -439,13 +512,25 @@ export class RequestsService {
   async applyToRequest(requestId: number, workerUserId: number) {
     await this.assertWorkerCanTakeJobs(workerUserId);
 
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (req.assignedWorkerUserId) throw new BadRequestException('Request already has assigned worker');
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.APPLY);
+    if (req.assignedWorkerUserId)
+      throw new BadRequestException('Request already has assigned worker');
+    this.lifecycle.assertTransition(
+      req.status,
+      REQUEST_LIFECYCLE_ACTIONS.APPLY,
+    );
 
-    let application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
-    if (application && !['withdrawn', 'rejected'].includes(application.status)) {
+    let application = await this.applicationsRepo.findOne({
+      where: { requestId, workerUserId },
+    });
+    if (
+      application &&
+      !['withdrawn', 'rejected'].includes(application.status)
+    ) {
       return this.toDto(req, {
         viewerRole: 'worker',
         viewerUserId: workerUserId,
@@ -490,25 +575,43 @@ export class RequestsService {
   async withdrawApplication(requestId: number, workerUserId: number) {
     await this.assertWorkerCanTakeJobs(workerUserId);
 
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (['completed', 'canceled', 'archived'].includes(req.status) || req.archivedAt) {
+    if (
+      ['completed', 'canceled', 'archived'].includes(req.status) ||
+      req.archivedAt
+    ) {
       throw new BadRequestException('Request is closed');
     }
     const isSelectedWorker =
       Number(req.assignedWorkerUserId) === Number(workerUserId) &&
       ['worker_selected', 'assigned'].includes(req.status);
-    if (Number(req.assignedWorkerUserId) === Number(workerUserId) && !isSelectedWorker) {
-      throw new BadRequestException('Cannot withdraw after confirming the request');
+    if (
+      Number(req.assignedWorkerUserId) === Number(workerUserId) &&
+      !isSelectedWorker
+    ) {
+      throw new BadRequestException(
+        'Cannot withdraw after confirming the request',
+      );
     }
     if (!isSelectedWorker) {
-      this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.WITHDRAW_APPLICATION);
+      this.lifecycle.assertTransition(
+        req.status,
+        REQUEST_LIFECYCLE_ACTIONS.WITHDRAW_APPLICATION,
+      );
     }
 
-    const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
+    const application = await this.applicationsRepo.findOne({
+      where: { requestId, workerUserId },
+    });
     if (!application) throw new NotFoundException('Application not found');
     if (application.status === 'assigned' && !isSelectedWorker) {
-      throw new BadRequestException('Cannot withdraw after confirming the request');
+      throw new BadRequestException(
+        'Cannot withdraw after confirming the request',
+      );
     }
     if (['withdrawn', 'rejected'].includes(application.status)) {
       return this.toDto(req, {
@@ -520,17 +623,25 @@ export class RequestsService {
     application.status = 'withdrawn';
     if (isSelectedWorker) req.assignedWorkerUserId = null;
 
-    const allApplications = await this.applicationsRepo.find({ where: { requestId } });
+    const allApplications = await this.applicationsRepo.find({
+      where: { requestId },
+    });
     const nextApplications = allApplications.map((candidate) =>
-      Number(candidate.workerUserId) === Number(workerUserId) ? application : candidate,
+      Number(candidate.workerUserId) === Number(workerUserId)
+        ? application
+        : candidate,
     );
-    req.status = nextApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status))
+    req.status = nextApplications.some(
+      (app) => !['withdrawn', 'rejected'].includes(app.status),
+    )
       ? 'applied'
       : 'published';
     const withdrawalEvent = this.eventsRepo.create({
       requestId,
       actorUserId: workerUserId,
-      eventType: isSelectedWorker ? 'worker.declined_selection' : 'application.withdrawn',
+      eventType: isSelectedWorker
+        ? 'worker.declined_selection'
+        : 'application.withdrawn',
       metadataJson: {},
     });
     await this.repairRequestsRepo.manager.transaction(async (manager) => {
@@ -551,24 +662,45 @@ export class RequestsService {
     });
   }
 
-  async assignWorker(requestId: number, clientUserId: number, workerUserId: number) {
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+  async assignWorker(
+    requestId: number,
+    clientUserId: number,
+    workerUserId: number,
+  ) {
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (['completed', 'canceled', 'archived'].includes(req.status)) throw new BadRequestException('Request is closed');
+    if (Number(req.clientUserId) !== Number(clientUserId))
+      throw new ForbiddenException('Not your request');
+    if (['completed', 'canceled', 'archived'].includes(req.status))
+      throw new BadRequestException('Request is closed');
     await this.assertWorkerCanTakeJobs(workerUserId);
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.ASSIGN);
+    this.lifecycle.assertTransition(
+      req.status,
+      REQUEST_LIFECYCLE_ACTIONS.ASSIGN,
+    );
 
-    const application = await this.applicationsRepo.findOne({ where: { requestId, workerUserId } });
-    if (!application || ['withdrawn', 'rejected'].includes(application.status)) {
-      throw new BadRequestException('This worker has not applied to this request');
+    const application = await this.applicationsRepo.findOne({
+      where: { requestId, workerUserId },
+    });
+    if (
+      !application ||
+      ['withdrawn', 'rejected'].includes(application.status)
+    ) {
+      throw new BadRequestException(
+        'This worker has not applied to this request',
+      );
     }
 
     req.assignedWorkerUserId = workerUserId;
     req.status = 'worker_selected';
     req.completedAt = null;
 
-    const allApplications = await this.applicationsRepo.find({ where: { requestId } });
+    const allApplications = await this.applicationsRepo.find({
+      where: { requestId },
+    });
     allApplications.forEach((candidate) => {
       if (Number(candidate.workerUserId) === Number(workerUserId)) {
         candidate.status = 'assigned';
@@ -600,16 +732,24 @@ export class RequestsService {
 
   async workerConfirm(requestId: number, workerUserId: number) {
     await this.assertWorkerCanTakeJobs(workerUserId);
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId))
+      throw new ForbiddenException('Not your job');
     if (!['worker_selected', 'assigned'].includes(req.status)) {
-      throw new BadRequestException(`Invalid request status transition from ${req.status} to worker_confirmed`);
+      throw new BadRequestException(
+        `Invalid request status transition from ${req.status} to worker_confirmed`,
+      );
     }
 
     const from = req.status;
     req.status = 'worker_confirmed';
-    const applications = await this.applicationsRepo.find({ where: { requestId } });
+    const applications = await this.applicationsRepo.find({
+      where: { requestId },
+    });
     applications.forEach((candidate) => {
       if (Number(candidate.workerUserId) === Number(workerUserId)) {
         candidate.status = 'assigned';
@@ -633,7 +773,10 @@ export class RequestsService {
       message: `The worker confirmed request #${requestId}.`,
       requestId,
     });
-    return this.toDto(req, { viewerRole: 'worker', viewerUserId: workerUserId });
+    return this.toDto(req, {
+      viewerRole: 'worker',
+      viewerUserId: workerUserId,
+    });
   }
 
   async markWorkerOnSite(requestId: number, workerUserId: number) {
@@ -670,7 +813,11 @@ export class RequestsService {
     );
   }
 
-  async finishWork(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
+  async finishWork(
+    requestId: number,
+    workerUserId: number,
+    afterPhotos: any[] = [],
+  ) {
     await this.workerTransition(
       requestId,
       workerUserId,
@@ -679,9 +826,18 @@ export class RequestsService {
       'worker.finished_work',
       REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
     );
-    await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos, 'pending');
+    await this.saveMedia(
+      requestId,
+      workerUserId,
+      'request_after',
+      afterPhotos,
+      'pending',
+    );
 
-    const updated = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const updated = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!updated) throw new NotFoundException('Request not found');
     return this.toDto(updated, {
       includeUnapprovedMedia: true,
@@ -703,17 +859,27 @@ export class RequestsService {
   }
 
   async clientConfirmWork(requestId: number, clientUserId: number) {
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
-    if (['client_confirmed', 'reviewed', 'completed'].includes(req.status) && req.archivedAt) {
+    if (Number(req.clientUserId) !== Number(clientUserId))
+      throw new ForbiddenException('Not your request');
+    if (
+      ['client_confirmed', 'reviewed', 'completed'].includes(req.status) &&
+      req.archivedAt
+    ) {
       return this.toDto(req, {
         includeUnapprovedMedia: true,
         viewerRole: 'client',
         viewerUserId: clientUserId,
       });
     }
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION);
+    this.lifecycle.assertTransition(
+      req.status,
+      REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION,
+    );
 
     const completedAt = new Date();
     req.status = 'client_confirmed';
@@ -741,19 +907,32 @@ export class RequestsService {
   }
 
   async unassignWorker(requestId: number, clientUserId: number) {
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.clientUserId) !== Number(clientUserId)) throw new ForbiddenException('Not your request');
+    if (Number(req.clientUserId) !== Number(clientUserId))
+      throw new ForbiddenException('Not your request');
     if (!['worker_selected', 'assigned'].includes(req.status)) {
-      throw new BadRequestException('The request is locked after worker confirmation');
+      throw new BadRequestException(
+        'The request is locked after worker confirmation',
+      );
     }
-    if (!req.assignedWorkerUserId) throw new BadRequestException('No assigned worker');
+    if (!req.assignedWorkerUserId)
+      throw new BadRequestException('No assigned worker');
 
     const assignedWorkerUserId = Number(req.assignedWorkerUserId);
     req.assignedWorkerUserId = null;
 
-    const activeApplications = await this.applicationsRepo.find({ where: { requestId } });
-    req.status = activeApplications.some((app) => !['withdrawn', 'rejected'].includes(app.status)) ? 'applied' : 'published';
+    const activeApplications = await this.applicationsRepo.find({
+      where: { requestId },
+    });
+    req.status = activeApplications.some(
+      (app) => !['withdrawn', 'rejected'].includes(app.status),
+    )
+      ? 'applied'
+      : 'published';
     const application = activeApplications.find(
       (candidate) => Number(candidate.workerUserId) === assignedWorkerUserId,
     );
@@ -780,10 +959,18 @@ export class RequestsService {
     });
   }
 
-  async completeRequest(requestId: number, workerUserId: number, afterPhotos: any[] = []) {
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+  async completeRequest(
+    requestId: number,
+    workerUserId: number,
+    afterPhotos: any[] = [],
+  ) {
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId))
+      throw new ForbiddenException('Not your job');
     if (req.status === 'completed') {
       await this.referrals.processCompletedRequest(requestId);
       return this.toDto(req, {
@@ -791,7 +978,10 @@ export class RequestsService {
         viewerUserId: workerUserId,
       });
     }
-    this.lifecycle.assertTransition(req.status, REQUEST_LIFECYCLE_ACTIONS.CLOSE);
+    this.lifecycle.assertTransition(
+      req.status,
+      REQUEST_LIFECYCLE_ACTIONS.CLOSE,
+    );
 
     const completedAt = new Date();
     req.status = 'completed';
@@ -803,9 +993,20 @@ export class RequestsService {
     await this.repairRequestsRepo.save(req);
 
     if (Array.isArray(afterPhotos) && afterPhotos.length) {
-      await this.saveMedia(requestId, workerUserId, 'request_after', afterPhotos, 'pending');
+      await this.saveMedia(
+        requestId,
+        workerUserId,
+        'request_after',
+        afterPhotos,
+        'pending',
+      );
     }
-    await this.addEvent(requestId, workerUserId, 'request.closed_by_worker', {});
+    await this.addEvent(
+      requestId,
+      workerUserId,
+      'request.closed_by_worker',
+      {},
+    );
     await this.referrals.processCompletedRequest(requestId);
 
     return this.toDto(req, {
@@ -818,16 +1019,37 @@ export class RequestsService {
   async adminListRequests(queue?: string) {
     const where =
       queue === 'moderation'
-        ? { status: 'pending_admin' as RepairRequestStatus, archivedAt: IsNull() }
+        ? {
+            status: 'pending_admin' as RepairRequestStatus,
+            archivedAt: IsNull(),
+          }
         : queue === 'active'
           ? { archivedAt: IsNull() }
           : queue === 'completed'
-            ? { status: 'completed' as RepairRequestStatus, archivedAt: Not(IsNull()) }
+            ? {
+                status: 'completed' as RepairRequestStatus,
+                archivedAt: Not(IsNull()),
+              }
             : {};
-    const requests = await this.repairRequestsRepo.find({ where, relations: ['client'], order: { createdAt: 'DESC' }, take: 200 });
-    const filtered = queue === 'active'
-      ? requests.filter((request) => !['draft', 'pending_admin', 'completed', 'canceled', 'archived'].includes(request.status))
-      : requests;
+    const requests = await this.repairRequestsRepo.find({
+      where,
+      relations: ['client'],
+      order: { createdAt: 'DESC' },
+      take: 200,
+    });
+    const filtered =
+      queue === 'active'
+        ? requests.filter(
+            (request) =>
+              ![
+                'draft',
+                'pending_admin',
+                'completed',
+                'canceled',
+                'archived',
+              ].includes(request.status),
+          )
+        : requests;
     return Promise.all(
       filtered.map((request) =>
         this.toDto(request, {
@@ -857,8 +1079,15 @@ export class RequestsService {
     };
   }
 
-  async adminSetStatus(requestId: number, status: RepairRequestStatus, actorUserId: number, reason?: string) {
-    const request = await this.repairRequestsRepo.findOne({ where: { id: requestId } });
+  async adminSetStatus(
+    requestId: number,
+    status: RepairRequestStatus,
+    actorUserId: number,
+    reason?: string,
+  ) {
+    const request = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+    });
     if (!request) throw new NotFoundException('Request not found');
 
     if (status === 'published') {
@@ -866,10 +1095,14 @@ export class RequestsService {
       const unresolvedPhotos = requestMedia.filter(
         (row) =>
           row.kind === 'request_before' &&
-          !['approved', 'rejected'].includes(String(row.moderationStatus || '').toLowerCase()),
+          !['approved', 'rejected'].includes(
+            String(row.moderationStatus || '').toLowerCase(),
+          ),
       );
       if (unresolvedPhotos.length) {
-        throw new BadRequestException('Review every request photo before publishing the request');
+        throw new BadRequestException(
+          'Review every request photo before publishing the request',
+        );
       }
     }
 
@@ -892,7 +1125,10 @@ export class RequestsService {
       request.archivedByUserId = request.archivedByUserId || actorUserId;
     }
     await this.repairRequestsRepo.save(request);
-    await this.addEvent(requestId, actorUserId, 'admin.status_changed', { status, reason: reason || null });
+    await this.addEvent(requestId, actorUserId, 'admin.status_changed', {
+      status,
+      reason: reason || null,
+    });
     return this.toDto(request, {
       includeUnapprovedMedia: true,
       viewerRole: 'admin',
@@ -905,7 +1141,10 @@ export class RequestsService {
     action: 'cancel' | 'reopen',
     reason: string,
   ) {
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
     if (!reason?.trim()) throw new BadRequestException('Reason is required');
 
@@ -920,16 +1159,21 @@ export class RequestsService {
       'reviewed',
     ];
     if (!req.assignedWorkerUserId || !lockedStatuses.includes(req.status)) {
-      throw new BadRequestException('Administrative intervention is only available for confirmed active requests');
+      throw new BadRequestException(
+        'Administrative intervention is only available for confirmed active requests',
+      );
     }
 
     const assignedWorkerUserId = Number(req.assignedWorkerUserId);
     const previousStatus = req.status;
-    const applications = await this.applicationsRepo.find({ where: { requestId } });
+    const applications = await this.applicationsRepo.find({
+      where: { requestId },
+    });
     if (action === 'cancel') {
       req.status = 'canceled';
       applications.forEach((candidate) => {
-        if (Number(candidate.workerUserId) === assignedWorkerUserId) candidate.status = 'withdrawn';
+        if (Number(candidate.workerUserId) === assignedWorkerUserId)
+          candidate.status = 'withdrawn';
       });
     } else {
       applications.forEach((candidate) => {
@@ -941,7 +1185,9 @@ export class RequestsService {
       });
       req.status = applications.some((candidate) =>
         ['applied', 'shortlisted'].includes(candidate.status),
-      ) ? 'applied' : 'published';
+      )
+        ? 'applied'
+        : 'published';
     }
     req.assignedWorkerUserId = null;
     req.completedAt = null;
@@ -954,8 +1200,15 @@ export class RequestsService {
     const interventionEvent = this.eventsRepo.create({
       requestId,
       actorUserId,
-      eventType: action === 'cancel' ? 'admin.request_canceled' : 'admin.request_reopened',
-      metadataJson: { reason: reason.trim(), previousStatus, assignedWorkerUserId },
+      eventType:
+        action === 'cancel'
+          ? 'admin.request_canceled'
+          : 'admin.request_reopened',
+      metadataJson: {
+        reason: reason.trim(),
+        previousStatus,
+        assignedWorkerUserId,
+      },
     });
     await this.repairRequestsRepo.manager.transaction(async (manager) => {
       await manager.save(req);
@@ -983,7 +1236,13 @@ export class RequestsService {
     });
   }
 
-  private async saveMedia(requestId: number, ownerUserId: number, kind: string, photos: any[], moderationStatus = 'approved') {
+  private async saveMedia(
+    requestId: number,
+    ownerUserId: number,
+    kind: string,
+    photos: any[],
+    moderationStatus = 'approved',
+  ) {
     const normalized = normalizePhotos(photos);
     await Promise.all(
       normalized.map((photo) =>
@@ -1001,7 +1260,12 @@ export class RequestsService {
     );
   }
 
-  private async addEvent(requestId: number, actorUserId: number, eventType: string, metadata: Record<string, any>) {
+  private async addEvent(
+    requestId: number,
+    actorUserId: number,
+    eventType: string,
+    metadata: Record<string, any>,
+  ) {
     return this.eventsRepo.save(
       this.eventsRepo.create({
         requestId,
@@ -1023,16 +1287,25 @@ export class RequestsService {
   ) {
     await this.assertWorkerCanTakeJobs(workerUserId);
 
-    const req = await this.repairRequestsRepo.findOne({ where: { id: requestId }, relations: ['client'] });
+    const req = await this.repairRequestsRepo.findOne({
+      where: { id: requestId },
+      relations: ['client'],
+    });
     if (!req) throw new NotFoundException('Request not found');
-    if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) throw new ForbiddenException('Not your job');
+    if (Number(req.assignedWorkerUserId) !== Number(workerUserId))
+      throw new ForbiddenException('Not your job');
     if (!allowedStatuses.includes(req.status)) {
-      throw new BadRequestException(`Invalid request status transition from ${req.status} to ${nextStatus}`);
+      throw new BadRequestException(
+        `Invalid request status transition from ${req.status} to ${nextStatus}`,
+      );
     }
 
     const currentLifecycleStatus = this.lifecycle.normalize(req.status);
     if (action) {
-      const nextLifecycleStatus = this.lifecycle.assertTransition(currentLifecycleStatus, action);
+      const nextLifecycleStatus = this.lifecycle.assertTransition(
+        currentLifecycleStatus,
+        action,
+      );
       const persistedLifecycleStatus = this.lifecycle.normalize(nextStatus);
       if (nextLifecycleStatus !== persistedLifecycleStatus) {
         throw new BadRequestException(
@@ -1040,13 +1313,18 @@ export class RequestsService {
         );
       }
     } else if (expectedState && currentLifecycleStatus !== expectedState) {
-      throw new BadRequestException(`Invalid lifecycle state ${currentLifecycleStatus}; expected ${expectedState}`);
+      throw new BadRequestException(
+        `Invalid lifecycle state ${currentLifecycleStatus}; expected ${expectedState}`,
+      );
     }
 
     const from = req.status;
     req.status = nextStatus;
     await this.repairRequestsRepo.save(req);
-    await this.addEvent(requestId, workerUserId, eventType, { from, to: nextStatus });
+    await this.addEvent(requestId, workerUserId, eventType, {
+      from,
+      to: nextStatus,
+    });
     return this.toDto(req, {
       viewerRole: 'worker',
       viewerUserId: workerUserId,
@@ -1058,15 +1336,24 @@ export class RequestsService {
     if (!uid) throw new BadRequestException('Missing worker id');
 
     const user = await this.usersRepo.findOne({ where: { id: uid } });
-    if (!user || user.role !== 'worker') throw new ForbiddenException('Worker account not found');
-    if (user.status !== 'active') throw new ForbiddenException('Worker account is not active');
+    if (!user || user.role !== 'worker')
+      throw new ForbiddenException('Worker account not found');
+    if (user.status !== 'active')
+      throw new ForbiddenException('Worker account is not active');
 
-    const profile = await this.workerProfilesRepo.findOne({ where: { userId: uid } });
-    if (!profile) throw new ForbiddenException('Worker profile is not approved');
+    const profile = await this.workerProfilesRepo.findOne({
+      where: { userId: uid },
+    });
+    if (!profile)
+      throw new ForbiddenException('Worker profile is not approved');
     if (profile.approvalStatus !== 'approved') {
       throw new ForbiddenException('Worker profile is not approved');
     }
-    if (['hidden', 'suspended'].includes(String(profile.visibilityStatus || '').toLowerCase())) {
+    if (
+      ['hidden', 'suspended'].includes(
+        String(profile.visibilityStatus || '').toLowerCase(),
+      )
+    ) {
       throw new ForbiddenException('Worker profile is not visible');
     }
   }
@@ -1076,8 +1363,12 @@ export class RequestsService {
     options: RequestDtoOptions = {},
   ) {
     const [mediaRows, applications] = await Promise.all([
-      this.media.findByRequest(request.id).catch(() => [] as MediaAssetEntity[]),
-      this.applicationsRepo.find({ where: { requestId: request.id } }).catch(() => [] as RequestApplicationEntity[]),
+      this.media
+        .findByRequest(request.id)
+        .catch(() => [] as MediaAssetEntity[]),
+      this.applicationsRepo
+        .find({ where: { requestId: request.id } })
+        .catch(() => [] as RequestApplicationEntity[]),
     ]);
 
     const visibleMediaRows = mediaRows.filter((row) => {
@@ -1124,13 +1415,20 @@ export class RequestsService {
     ];
     const isConfirmedAssignedWorker =
       isAssignedWorker && contactUnlockedStatuses.includes(request.status);
-    const canViewExactAddress = isAdmin || isClientOwner || isConfirmedAssignedWorker;
+    const canViewExactAddress =
+      isAdmin || isClientOwner || isConfirmedAssignedWorker;
+    const canViewExactCoordinates =
+      canViewExactAddress || viewerRole === 'worker';
     const canViewClientName = isAdmin || isClientOwner || isAssignedWorker;
-    const canViewClientPhone = isAdmin || isClientOwner || isConfirmedAssignedWorker;
+    const canViewClientPhone =
+      isAdmin || isClientOwner || isConfirmedAssignedWorker;
     const clientProfile =
-      canViewClientPhone && typeof this.clientProfilesRepo?.findOne === 'function'
+      canViewClientPhone &&
+      typeof this.clientProfilesRepo?.findOne === 'function'
         ? await Promise.resolve(
-            this.clientProfilesRepo.findOne({ where: { userId: request.clientUserId } }),
+            this.clientProfilesRepo.findOne({
+              where: { userId: request.clientUserId },
+            }),
           ).catch(() => null)
         : null;
     const address = canViewExactAddress
@@ -1146,14 +1444,15 @@ export class RequestsService {
       addressText: address,
       addressVisibility: request.addressVisibility,
       addressPrecision: canViewExactAddress ? 'exact' : 'rough',
-      category: REPAIR_CATEGORY_BY_KEY[this.normalizeCategoryKey(request.categoryKey)],
+      category:
+        REPAIR_CATEGORY_BY_KEY[this.normalizeCategoryKey(request.categoryKey)],
       categoryKey: request.categoryKey,
       title: request.title,
       description: request.description,
-      latitude: canViewExactAddress
+      latitude: canViewExactCoordinates
         ? request.latitude
         : this.toRoughCoordinate(request.latitude),
-      longitude: canViewExactAddress
+      longitude: canViewExactCoordinates
         ? request.longitude
         : this.toRoughCoordinate(request.longitude),
       locationSource: request.locationSource,
@@ -1186,7 +1485,9 @@ export class RequestsService {
       archiveSource: request.archiveSource,
       archivedByUserId: request.archivedByUserId,
       isArchived: Boolean(request.archivedAt),
-      durationDays: request.completedAt ? completionDurationDays(request.createdAt, request.completedAt) : null,
+      durationDays: request.completedAt
+        ? completionDurationDays(request.createdAt, request.completedAt)
+        : null,
       created_at: request.createdAt,
       updated_at: request.updatedAt,
     };
@@ -1207,41 +1508,58 @@ export class RequestsService {
   ) {
     const base = this.lifecycle.allowedActions(request.status);
     const viewerUserId = Number(options.viewerUserId);
-    const isAdmin = options.viewerRole === 'admin' || options.viewerRole === 'super_admin';
+    const isAdmin =
+      options.viewerRole === 'admin' || options.viewerRole === 'super_admin';
     if (isAdmin) return base;
 
-    if (options.viewerRole === 'client' && Number(request.clientUserId) === viewerUserId) {
-      if (['worker_selected', 'assigned'].includes(request.status)) return ['unassign'];
-      if ([
-        'worker_confirmed',
-        'worker_on_site',
-        'inspected',
-        'in_progress',
-        'work_finished',
-      ].includes(request.status)) return [];
+    if (
+      options.viewerRole === 'client' &&
+      Number(request.clientUserId) === viewerUserId
+    ) {
+      if (['worker_selected', 'assigned'].includes(request.status))
+        return ['unassign'];
+      if (
+        [
+          'worker_confirmed',
+          'worker_on_site',
+          'inspected',
+          'in_progress',
+          'work_finished',
+        ].includes(request.status)
+      )
+        return [];
       return base.filter((action) =>
-        ['assign', 'confirm_completion', 'leave_review', 'cancel'].includes(action),
+        ['assign', 'confirm_completion', 'leave_review', 'cancel'].includes(
+          action,
+        ),
       );
     }
 
     if (options.viewerRole === 'worker') {
-      const assignedToViewer = Number(request.assignedWorkerUserId) === viewerUserId;
-      if (assignedToViewer && ['worker_selected', 'assigned'].includes(request.status)) {
+      const assignedToViewer =
+        Number(request.assignedWorkerUserId) === viewerUserId;
+      if (
+        assignedToViewer &&
+        ['worker_selected', 'assigned'].includes(request.status)
+      ) {
         return ['withdraw_application', 'mark_arrived'];
       }
       if (assignedToViewer) {
         return base.filter((action) =>
-          ['mark_arrived', 'start_work', 'mark_ready', 'close'].includes(action),
+          ['mark_arrived', 'start_work', 'mark_ready', 'close'].includes(
+            action,
+          ),
         );
       }
       const application = applications.find(
         (candidate) => Number(candidate.workerUserId) === viewerUserId,
       );
-      return base.filter((action) =>
-        action === 'apply' ||
-        (action === 'withdraw_application' &&
-          Boolean(application) &&
-          !['withdrawn', 'rejected'].includes(application!.status)),
+      return base.filter(
+        (action) =>
+          action === 'apply' ||
+          (action === 'withdraw_application' &&
+            Boolean(application) &&
+            !['withdrawn', 'rejected'].includes(application!.status)),
       );
     }
 
@@ -1254,7 +1572,9 @@ export class RequestsService {
   ) {
     if (!Number(userId)) return;
     if (typeof this.notifications?.create !== 'function') return;
-    await Promise.resolve(this.notifications.create(Number(userId), payload)).catch(() => null);
+    await Promise.resolve(
+      this.notifications.create(Number(userId), payload),
+    ).catch(() => null);
   }
 
   private toRoughCoordinate(value: string | number | null) {
@@ -1279,7 +1599,10 @@ export class RequestsService {
 
   private buildLocalDraft(prompt: string, address?: string) {
     const categoryKey = this.guessCategoryKey(prompt);
-    const details = [prompt.trim(), address ? `Адрес: ${address.trim()}` : ''].filter(Boolean);
+    const details = [
+      prompt.trim(),
+      address ? `Адрес: ${address.trim()}` : '',
+    ].filter(Boolean);
 
     return {
       category: REPAIR_CATEGORY_BY_KEY[categoryKey],
@@ -1296,18 +1619,34 @@ export class RequestsService {
 
   private guessCategoryKey(prompt: string): RepairCategoryKey {
     const text = prompt.toLowerCase();
-    if (/(vik|plumb|water|leak|pipe|sink|boiler|сифон|теч|тръб|мивк|бойлер|смесител)/i.test(text)) return 'vik';
-    if (/(electro|electric|power|cable|switch|lamp|fuse|ток|контакт|кабел|табло|ламп|ключ)/i.test(text)) return 'electro';
-    if (/(bathroom|bath|баня|бани|санитар)/i.test(text)) return 'bathroom_renovation';
-    if (/(tile|tiles|ceramic|плочк|фаянс|теракот|гранитогрес)/i.test(text)) return 'tiles';
+    if (
+      /(vik|plumb|water|leak|pipe|sink|boiler|сифон|теч|тръб|мивк|бойлер|смесител)/i.test(
+        text,
+      )
+    )
+      return 'vik';
+    if (
+      /(electro|electric|power|cable|switch|lamp|fuse|ток|контакт|кабел|табло|ламп|ключ)/i.test(
+        text,
+      )
+    )
+      return 'electro';
+    if (/(bathroom|bath|баня|бани|санитар)/i.test(text))
+      return 'bathroom_renovation';
+    if (/(tile|tiles|ceramic|плочк|фаянс|теракот|гранитогрес)/i.test(text))
+      return 'tiles';
     if (/(roof|покрив|керемид|улук)/i.test(text)) return 'roof_waterproofing';
-    if (/(drywall|гипсокартон|окачен таван|преградна стена)/i.test(text)) return 'drywall';
+    if (/(drywall|гипсокартон|окачен таван|преградна стена)/i.test(text))
+      return 'drywall';
     if (/(floor|ламинат|паркет|настилк|под)/i.test(text)) return 'flooring';
     if (/(window|door|дограма|врат|обков)/i.test(text)) return 'windows_doors';
-    if (/(heating|cooling|климатик|радиатор|отоплен)/i.test(text)) return 'heating_cooling';
-    if (/(demolition|кърт|извоз|демонтаж|отпад)/i.test(text)) return 'demolition_cleanup';
+    if (/(heating|cooling|климатик|радиатор|отоплен)/i.test(text))
+      return 'heating_cooling';
+    if (/(demolition|кърт|извоз|демонтаж|отпад)/i.test(text))
+      return 'demolition_cleanup';
     if (/(major|основен|цялостен)/i.test(text)) return 'full_renovation';
-    if (/(paint|plaster|wall|ceiling|боя|шпаклов|стена|таван)/i.test(text)) return 'plaster';
+    if (/(paint|plaster|wall|ceiling|боя|шпаклов|стена|таван)/i.test(text))
+      return 'plaster';
     return 'small_repairs';
   }
 

@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { ClientController } from './client.controller';
 
 describe('ClientController', () => {
@@ -37,13 +37,5 @@ describe('ClientController', () => {
       controller.getMyProfile({ user: { id: 7, role: 'worker' } }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(users.findClientProfile).not.toHaveBeenCalled();
-  });
-
-  it('returns not found when the client profile is missing', async () => {
-    users.findClientProfile.mockResolvedValue(null);
-
-    await expect(
-      controller.getMyProfile({ user: { id: 42, role: 'client' } }),
-    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

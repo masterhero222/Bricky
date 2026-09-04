@@ -25,12 +25,17 @@ describe('RequestsService v2 data core', () => {
       (overrides.repairRequestsRepo || repo()) as any,
       (overrides.applicationsRepo || repo()) as any,
       (overrides.pricingSnapshotsRepo || repo()) as any,
-      (overrides.eventsRepo || repo({ save: jest.fn().mockResolvedValue({}) })) as any,
+      (overrides.eventsRepo ||
+        repo({ save: jest.fn().mockResolvedValue({}) })) as any,
       (overrides.usersRepo || repo()) as any,
       (overrides.workerProfilesRepo || repo()) as any,
       (overrides.clientProfilesRepo || repo()) as any,
-      {} as any,
-      (overrides.notifications || { create: jest.fn().mockResolvedValue({}) }) as any,
+      (overrides.mail || {
+        sendNewRequestNotification: jest.fn().mockResolvedValue(true),
+      }) as any,
+      (overrides.notifications || {
+        create: jest.fn().mockResolvedValue({}),
+      }) as any,
       (overrides.media || {
         createAsset: jest.fn(),
         findByRequest: jest.fn().mockResolvedValue([]),
@@ -40,6 +45,11 @@ describe('RequestsService v2 data core', () => {
       (overrides.referrals || {
         processCompletedRequest: jest.fn().mockResolvedValue(null),
       }) as any,
+      (overrides.geocoding || {
+        geocode: jest
+          .fn()
+          .mockResolvedValue({ latitude: 42.6977, longitude: 23.3219 }),
+      }) as any,
     );
   }
 
@@ -47,7 +57,12 @@ describe('RequestsService v2 data core', () => {
     const savedRequests: any[] = [];
     const repairRequestsRepo = repo({
       save: jest.fn(async (request) => {
-        const saved = { id: request.id || 1, createdAt: new Date(), updatedAt: new Date(), ...request };
+        const saved = {
+          id: request.id || 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...request,
+        };
         savedRequests.push(saved);
         return saved;
       }),
@@ -61,10 +76,19 @@ describe('RequestsService v2 data core', () => {
       setRequestMediaModeration: jest.fn().mockResolvedValue([]),
     };
 
-    const service = serviceWith({ repairRequestsRepo, pricingSnapshotsRepo, media });
+    const mail = {
+      sendNewRequestNotification: jest.fn().mockResolvedValue(true),
+    };
+    const service = serviceWith({
+      repairRequestsRepo,
+      pricingSnapshotsRepo,
+      media,
+      mail,
+    });
     const created = await service.create(
       {
         category: 'ВиК',
+        categoryKey: 'vik',
         description: 'Теч под мивката',
         address: 'София',
         photos: [{ url: '/uploads/request-before.jpg' }],
@@ -81,7 +105,19 @@ describe('RequestsService v2 data core', () => {
     expect(created.allowedActions).toEqual([]);
     expect(created).not.toHaveProperty('assignedWorkerId');
     expect(created).not.toHaveProperty('completedByWorkerId');
-    expect(media.createAsset).toHaveBeenCalledWith(expect.objectContaining({ kind: 'request_before', moderationStatus: 'pending' }));
+    expect(media.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'request_before',
+        moderationStatus: 'pending',
+      }),
+    );
+    expect(mail.sendNewRequestNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 1,
+        category: 'ВиК ремонти',
+        address: 'София',
+      }),
+    );
   });
 
   it('hides pending and rejected media from the public worker request feed', async () => {
@@ -101,7 +137,9 @@ describe('RequestsService v2 data core', () => {
       find: jest.fn().mockResolvedValue([request]),
     });
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -161,9 +199,13 @@ describe('RequestsService v2 data core', () => {
       updatedAt: new Date('2026-07-19T08:00:00.000Z'),
       client: {},
     };
-    const repairRequestsRepo = repo({ find: jest.fn().mockResolvedValue([request]) });
+    const repairRequestsRepo = repo({
+      find: jest.fn().mockResolvedValue([request]),
+    });
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -175,19 +217,52 @@ describe('RequestsService v2 data core', () => {
     const media = {
       createAsset: jest.fn(),
       findByRequest: jest.fn().mockResolvedValue([
-        { id: 1, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/approved-before.jpg', moderationStatus: 'approved' },
-        { id: 2, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/rejected-before.jpg', moderationStatus: 'rejected' },
-        { id: 3, ownerUserId: 101, kind: 'request_before', publicUrl: '/uploads/pending-before.jpg', moderationStatus: 'pending' },
-        { id: 4, ownerUserId: 201, kind: 'request_after', publicUrl: '/uploads/pending-after.jpg', moderationStatus: 'pending' },
+        {
+          id: 1,
+          ownerUserId: 101,
+          kind: 'request_before',
+          publicUrl: '/uploads/approved-before.jpg',
+          moderationStatus: 'approved',
+        },
+        {
+          id: 2,
+          ownerUserId: 101,
+          kind: 'request_before',
+          publicUrl: '/uploads/rejected-before.jpg',
+          moderationStatus: 'rejected',
+        },
+        {
+          id: 3,
+          ownerUserId: 101,
+          kind: 'request_before',
+          publicUrl: '/uploads/pending-before.jpg',
+          moderationStatus: 'pending',
+        },
+        {
+          id: 4,
+          ownerUserId: 201,
+          kind: 'request_after',
+          publicUrl: '/uploads/pending-after.jpg',
+          moderationStatus: 'pending',
+        },
       ]),
       setRequestMediaModeration: jest.fn(),
     };
-    const service = serviceWith({ repairRequestsRepo, usersRepo, workerProfilesRepo, media });
+    const service = serviceWith({
+      repairRequestsRepo,
+      usersRepo,
+      workerProfilesRepo,
+      media,
+    });
 
     const [result] = await service.getForWorkersFeed(201);
 
-    expect(result.beforePhotos.map((photo) => photo.url)).toEqual(['/uploads/approved-before.jpg']);
-    expect(result.afterPhotos.map((photo) => photo.url)).toEqual(['/uploads/pending-after.jpg']);
+    expect(result.beforePhotos.map((photo) => photo.url)).toEqual([
+      '/uploads/approved-before.jpg',
+    ]);
+    expect(result.afterPhotos.map((photo) => photo.url)).toEqual([
+      '/uploads/pending-after.jpg',
+    ]);
   });
 
   it('hides client contact details and exact location until the selected worker confirms', async () => {
@@ -233,7 +308,9 @@ describe('RequestsService v2 data core', () => {
       usersRepo,
       workerProfilesRepo,
       clientProfilesRepo: repo({
-        findOne: jest.fn().mockResolvedValue({ userId: 101, phonePrivate: '0888000000' }),
+        findOne: jest
+          .fn()
+          .mockResolvedValue({ userId: 101, phonePrivate: '0888000000' }),
       }),
     });
 
@@ -247,8 +324,8 @@ describe('RequestsService v2 data core', () => {
         address: 'Sofia',
         addressText: 'Sofia',
         addressPrecision: 'rough',
-        latitude: 42.7,
-        longitude: 23.32,
+        latitude: '42.6977000',
+        longitude: '23.3219000',
       }),
     );
 
@@ -264,8 +341,8 @@ describe('RequestsService v2 data core', () => {
         address: 'Sofia',
         addressText: 'Sofia',
         addressPrecision: 'rough',
-        latitude: 42.7,
-        longitude: 23.32,
+        latitude: '42.6977000',
+        longitude: '23.3219000',
       }),
     );
 
@@ -364,7 +441,9 @@ describe('RequestsService v2 data core', () => {
 
   it('rejects applications from suspended workers', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -376,12 +455,16 @@ describe('RequestsService v2 data core', () => {
 
     const service = serviceWith({ usersRepo, workerProfilesRepo });
 
-    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('does not expose completed request contact details to suspended workers', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -393,15 +476,23 @@ describe('RequestsService v2 data core', () => {
     const repairRequestsRepo = repo({
       find: jest.fn(),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+    });
 
-    await expect(service.getCompletedForWorker(201)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.getCompletedForWorker(201)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(repairRequestsRepo.find).not.toHaveBeenCalled();
   });
 
   it('blocks worker applications before admin approval', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -434,7 +525,9 @@ describe('RequestsService v2 data core', () => {
       referrals,
     });
 
-    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.applyToRequest(1, 201)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('keeps repeated worker applications idempotent', async () => {
@@ -451,7 +544,9 @@ describe('RequestsService v2 data core', () => {
       status: 'applied',
     };
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -496,7 +591,9 @@ describe('RequestsService v2 data core', () => {
       client: {},
     };
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -515,9 +612,16 @@ describe('RequestsService v2 data core', () => {
         status: 'applied',
       }),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      applicationsRepo,
+    });
 
-    await expect(service.assignWorker(1, 101, 201)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.assignWorker(1, 101, 201)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(request.assignedWorkerUserId).toBeNull();
   });
 
@@ -543,7 +647,9 @@ describe('RequestsService v2 data core', () => {
       status: 'shortlisted',
     };
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -561,7 +667,12 @@ describe('RequestsService v2 data core', () => {
       find: jest.fn().mockResolvedValue([selected, other]),
       save: jest.fn().mockImplementation(async (value) => value),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      applicationsRepo,
+    });
 
     const updated = await service.assignWorker(1, 101, 201);
 
@@ -612,14 +723,18 @@ describe('RequestsService v2 data core', () => {
     });
     const media = {
       createAsset: jest.fn(),
-      findByRequest: jest.fn().mockResolvedValue([
-        { id: 1, kind: 'request_before', moderationStatus: 'pending' },
-      ]),
+      findByRequest: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 1, kind: 'request_before', moderationStatus: 'pending' },
+        ]),
       setRequestMediaModeration: jest.fn(),
     };
     const service = serviceWith({ repairRequestsRepo, media });
 
-    await expect(service.adminSetStatus(1, 'published', 1, 'ok')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.adminSetStatus(1, 'published', 1, 'ok'),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(repairRequestsRepo.save).not.toHaveBeenCalled();
     expect(request.status).toBe('pending_admin');
   });
@@ -632,10 +747,22 @@ describe('RequestsService v2 data core', () => {
       createdAt: new Date('2026-07-19T09:00:00.000Z'),
     };
     const events = [
-      { id: 1, requestId: 1, eventType: 'request.created', createdAt: new Date('2026-07-19T09:00:00.000Z') },
-      { id: 2, requestId: 1, eventType: 'admin.status_changed', createdAt: new Date('2026-07-19T09:05:00.000Z') },
+      {
+        id: 1,
+        requestId: 1,
+        eventType: 'request.created',
+        createdAt: new Date('2026-07-19T09:00:00.000Z'),
+      },
+      {
+        id: 2,
+        requestId: 1,
+        eventType: 'admin.status_changed',
+        createdAt: new Date('2026-07-19T09:05:00.000Z'),
+      },
     ];
-    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+    });
     const eventsRepo = repo({ find: jest.fn().mockResolvedValue(events) });
     const service = serviceWith({ repairRequestsRepo, eventsRepo });
 
@@ -688,7 +815,9 @@ describe('RequestsService v2 data core', () => {
 
   it('keeps final jobs out of the active feed but returns reviewed jobs for worker close', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -725,7 +854,11 @@ describe('RequestsService v2 data core', () => {
         },
       ]),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+    });
 
     const feed = await service.getForWorkersFeed(201);
 
@@ -743,12 +876,24 @@ describe('RequestsService v2 data core', () => {
       createdAt: new Date(),
       client: {},
     };
-    const application: any = { requestId: 1, workerUserId: 201, status: 'applied' };
+    const application: any = {
+      requestId: 1,
+      workerUserId: 201,
+      status: 'applied',
+    };
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({
+          userId: 201,
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+        }),
     });
     const repairRequestsRepo = repo({
       findOne: jest.fn().mockResolvedValue(request),
@@ -759,7 +904,12 @@ describe('RequestsService v2 data core', () => {
       find: jest.fn().mockResolvedValue([application]),
       save: jest.fn(async (value) => value),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      applicationsRepo,
+    });
 
     await service.withdrawApplication(1, 201);
 
@@ -770,10 +920,18 @@ describe('RequestsService v2 data core', () => {
 
   it('lets the selected worker decline before confirmation', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({
+          userId: 201,
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+        }),
     });
     const repairRequestsRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -785,12 +943,22 @@ describe('RequestsService v2 data core', () => {
         client: {},
       }),
     });
-    const application: any = { id: 5, requestId: 1, workerUserId: 201, status: 'assigned' };
+    const application: any = {
+      id: 5,
+      requestId: 1,
+      workerUserId: 201,
+      status: 'assigned',
+    };
     const applicationsRepo = repo({
       findOne: jest.fn().mockResolvedValue(application),
       find: jest.fn().mockResolvedValue([application]),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo, applicationsRepo });
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+      applicationsRepo,
+    });
 
     const result = await service.withdrawApplication(1, 201);
     expect(application.status).toBe('withdrawn');
@@ -800,10 +968,18 @@ describe('RequestsService v2 data core', () => {
 
   it('blocks worker withdrawal after confirmation', async () => {
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ userId: 201, approvalStatus: 'approved', visibilityStatus: 'public' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({
+          userId: 201,
+          approvalStatus: 'approved',
+          visibilityStatus: 'public',
+        }),
     });
     const repairRequestsRepo = repo({
       findOne: jest.fn().mockResolvedValue({
@@ -815,8 +991,14 @@ describe('RequestsService v2 data core', () => {
         client: {},
       }),
     });
-    const service = serviceWith({ usersRepo, workerProfilesRepo, repairRequestsRepo });
-    await expect(service.withdrawApplication(1, 201)).rejects.toBeInstanceOf(BadRequestException);
+    const service = serviceWith({
+      usersRepo,
+      workerProfilesRepo,
+      repairRequestsRepo,
+    });
+    await expect(service.withdrawApplication(1, 201)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('blocks client unassign after the worker started work', async () => {
@@ -831,7 +1013,9 @@ describe('RequestsService v2 data core', () => {
     });
     const service = serviceWith({ repairRequestsRepo });
 
-    await expect(service.unassignWorker(1, 101)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.unassignWorker(1, 101)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('lets the client remove a selected worker before confirmation', async () => {
@@ -843,9 +1027,18 @@ describe('RequestsService v2 data core', () => {
       archivedAt: null,
       client: {},
     };
-    const application: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
-    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
-    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([application]) });
+    const application: any = {
+      id: 7,
+      requestId: 1,
+      workerUserId: 201,
+      status: 'assigned',
+    };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+    });
+    const applicationsRepo = repo({
+      find: jest.fn().mockResolvedValue([application]),
+    });
     const service = serviceWith({ repairRequestsRepo, applicationsRepo });
 
     const result = await service.unassignWorker(1, 101);
@@ -869,15 +1062,41 @@ describe('RequestsService v2 data core', () => {
       archivedByUserId: null,
       client: {},
     };
-    const selected: any = { id: 7, requestId: 1, workerUserId: 201, status: 'assigned' };
-    const other: any = { id: 8, requestId: 1, workerUserId: 202, status: 'rejected' };
-    const withdrawn: any = { id: 9, requestId: 1, workerUserId: 203, status: 'withdrawn' };
-    const repairRequestsRepo = repo({ findOne: jest.fn().mockResolvedValue(request) });
-    const applicationsRepo = repo({ find: jest.fn().mockResolvedValue([selected, other, withdrawn]) });
+    const selected: any = {
+      id: 7,
+      requestId: 1,
+      workerUserId: 201,
+      status: 'assigned',
+    };
+    const other: any = {
+      id: 8,
+      requestId: 1,
+      workerUserId: 202,
+      status: 'rejected',
+    };
+    const withdrawn: any = {
+      id: 9,
+      requestId: 1,
+      workerUserId: 203,
+      status: 'withdrawn',
+    };
+    const repairRequestsRepo = repo({
+      findOne: jest.fn().mockResolvedValue(request),
+    });
+    const applicationsRepo = repo({
+      find: jest.fn().mockResolvedValue([selected, other, withdrawn]),
+    });
     const service = serviceWith({ repairRequestsRepo, applicationsRepo });
 
-    await expect(service.adminIntervene(1, 900, 'reopen', '')).rejects.toBeInstanceOf(BadRequestException);
-    const result = await service.adminIntervene(1, 900, 'reopen', 'Worker unavailable');
+    await expect(
+      service.adminIntervene(1, 900, 'reopen', ''),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    const result = await service.adminIntervene(
+      1,
+      900,
+      'reopen',
+      'Worker unavailable',
+    );
 
     expect(result.statusKey).toBe('applied');
     expect(result.assignedWorkerUserId).toBeNull();
@@ -904,7 +1123,9 @@ describe('RequestsService v2 data core', () => {
       client: {},
     };
     const usersRepo = repo({
-      findOne: jest.fn().mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 201, role: 'worker', status: 'active' }),
     });
     const workerProfilesRepo = repo({
       findOne: jest.fn().mockResolvedValue({

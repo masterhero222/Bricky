@@ -13,6 +13,8 @@ export class MailService {
   private readonly confirmationTemplate: Handlebars.TemplateDelegate;
   private readonly passwordResetTemplate: Handlebars.TemplateDelegate;
   private readonly emailVerificationTemplate: Handlebars.TemplateDelegate;
+  private readonly newRequestTemplate: Handlebars.TemplateDelegate;
+  private readonly requestNotificationEmail: string;
 
   constructor(config: ConfigService) {
     const port = config.get<number>('MAIL_PORT') || 587;
@@ -47,6 +49,51 @@ export class MailService {
       ),
       { strict: true },
     );
+    this.newRequestTemplate = Handlebars.compile(
+      readFileSync(
+        join(__dirname, 'templates', 'new-request-notification.hbs'),
+        'utf8',
+      ),
+      { strict: true },
+    );
+    this.requestNotificationEmail =
+      config.get<string>('REQUEST_NOTIFICATION_EMAIL') ||
+      'tsvetoslavpaskalev@gmail.com';
+  }
+
+  async sendNewRequestNotification(request: {
+    requestId: number;
+    category: string;
+    clientName?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address: string;
+  }) {
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: this.requestNotificationEmail,
+        subject: `Нова заявка #${request.requestId} - Bricky`,
+        html: this.newRequestTemplate({
+          requestId: request.requestId,
+          category: request.category,
+          clientName: request.clientName || 'Не е посочен',
+          phone: request.phone || 'Не е посочен',
+          email: request.email || 'Не е посочен',
+          address: request.address,
+        }),
+      });
+      this.logger.log(
+        `New request notification sent for #${request.requestId}`,
+      );
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `New request notification failed for #${request.requestId}: ${message}`,
+      );
+      return false;
+    }
   }
 
   async sendRequestConfirmation(request: {

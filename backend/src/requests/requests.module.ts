@@ -18,6 +18,7 @@ import { UserEntity } from '../users/user.entity';
 import { WorkerProfileEntity } from '../workers/worker-profile.entity';
 import { ClientProfileEntity } from '../users/client-profile.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { GeocodingService } from './geocoding.service';
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
     ReferralsModule,
   ],
   controllers: [RequestsController],
-  providers: [RequestsService, RequestLifecycleService],
+  providers: [RequestsService, RequestLifecycleService, GeocodingService],
   exports: [RequestsService, RequestLifecycleService],
 })
 export class RequestsModule {}

@@ -2095,6 +2095,18 @@ export async function mockRequest(method, url, data) {
   }
   if (method === "post" && path === "/requests/draft") return response(draftRequest(data));
 
+  if (method === "post" && path === "/requests/geocode") {
+    if (role !== "client") return fail("Client only", 400);
+    if (String(data?.address || "").trim().length < 5) {
+      return fail("Добавете град, улица и номер.", 400);
+    }
+    return response({
+      latitude: 42.6977,
+      longitude: 23.3219,
+      displayName: String(data.address).trim(),
+    });
+  }
+
   if (method === "get" && path === "/requests/client") {
     const items = db.requests.filter((r) => {
       if (Number(r.clientUserId) !== userId) return false;

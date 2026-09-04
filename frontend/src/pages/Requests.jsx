@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Bath,
@@ -14,6 +14,7 @@ import {
   PanelsTopLeft,
   ThermometerSun,
   Trash2,
+  Upload,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -26,18 +27,6 @@ import { getPricingActivity } from "../constants/repairPricingConfig";
 import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
 import { calculateCatalogEstimate } from "../utils/pricingCatalogAdapter";
 import { useAuthModal } from "../context/AuthModalContext";
-
-const GOALS = [
-  { value: "consult", label: "Искам да се консултирам със специалист" },
-  { value: "compare", label: "Искам да сравня оферти" },
-  { value: "hire", label: "Искам да наема изпълнител" },
-];
-
-const CONTACT_PREFS = [
-  { value: "browse", label: "Искам да разгледам профилите и сам да избера с кой да се свържа" },
-  { value: "offers", label: "Искам до 3-ма майстори да ми изпратят оферта през Bricky" },
-  { value: "bricky", label: "Искам комуникацията да остане само през Bricky" },
-];
 
 const PRICING_MODES = [
   { value: "labor_only", label: "Труд", description: "Материалите не са включени в ориентира." },
@@ -69,7 +58,10 @@ const CONFIDENCE_LABELS = {
   inspection_required: "Нужен е оглед",
 };
 
-const STEPS = ["Ремонт", "Дейности", "Размер", "Локация", "Цел", "Контакт", "Преглед"];
+const STEPS = ["Ремонт", "Дейности", "Размер", "Адрес", "Преглед"];
+const MAX_REQUEST_PHOTOS = 20;
+const MAX_REQUEST_PHOTO_BYTES = 8 * 1024 * 1024;
+const REQUEST_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const ICONS = {
   bath: Bath,
@@ -111,8 +103,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
   const [pricingCatalog, setPricingCatalog] = useState(null);
   const [locationStatus, setLocationStatus] = useState("idle");
-  const [locationMessage, setLocationMessage] = useState("Позволи текуща локация или въведи точния адрес ръчно.");
-  const locationAskedRef = useRef(false);
+  const [locationMessage, setLocationMessage] = useState("Въведи точния адрес на обекта.");
 
   const [form, setForm] = useState({
     categoryKey: initialCategoryKey,
@@ -124,8 +115,6 @@ export function RequestFlow({ embedded = false, onCreated }) {
     latitude: null,
     longitude: null,
     locationSource: "manual",
-    goal: "compare",
-    contactPreference: "offers",
     description: "",
     photos: [],
   });
@@ -200,49 +189,41 @@ export function RequestFlow({ embedded = false, onCreated }) {
   );
 
   function setField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  const requestCurrentLocation = useCallback(() => {
-    setStatus("");
-
-    if (!navigator.geolocation) {
-      setLocationStatus("denied");
-      setLocationMessage("Браузърът не поддържа автоматична локация. Въведи точния адрес ръчно.");
-      setForm((prev) => ({ ...prev, latitude: null, longitude: null, locationSource: "manual" }));
-      return;
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+      ...(field === "address"
+        ? { latitude: null, longitude: null, locationSource: "manual" }
+        : {}),
+    }));
+    if (field === "address") {
+      setLocationStatus("idle");
+      setLocationMessage("Адресът ще бъде проверен преди продължаване.");
     }
-
-    setLocationStatus("loading");
-    setLocationMessage("Браузърът очаква разрешение за достъп до текущата локация...");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = Number(position.coords.latitude.toFixed(6));
-        const longitude = Number(position.coords.longitude.toFixed(6));
-        setForm((prev) => ({ ...prev, latitude, longitude, locationSource: "gps" }));
-        setLocationStatus("granted");
-        setLocationMessage("Текущата локация е добавена към заявката.");
-      },
-      (err) => {
-        console.warn("Geolocation denied/unavailable:", err);
-        setForm((prev) => ({ ...prev, latitude: null, longitude: null, locationSource: "manual" }));
-        setLocationStatus("denied");
-        setLocationMessage("Локацията е отказана или недостъпна. Въведи точния адрес ръчно.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, []);
-
-  useEffect(() => {
-    if (step !== 3 || locationAskedRef.current) return;
-    locationAskedRef.current = true;
-    requestCurrentLocation();
-  }, [requestCurrentLocation, step]);
+  }
 
   async function handlePhotos(e) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+
+    const unsupported = files.find((file) => !REQUEST_PHOTO_TYPES.has(file.type));
+    if (unsupported) {
+      setStatus(`Снимката „${unsupported.name}“ не е JPG, PNG или WebP.`);
+      e.target.value = "";
+      return;
+    }
+
+    const oversized = files.find((file) => file.size > MAX_REQUEST_PHOTO_BYTES);
+    if (oversized) {
+      setStatus(`Снимката „${oversized.name}“ е над лимита от 8 MB.`);
+      e.target.value = "";
+      return;
+    }
+    if ((form.photos?.length || 0) + files.length > MAX_REQUEST_PHOTOS) {
+      setStatus(`Може да качите най-много ${MAX_REQUEST_PHOTOS} снимки.`);
+      e.target.value = "";
+      return;
+    }
 
     try {
       const photos = await filesToPhotos(files);
@@ -298,11 +279,40 @@ export function RequestFlow({ embedded = false, onCreated }) {
     return true;
   }
 
-  function next() {
+  async function next() {
     setStatus("");
     if (!canContinue()) {
       setStatus("Попълни текущата стъпка, за да продължим.");
       return;
+    }
+    if (step === 3) {
+      if (!isLogged) {
+        setStatus("Влез в клиентския си профил, за да проверим адреса.");
+        showLogin();
+        return;
+      }
+      setLocationStatus("loading");
+      setLocationMessage("Проверяваме адреса и позицията му на картата...");
+      try {
+        const response = await apiPost("/requests/geocode", {
+          address: form.address.trim(),
+        });
+        setForm((prev) => ({
+          ...prev,
+          latitude: response.data.latitude,
+          longitude: response.data.longitude,
+          locationSource: "address_geocode",
+        }));
+        setLocationStatus("granted");
+        setLocationMessage("Адресът е намерен и ще бъде отбелязан на картата.");
+      } catch (error) {
+        setLocationStatus("denied");
+        setLocationMessage(
+          error?.response?.data?.message ||
+            "Адресът не беше намерен. Добави град, улица и номер.",
+        );
+        return;
+      }
     }
     setStep((prev) => Math.min(prev + 1, STEPS.length - 1));
   }
@@ -324,8 +334,6 @@ export function RequestFlow({ embedded = false, onCreated }) {
       `Планирани дейности: ${form.activities.join(", ") || "не е избрано"}`,
       `Приблизителен размер: ${form.quantity || "не е посочено"}`,
       form.exactAreaM2 ? `Точна площ, въведена от клиента: ${form.exactAreaM2} кв.м` : "",
-      `Цел: ${GOALS.find((item) => item.value === form.goal)?.label || form.goal}`,
-      `Комуникация: ${CONTACT_PREFS.find((item) => item.value === form.contactPreference)?.label || form.contactPreference}`,
       form.description ? `Описание: ${form.description}` : "",
     ]
       .filter(Boolean)
@@ -407,17 +415,18 @@ export function RequestFlow({ embedded = false, onCreated }) {
         createdRequestId &&
         realImageFiles.length
       ) {
-        const mediaPayload = new FormData();
-        realImageFiles.forEach((file) => mediaPayload.append("images", file));
-        await apiPost(`/requests/${createdRequestId}/media/before`, mediaPayload);
+        for (const file of realImageFiles) {
+          const mediaPayload = new FormData();
+          mediaPayload.append("images", file);
+          await apiPost(`/requests/${createdRequestId}/media/before`, mediaPayload);
+        }
       }
       setStatus("Заявката е изпратена за одобрение от админ.");
       if (onCreated) onCreated();
       else navigate("/client/profile?tab=requests", { replace: true });
       setStep(0);
-      locationAskedRef.current = false;
       setLocationStatus("idle");
-      setLocationMessage("Позволи текуща локация или въведи точния адрес ръчно.");
+      setLocationMessage("Въведи точния адрес на обекта.");
       setForm((prev) => ({
         ...prev,
         activities: [],
@@ -432,7 +441,12 @@ export function RequestFlow({ embedded = false, onCreated }) {
       }));
     } catch (err) {
       console.error(err);
-      setStatus("Не успях да изпратя заявката. Опитай отново.");
+      const isTooLarge = err?.response?.status === 413;
+      setStatus(
+        isTooLarge
+          ? "Снимката е прекалено голяма. Лимитът е 8 MB за една снимка и до 20 снимки."
+          : err?.response?.data?.message || "Не успях да изпратя заявката. Опитай отново.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -578,27 +592,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
               <div>
                 <StepTitle category={category} title="Къде се намира обектът?" step={step} onGoToStep={goToStep} />
                 <div className="mt-6 space-y-4">
-                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold">Използвай текущата локация</p>
-                        <p className="mt-1 text-sm text-gray-300">Браузърът ще поиска разрешение и ще добави координатите към заявката.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={requestCurrentLocation}
-                        disabled={locationStatus === "loading"}
-                        className="rounded-lg bg-cyan-600 px-4 py-3 font-bold hover:bg-cyan-500 disabled:cursor-wait disabled:opacity-60"
-                      >
-                        {locationStatus === "loading" ? "Изчакване..." : locationStatus === "granted" ? "Обнови локацията" : "Разреши локация"}
-                      </button>
-                    </div>
-                    <p className={cx("mt-3 text-sm", locationStatus === "granted" ? "text-green-300" : locationStatus === "denied" ? "text-amber-300" : "text-cyan-100")}>
-                      {locationMessage}
-                    </p>
-                  </div>
                   <label className="block">
-                    <span className="mb-2 block font-bold">Или въведи точен адрес</span>
+                    <span className="mb-2 block font-bold">Точен адрес</span>
                     <input
                       value={form.address}
                       onChange={(e) => setField("address", e.target.value)}
@@ -606,38 +601,14 @@ export function RequestFlow({ embedded = false, onCreated }) {
                       className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3"
                     />
                   </label>
+                  <p className={cx("text-sm", locationStatus === "granted" ? "text-green-300" : locationStatus === "denied" ? "text-amber-300" : "text-gray-400")}>
+                    {locationMessage}
+                  </p>
                 </div>
               </div>
             )}
 
             {step === 4 && (
-              <div>
-                <StepTitle category={category} title="С каква цел използваш платформата?" step={step} onGoToStep={goToStep} />
-                <div className="mt-6 space-y-3">
-                  {GOALS.map((goal) => (
-                    <RadioCard key={goal.value} selected={form.goal === goal.value} onClick={() => setField("goal", goal.value)}>
-                      {goal.label}
-                    </RadioCard>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step === 5 && (
-              <div>
-                <StepTitle category={category} title="Как предпочиташ да комуникираш?" step={step} onGoToStep={goToStep} />
-                <p className="mt-2 text-gray-300">Контактът с майсторите остава защитен в Bricky.</p>
-                <div className="mt-6 space-y-3">
-                  {CONTACT_PREFS.map((pref) => (
-                    <RadioCard key={pref.value} selected={form.contactPreference === pref.value} onClick={() => setField("contactPreference", pref.value)}>
-                      {pref.label}
-                    </RadioCard>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step === 6 && (
               <div>
                 <StepTitle category={category} title="Финални детайли" step={step} onGoToStep={goToStep} />
                 <textarea
@@ -649,9 +620,12 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
                 <div className="mt-5 rounded-xl border border-gray-700 bg-gray-900 p-4">
                   <label className="block font-bold">Снимки на проблема / мястото за ремонт</label>
-                  <input type="file" accept="image/*" multiple onChange={handlePhotos} className="mt-3 block w-full text-sm" />
+                  <label className="mt-4 inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-500 focus-within:ring-2 focus-within:ring-cyan-300">
+                    <Upload size={19} /> Избери снимки
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handlePhotos} className="sr-only" />
+                  </label>
                   <p className="mt-2 text-xs text-gray-400">
-                    Снимките се записват към заявката и майсторът ги вижда в списъка със заявки.
+                    JPG, PNG или WebP. До 8 MB на снимка, максимум 20 снимки.
                   </p>
 
                   {form.photos.length > 0 && (
@@ -685,8 +659,8 @@ export function RequestFlow({ embedded = false, onCreated }) {
                 </button>
               )}
               {step < STEPS.length - 1 ? (
-                <button type="button" onClick={next} className="rounded-lg bg-blue-600 px-5 py-3 font-bold hover:bg-blue-700">
-                  Напред
+                <button type="button" onClick={next} disabled={locationStatus === "loading"} className="rounded-lg bg-blue-600 px-5 py-3 font-bold hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">
+                  {locationStatus === "loading" ? "Проверявам адреса..." : "Напред"}
                 </button>
               ) : (
                 <button type="button" onClick={submit} disabled={submitting} className="rounded-lg bg-green-600 px-5 py-3 font-bold hover:bg-green-700 disabled:opacity-60">
@@ -704,8 +678,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
             <SummaryLine label="Размер" value={form.quantity || "не е избран"} />
             <SummaryLine label="Площ от клиента" value={form.exactAreaM2 ? `${form.exactAreaM2} кв.м` : "не е въведена"} />
             <SummaryLine label="Ценови режим" value={PRICING_MODES.find((item) => item.value === estimate.pricingMode)?.label} />
-            <SummaryLine label="Локация" value={form.address.trim() || (form.locationSource === "gps" ? "Текуща локация от браузъра" : "не е посочена")} />
-            <SummaryLine label="Цел" value={GOALS.find((item) => item.value === form.goal)?.label} />
+            <SummaryLine label="Адрес" value={form.address.trim() || "не е посочен"} />
             <div className="mt-6 rounded-xl bg-gray-900 p-4">
               <p className="text-sm text-gray-400">
                 {estimate.isCategoryEstimate ? "Груб ориентир за категорията" : `Ориентир ${estimate.pricingVersion}`}

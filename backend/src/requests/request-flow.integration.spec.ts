@@ -21,7 +21,11 @@ describe('Sprint 3 canonical request flow', () => {
         value.id = nextRequestId++;
         value.createdAt = new Date('2026-07-19T08:00:00.000Z');
         value.updatedAt = value.createdAt;
-        value.client = { id: value.clientUserId, name: 'Client', email: 'client@example.com' };
+        value.client = {
+          id: value.clientUserId,
+          name: 'Client',
+          email: 'client@example.com',
+        };
         requests.push(value);
       }
       value.updatedAt = new Date();
@@ -46,7 +50,9 @@ describe('Sprint 3 canonical request flow', () => {
     const transactionManager = {
       save: jest.fn(async (value: any) => {
         if (Array.isArray(value)) {
-          return Promise.all(value.map((item) => transactionManager.save(item)));
+          return Promise.all(
+            value.map((item) => transactionManager.save(item)),
+          );
         }
         if (value?.eventType) return persistEvent(value);
         if (value?.workerUserId && value?.requestId && !value?.categoryKey) {
@@ -59,8 +65,10 @@ describe('Sprint 3 canonical request flow', () => {
     const repairRequestsRepo = {
       create: jest.fn((value) => ({ ...value })),
       save: jest.fn(async (value) => persistRequest(value)),
-      findOne: jest.fn(async ({ where }: any) =>
-        requests.find((request) => Number(request.id) === Number(where.id)) || null,
+      findOne: jest.fn(
+        async ({ where }: any) =>
+          requests.find((request) => Number(request.id) === Number(where.id)) ||
+          null,
       ),
       find: jest.fn(async () => requests),
       manager: {
@@ -70,17 +78,20 @@ describe('Sprint 3 canonical request flow', () => {
     const applicationsRepo = {
       create: jest.fn((value) => ({ ...value })),
       save: jest.fn(async (value) => persistApplication(value)),
-      findOne: jest.fn(async ({ where }: any) =>
-        applications.find(
-          (application) =>
-            Number(application.requestId) === Number(where.requestId) &&
-            (where.workerUserId == null ||
-              Number(application.workerUserId) === Number(where.workerUserId)),
-        ) || null,
+      findOne: jest.fn(
+        async ({ where }: any) =>
+          applications.find(
+            (application) =>
+              Number(application.requestId) === Number(where.requestId) &&
+              (where.workerUserId == null ||
+                Number(application.workerUserId) ===
+                  Number(where.workerUserId)),
+          ) || null,
       ),
       find: jest.fn(async ({ where }: any) =>
         applications.filter(
-          (application) => Number(application.requestId) === Number(where.requestId),
+          (application) =>
+            Number(application.requestId) === Number(where.requestId),
         ),
       ),
     };
@@ -123,17 +134,20 @@ describe('Sprint 3 canonical request flow', () => {
       findByRequest: jest.fn(async (requestId) =>
         mediaRows.filter((row) => Number(row.requestId) === Number(requestId)),
       ),
-      setRequestMediaModeration: jest.fn(async (requestId, kind, moderationStatus) => {
-        mediaRows
-          .filter(
-            (row) =>
-              Number(row.requestId) === Number(requestId) && row.kind === kind,
-          )
-          .forEach((row) => {
-            row.moderationStatus = moderationStatus;
-          });
-        return mediaRows;
-      }),
+      setRequestMediaModeration: jest.fn(
+        async (requestId, kind, moderationStatus) => {
+          mediaRows
+            .filter(
+              (row) =>
+                Number(row.requestId) === Number(requestId) &&
+                row.kind === kind,
+            )
+            .forEach((row) => {
+              row.moderationStatus = moderationStatus;
+            });
+          return mediaRows;
+        },
+      ),
     };
     const lifecycle = new RequestLifecycleService();
     const requestService = new RequestsService(
@@ -144,28 +158,38 @@ describe('Sprint 3 canonical request flow', () => {
       usersRepo as any,
       workerProfilesRepo as any,
       { findOne: jest.fn().mockResolvedValue(null) } as any,
-      {} as any,
+      { sendNewRequestNotification: jest.fn().mockResolvedValue(true) } as any,
       { create: jest.fn().mockResolvedValue({}) } as any,
       media as any,
       lifecycle,
       {
         processCompletedRequest: jest.fn().mockResolvedValue(null),
       } as any,
+      {
+        geocode: jest
+          .fn()
+          .mockResolvedValue({ latitude: 42.6977, longitude: 23.3219 }),
+      } as any,
     );
 
     const reviewManager = {
       findOne: jest.fn(async (entity: any, options: any) => {
         if (entity === RepairRequestEntity) {
-          return requests.find(
-            (request) => Number(request.id) === Number(options.where.id),
-          ) || null;
+          return (
+            requests.find(
+              (request) => Number(request.id) === Number(options.where.id),
+            ) || null
+          );
         }
         if (entity === ReviewEntity) {
-          return reviews.find(
-            (review) =>
-              Number(review.requestId) === Number(options.where.requestId) &&
-              Number(review.clientUserId) === Number(options.where.clientUserId),
-          ) || null;
+          return (
+            reviews.find(
+              (review) =>
+                Number(review.requestId) === Number(options.where.requestId) &&
+                Number(review.clientUserId) ===
+                  Number(options.where.clientUserId),
+            ) || null
+          );
         }
         return null;
       }),
@@ -188,10 +212,7 @@ describe('Sprint 3 canonical request flow', () => {
       },
       find: jest.fn(async () => reviews),
     };
-    const reviewService = new ReviewsService(
-      reviewsRepo as any,
-      lifecycle,
-    );
+    const reviewService = new ReviewsService(reviewsRepo as any, lifecycle);
 
     const created = await requestService.create(
       {
@@ -206,7 +227,12 @@ describe('Sprint 3 canonical request flow', () => {
     expect(mediaRows[0].moderationStatus).toBe('pending');
 
     mediaRows[0].moderationStatus = 'approved';
-    await requestService.adminSetStatus(created.id, 'published', 900, 'approved');
+    await requestService.adminSetStatus(
+      created.id,
+      'published',
+      900,
+      'approved',
+    );
     expect(requests[0].status).toBe('published');
     expect(mediaRows[0].moderationStatus).toBe('approved');
     expect(media.setRequestMediaModeration).not.toHaveBeenCalled();

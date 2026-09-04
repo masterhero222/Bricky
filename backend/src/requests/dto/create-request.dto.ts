@@ -1,5 +1,18 @@
-import { IsArray, IsEmail, IsIn, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
-import { REPAIR_CATEGORY_KEYS, REPAIR_CATEGORY_LABELS } from '../repair-catalog';
+import {
+  IsArray,
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import {
+  REPAIR_CATEGORY_KEYS,
+  REPAIR_CATEGORY_LABELS,
+} from '../repair-catalog';
 
 export class CreateRequestDto {
   @IsOptional()
@@ -14,9 +27,10 @@ export class CreateRequestDto {
   @IsString()
   phone?: string;
 
-  @IsOptional()
   @IsString()
-  address?: string;
+  @IsNotEmpty()
+  @MaxLength(255)
+  address: string;
 
   @IsOptional()
   @IsNumber()

@@ -101,7 +101,14 @@ export default function ClientProfile() {
         const clientRes = await apiGet("/client/me");
         setClient(clientRes.data || {});
       } catch {
-        // ok - no endpoint
+        const accountRes = await apiGet("/account/me");
+        const account = accountRes.data || {};
+        setClient({
+          name: account.profile?.name || "",
+          email: account.email || "",
+          phone: account.profile?.phone || "",
+          address: account.profile?.address || "",
+        });
       }
 
       const [reqRes, historyRes] = await Promise.all([

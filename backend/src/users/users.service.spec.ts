@@ -53,17 +53,26 @@ describe('UsersService account settings', () => {
       update: jest.fn(),
     };
     const notificationsRepo = {
-      find: jest.fn().mockResolvedValue([
-        { id: 1, userId: 12, message: 'New request', isRead: false },
-      ]),
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 1, userId: 12, message: 'New request', isRead: false },
+        ]),
       count: jest.fn().mockResolvedValue(3),
     };
     const plansRepo = {
-      findOne: jest.fn().mockResolvedValue(
-        role === 'worker'
-          ? { workerUserId: 12, planKey: 'pro', status: 'active', endsAt: null }
-          : null,
-      ),
+      findOne: jest
+        .fn()
+        .mockResolvedValue(
+          role === 'worker'
+            ? {
+                workerUserId: 12,
+                planKey: 'pro',
+                status: 'active',
+                endsAt: null,
+              }
+            : null,
+        ),
     };
     const requestRepo = {
       find: jest.fn().mockResolvedValue([]),
@@ -147,7 +156,10 @@ describe('UsersService account settings', () => {
           phone: '0899000000',
           address: 'Plovdiv center',
         }),
-        subscription: expect.objectContaining({ planKey: 'pro', status: 'active' }),
+        subscription: expect.objectContaining({
+          planKey: 'pro',
+          status: 'active',
+        }),
       }),
     );
   });
@@ -155,13 +167,37 @@ describe('UsersService account settings', () => {
   it('rejects a duplicate email before saving a profile', async () => {
     const { service, userRepo, clientRepo } = setup('client');
     userRepo.findOne.mockImplementation(async ({ where }: any) =>
-      where?.email ? { id: 99, email: where.email } : { id: 12, email: 'client@bricky.test', role: 'client' },
+      where?.email
+        ? { id: 99, email: where.email }
+        : { id: 12, email: 'client@bricky.test', role: 'client' },
     );
 
     await expect(
       service.updateAccountProfile(12, { email: 'taken@bricky.test' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(clientRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('creates the missing legacy client profile on first save', async () => {
+    const { service, clientRepo } = setup('client');
+    clientRepo.findOne.mockResolvedValue(null);
+    clientRepo.create = jest.fn((value) => value);
+
+    await service.updateAccountProfile(12, {
+      name: 'Updated Client',
+      phone: '0888 123 456',
+      address: 'София, бул. България 1',
+    });
+
+    expect(clientRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 12, displayName: 'Updated Client' }),
+    );
+    expect(clientRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phonePrivate: '+359888123456',
+        defaultAddress: 'София, бул. България 1',
+      }),
+    );
   });
 
   it('exports account data without password or internal storage keys', async () => {
@@ -216,5 +252,4 @@ describe('UsersService account settings', () => {
       { visibilityStatus: 'private' },
     );
   });
-
 });

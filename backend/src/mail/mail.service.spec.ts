@@ -88,4 +88,21 @@ describe('MailService', () => {
     );
     expect(deliveredMessage?.html).toContain('30 минути');
   });
+
+  it('notifies the configured administrator about a new request', async () => {
+    await service.sendNewRequestNotification({
+      requestId: 42,
+      category: 'Ремонт на баня',
+      clientName: '<b>Клиент</b>',
+      phone: '+359888123456',
+      email: 'client@bricky.test',
+      address: 'София, бул. България 1',
+    });
+
+    expect(deliveredMessage).toMatchObject({
+      to: 'tsvetoslavpaskalev@gmail.com',
+      subject: 'Нова заявка #42 - Bricky',
+    });
+    expect(deliveredMessage?.html).toContain('&lt;b&gt;Клиент&lt;/b&gt;');
+  });
 });

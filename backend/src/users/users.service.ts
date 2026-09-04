@@ -49,11 +49,23 @@ export class UsersService {
     return this.repo.find({ where: { id: In(ids) } });
   }
 
-  findClientProfile(userId: number) {
-    return this.clientProfilesRepo.findOne({
+  async findClientProfile(userId: number) {
+    const profile = await this.clientProfilesRepo.findOne({
       where: { userId },
       relations: { user: true },
     });
+    if (profile) return profile;
+
+    const user = await this.repo.findOne({ where: { id: userId } });
+    if (!user || user.role !== 'client') return null;
+
+    return {
+      userId: user.id,
+      user,
+      displayName: user.name,
+      phonePrivate: null,
+      defaultAddress: null,
+    } as ClientProfileEntity;
   }
 
   async create(
@@ -208,8 +220,14 @@ export class UsersService {
 
       if (user.role === 'client') {
         const profiles = manager.getRepository(ClientProfileEntity);
-        const profile = await profiles.findOne({ where: { userId } });
-        if (!profile) throw new NotFoundException('Client profile not found');
+        const profile =
+          (await profiles.findOne({ where: { userId } })) ||
+          profiles.create({
+            userId,
+            displayName: name || user.name,
+            phonePrivate: null,
+            defaultAddress: null,
+          });
         if (name) profile.displayName = name;
         if (data.phone !== undefined)
           profile.phonePrivate = this.normalizePhone(data.phone);
@@ -246,10 +264,7 @@ export class UsersService {
       await Promise.all([
         this.getAccount(userId),
         requestRepo.find({
-          where: [
-            { clientUserId: userId },
-            { assignedWorkerUserId: userId },
-          ],
+          where: [{ clientUserId: userId }, { assignedWorkerUserId: userId }],
           order: { createdAt: 'DESC' },
         }),
         applicationRepo.find({
@@ -334,10 +349,9 @@ export class UsersService {
       );
 
       if (user.role === 'worker') {
-        await manager.getRepository(WorkerProfileEntity).update(
-          { userId },
-          { visibilityStatus: 'private' },
-        );
+        await manager
+          .getRepository(WorkerProfileEntity)
+          .update({ userId }, { visibilityStatus: 'private' });
       }
     });
 

@@ -59,6 +59,15 @@ function requestPhotos(req) {
   return photos.filter((photo) => photoUrl(photo));
 }
 
+function requestStatusTone(request) {
+  const status = String(request?.statusKey || '').toLowerCase();
+  if (['published', 'approved'].includes(status)) return 'text-emerald-300';
+  if (['applied', 'assigned', 'worker_selected'].includes(status)) return 'text-sky-300';
+  if (['worker_confirmed', 'worker_on_site', 'inspected', 'in_progress'].includes(status)) return 'text-amber-300';
+  if (['completed', 'reviewed', 'client_confirmed'].includes(status)) return 'text-emerald-300';
+  return 'text-slate-300';
+}
+
 function imageFileToDataUrl(file, maxSize = 900, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1205,7 +1214,7 @@ export default function WorkerProfile() {
                           <div className="font-bold">
                             #{r.id} • {r.category} • {r.clientName}
                           </div>
-                          <div className="text-sm text-red-400">
+                          <div className={`text-sm font-bold ${requestStatusTone(r)}`}>
                             {r.statusLabel || r.statusKey}
                           </div>
                         </div>
@@ -1510,7 +1519,7 @@ export default function WorkerProfile() {
                         <h2 className="text-xl font-bold">
                           #{req.id} • {req.category}
                         </h2>
-                        <span className="text-red-400 font-bold">
+                        <span className={`${requestStatusTone(req)} font-bold`}>
                           {req.statusLabel || req.statusKey}
                         </span>
                       </div>
