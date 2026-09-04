@@ -480,7 +480,10 @@ export class WorkersService {
     ]);
 
     return {
-      currentStep: Number(profile.onboardingStep || 1),
+      currentStep: Math.min(
+        4,
+        Math.max(1, Number(profile.onboardingStep || 1)),
+      ),
       completedAt: profile.onboardingCompletedAt || null,
       contact: {
         phone: profile.phonePrivate || '',

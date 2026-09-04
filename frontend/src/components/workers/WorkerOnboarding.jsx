@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,6 +25,24 @@ const STEP_FIELDS = {
   readiness: ['projectPhotosReadiness', 'serviceDescriptionReadiness'],
 };
 
+function initialDraft(state) {
+  return {
+    phone: state?.contact?.phone || '',
+    preferredContactMethod: state?.contact?.preferredContactMethod || '',
+    contactAccuracyConfirmed: Boolean(state?.contact?.contactAccuracyConfirmed),
+    primaryCategoryKey: state?.activity?.primaryCategoryKey || '',
+    skills: state?.activity?.skills || [],
+    workType: state?.activity?.workType || '',
+    experienceRange: state?.activity?.experienceRange || '',
+    city: state?.activity?.city || '',
+    availabilityStatus: state?.activity?.availabilityStatus || '',
+    acquisitionSourceSelfReported: state?.acquisition?.source || '',
+    acquisitionSourceDetail: state?.acquisition?.detail || '',
+    projectPhotosReadiness: state?.readiness?.projectPhotosReadiness || '',
+    serviceDescriptionReadiness: state?.readiness?.serviceDescriptionReadiness || '',
+  };
+}
+
 const SOURCE_OPTIONS = [
   ['founder_outreach', 'Цветослав се свърза с мен'],
   ['worker_referral', 'Препоръка от майстор'],
@@ -43,6 +61,8 @@ export function WorkerProfileGuidanceCard({ state, onContinue, onNavigate }) {
   if (!completion) return null;
   const percentage = Number(completion.percentage || 0);
   const missing = completion.missingItems || [];
+  const onboardingCompleted = completion.onboardingStatus === 'completed';
+  const continueTarget = missing[0]?.target;
 
   return (
     <section className="mb-7 rounded-lg border border-cyan-400/20 bg-[#0b2033] p-5 shadow-lg shadow-cyan-950/20">
@@ -53,13 +73,20 @@ export function WorkerProfileGuidanceCard({ state, onContinue, onNavigate }) {
           </p>
           <h2 className="mt-1 text-xl font-bold">Дай на клиентите достатъчно информация за сравнение</h2>
         </div>
-        <button
-          type="button"
-          onClick={onContinue}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-3 text-sm font-bold hover:bg-emerald-500"
-        >
-          Продължи профила <ArrowRight size={17} />
-        </button>
+        {percentage < 100 && (
+          <button
+            type="button"
+            onClick={() =>
+              onboardingCompleted && continueTarget
+                ? onNavigate(continueTarget)
+                : onContinue()
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-3 text-sm font-bold hover:bg-emerald-500"
+          >
+            {onboardingCompleted ? 'Допълни профила' : 'Продължи профила'}{' '}
+            <ArrowRight size={17} />
+          </button>
+        )}
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded bg-slate-800" aria-label={`${percentage}% завършен профил`}>
         <div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${percentage}%` }} />
@@ -90,30 +117,10 @@ export function WorkerProfileGuidanceCard({ state, onContinue, onNavigate }) {
 export function WorkerOnboardingModal({ state, onSaveStep, onClose }) {
   const initialStep = Math.min(4, Math.max(1, Number(state?.currentStep || 1)));
   const [step, setStep] = useState(initialStep);
-  const [draft, setDraft] = useState({});
+  const [draft, setDraft] = useState(() => initialDraft(state));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    setStep(initialStep);
-    setDraft({
-      phone: state?.contact?.phone || '',
-      preferredContactMethod: state?.contact?.preferredContactMethod || '',
-      contactAccuracyConfirmed: Boolean(state?.contact?.contactAccuracyConfirmed),
-      primaryCategoryKey: state?.activity?.primaryCategoryKey || '',
-      skills: state?.activity?.skills || [],
-      workType: state?.activity?.workType || '',
-      experienceRange: state?.activity?.experienceRange || '',
-      city: state?.activity?.city || '',
-      availabilityStatus: state?.activity?.availabilityStatus || '',
-      acquisitionSourceSelfReported: state?.acquisition?.source || '',
-      acquisitionSourceDetail: state?.acquisition?.detail || '',
-      projectPhotosReadiness: state?.readiness?.projectPhotosReadiness || '',
-      serviceDescriptionReadiness: state?.readiness?.serviceDescriptionReadiness || '',
-    });
-  }, [initialStep, state]);
-
-  const stepKey = STEP_KEYS[step - 1];
   const needsSourceDetail = ['worker_referral', 'partner', 'other'].includes(
     draft.acquisitionSourceSelfReported,
   );
@@ -137,14 +144,16 @@ export function WorkerOnboardingModal({ state, onSaveStep, onClose }) {
 
   async function submit(event) {
     event.preventDefault();
+    const submittedStep = Math.min(4, Math.max(1, step));
+    const submittedStepKey = STEP_KEYS[submittedStep - 1];
     setSaving(true);
     setError('');
     try {
       const stepPayload = Object.fromEntries(
-        STEP_FIELDS[stepKey].map((field) => [field, draft[field]]),
+        STEP_FIELDS[submittedStepKey].map((field) => [field, draft[field]]),
       );
-      await onSaveStep(stepKey, stepPayload);
-      if (step < 4) setStep((current) => current + 1);
+      await onSaveStep(submittedStepKey, stepPayload);
+      if (submittedStep < 4) setStep(submittedStep + 1);
       else onClose();
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || 'Неуспешно запазване';
