@@ -90,7 +90,17 @@ export class AuthService {
         return created;
       });
 
-      const emailVerification = await this.requestEmailVerification(user.id);
+      const [emailVerification] = await Promise.all([
+        this.requestEmailVerification(user.id),
+        this.mail.sendNewUserRegistrationNotification({
+          userId: user.id,
+          role: 'client',
+          name: displayName,
+          email: dto.email,
+          phone: profile.phonePrivate || dto.phone || null,
+          city: null,
+        }),
+      ]);
       return {
         message: 'Клиентът е регистриран успешно',
         user: this.publicUser(user),
@@ -151,7 +161,17 @@ export class AuthService {
         return created;
       });
 
-      const emailVerification = await this.requestEmailVerification(user.id);
+      const [emailVerification] = await Promise.all([
+        this.requestEmailVerification(user.id),
+        this.mail.sendNewUserRegistrationNotification({
+          userId: user.id,
+          role: 'worker',
+          name: publicName,
+          email: dto.email,
+          phone: profile.phonePrivate || dto.phone || null,
+          city,
+        }),
+      ]);
       return {
         message: 'Майсторът е регистриран успешно',
         user: this.publicUser(user),

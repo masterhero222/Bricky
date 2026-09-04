@@ -14,6 +14,7 @@ export class MailService {
   private readonly passwordResetTemplate: Handlebars.TemplateDelegate;
   private readonly emailVerificationTemplate: Handlebars.TemplateDelegate;
   private readonly newRequestTemplate: Handlebars.TemplateDelegate;
+  private readonly newRegistrationTemplate: Handlebars.TemplateDelegate;
   private readonly requestNotificationEmail: string;
 
   constructor(config: ConfigService) {
@@ -56,9 +57,51 @@ export class MailService {
       ),
       { strict: true },
     );
+    this.newRegistrationTemplate = Handlebars.compile(
+      readFileSync(
+        join(__dirname, 'templates', 'new-registration-notification.hbs'),
+        'utf8',
+      ),
+      { strict: true },
+    );
     this.requestNotificationEmail =
       config.get<string>('REQUEST_NOTIFICATION_EMAIL') ||
       'tsvetoslavpaskalev@gmail.com';
+  }
+
+  async sendNewUserRegistrationNotification(registration: {
+    userId: number;
+    role: 'client' | 'worker';
+    name: string;
+    email: string;
+    phone?: string | null;
+    city?: string | null;
+  }) {
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: this.requestNotificationEmail,
+        subject: `Нов ${registration.role === 'worker' ? 'майстор' : 'клиент'} #${registration.userId} - Bricky`,
+        html: this.newRegistrationTemplate({
+          userId: registration.userId,
+          role: registration.role === 'worker' ? 'Майстор' : 'Клиент',
+          name: registration.name,
+          email: registration.email,
+          phone: registration.phone || 'Не е посочен',
+          city: registration.city || 'Не е посочен',
+        }),
+      });
+      this.logger.log(
+        `New user registration notification sent for #${registration.userId}`,
+      );
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `New user registration notification failed for #${registration.userId}: ${message}`,
+      );
+      return false;
+    }
   }
 
   async sendNewRequestNotification(request: {

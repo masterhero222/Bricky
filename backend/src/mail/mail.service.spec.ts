@@ -105,4 +105,22 @@ describe('MailService', () => {
     });
     expect(deliveredMessage?.html).toContain('&lt;b&gt;Клиент&lt;/b&gt;');
   });
+
+  it('notifies the administrator when a new user registers', async () => {
+    await service.sendNewUserRegistrationNotification({
+      userId: 77,
+      role: 'worker',
+      name: '<b>Нов майстор</b>',
+      email: 'worker@bricky.test',
+      phone: '+359888123456',
+      city: 'София',
+    });
+
+    expect(deliveredMessage).toMatchObject({
+      to: 'tsvetoslavpaskalev@gmail.com',
+      subject: 'Нов майстор #77 - Bricky',
+    });
+    expect(deliveredMessage?.html).toContain('&lt;b&gt;Нов майстор&lt;/b&gt;');
+    expect(deliveredMessage?.html).toContain('worker@bricky.test');
+  });
 });

@@ -45,6 +45,7 @@ describe('AuthService registration', () => {
     mail = {
       sendPasswordResetLink: jest.fn().mockResolvedValue(undefined),
       sendEmailVerificationLink: jest.fn().mockResolvedValue(undefined),
+      sendNewUserRegistrationNotification: jest.fn().mockResolvedValue(true),
     };
     passwordResetTokens = {
       findOne: jest.fn().mockResolvedValue(null),
@@ -113,6 +114,14 @@ describe('AuthService registration', () => {
       {},
     );
     expect(result.user.id).toBe(42);
+    expect(mail.sendNewUserRegistrationNotification).toHaveBeenCalledWith({
+      userId: 42,
+      role: 'client',
+      name: 'Нов клиент',
+      email: 'new@bricky.bg',
+      phone: '0888000000',
+      city: null,
+    });
   });
 
   it('creates a worker and skills in the same transaction', async () => {
@@ -151,6 +160,14 @@ describe('AuthService registration', () => {
     );
     expect(users.createClientProfile).not.toHaveBeenCalled();
     expect(result.user.id).toBe(77);
+    expect(mail.sendNewUserRegistrationNotification).toHaveBeenCalledWith({
+      userId: 77,
+      role: 'worker',
+      name: 'Нов майстор',
+      email: 'worker@bricky.bg',
+      phone: null,
+      city: 'София',
+    });
   });
 
   it('does not attach a referral when profile creation fails', async () => {
