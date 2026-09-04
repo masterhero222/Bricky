@@ -11,6 +11,20 @@ import { REPAIR_CATEGORY_OPTIONS } from '../../constants/repairCatalog';
 
 const STEP_KEYS = ['contact', 'activity', 'acquisition', 'readiness'];
 
+const STEP_FIELDS = {
+  contact: ['phone', 'preferredContactMethod', 'contactAccuracyConfirmed'],
+  activity: [
+    'primaryCategoryKey',
+    'skills',
+    'workType',
+    'experienceRange',
+    'city',
+    'availabilityStatus',
+  ],
+  acquisition: ['acquisitionSourceSelfReported', 'acquisitionSourceDetail'],
+  readiness: ['projectPhotosReadiness', 'serviceDescriptionReadiness'],
+};
+
 const SOURCE_OPTIONS = [
   ['founder_outreach', 'Цветослав се свърза с мен'],
   ['worker_referral', 'Препоръка от майстор'],
@@ -126,11 +140,15 @@ export function WorkerOnboardingModal({ state, onSaveStep, onClose }) {
     setSaving(true);
     setError('');
     try {
-      await onSaveStep(stepKey, draft);
+      const stepPayload = Object.fromEntries(
+        STEP_FIELDS[stepKey].map((field) => [field, draft[field]]),
+      );
+      await onSaveStep(stepKey, stepPayload);
       if (step < 4) setStep((current) => current + 1);
       else onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Неуспешно запазване');
+      const message = err?.response?.data?.message || err?.message || 'Неуспешно запазване';
+      setError(Array.isArray(message) ? message.join('\n') : message);
     } finally {
       setSaving(false);
     }
@@ -202,7 +220,7 @@ export function WorkerOnboardingModal({ state, onSaveStep, onClose }) {
           )}
         </div>
 
-        {error && <p className="mt-5 rounded-md border border-red-500/40 bg-red-950/40 p-3 text-sm text-red-200">{error}</p>}
+        {error && <p className="mt-5 whitespace-pre-line rounded-md border border-red-500/40 bg-red-950/40 p-3 text-sm text-red-200">{error}</p>}
         <div className="mt-7 flex flex-wrap justify-between gap-3">
           <button type="button" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="inline-flex items-center gap-2 rounded-md border border-slate-600 px-4 py-3 text-sm font-semibold"><ArrowLeft size={17} />{step > 1 ? 'Назад' : 'По-късно'}</button>
           <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-5 py-3 text-sm font-bold disabled:opacity-60">{saving ? 'Запазване...' : step === 4 ? 'Завърши' : 'Запази и продължи'}<ArrowRight size={17} /></button>
