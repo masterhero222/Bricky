@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, BookOpen, Search } from 'lucide-react';
 import { knowledgeApi, knowledgeError } from '../../services/knowledge';
+import { knowledgeListingRobots } from '../../services/seoPolicy';
 import useDocumentMeta from '../../hooks/useDocumentMeta';
 import { mediaUrl } from '../../utils/mediaUrls';
 import { articlePath } from '../../components/knowledge/content';
@@ -19,6 +20,7 @@ export default function KnowledgeIndex() {
   const section = repairKey ? 'repairs' : sectionParam;
   const [params, setParams] = useSearchParams();
   const q = params.get('q') || '';
+  const hasSearchQuery = params.has('q');
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [search, setSearch] = useState(q);
   const [data, setData] = useState(null);
@@ -39,7 +41,7 @@ export default function KnowledgeIndex() {
   const repair = data?.metadata.categories.find(c => c.categoryKey === repairKey);
   const missing = !loading && !error && ((section && !rubric) || (repairKey && !repair));
   const title = repair?.label || rubric?.label || 'Център за ремонти';
-  useDocumentMeta({ title: `${title} | Bricky`, description: repair?.description || rubric?.description || 'Ремонтни дейности, ориентировъчни цени и избор на майстор.', canonicalPath: repairKey ? `/knowledge/repairs/${repairKey}` : section ? `/knowledge/${section}` : '/knowledge', robots: q || missing || error || (!loading && !data?.total && section) ? 'noindex,follow' : 'index,follow' });
+  useDocumentMeta({ title: `${title} | Bricky`, description: repair?.description || rubric?.description || 'Ремонтни дейности, ориентировъчни цени и избор на майстор.', canonicalPath: repairKey ? `/knowledge/repairs/${repairKey}` : section ? `/knowledge/${section}` : '/knowledge', robots: knowledgeListingRobots({ hasSearchQuery, routeMissing: missing }) });
   if (missing) return <div className="knowledge-root knowledge-container"><h1>Разделът не е намерен</h1><Link to="/knowledge">Към Центъра за ремонти</Link></div>;
   const matchedCategories = data?.metadata.categories.filter(category => !q || q.toLocaleLowerCase('bg').split(/\s+/).every(word => `${category.label} ${category.description || ''}`.toLocaleLowerCase('bg').includes(word))) || [];
   function updatePage(value) { const next = new URLSearchParams(params); next.set('page', String(value)); setParams(next); window.scrollTo(0, 0); }

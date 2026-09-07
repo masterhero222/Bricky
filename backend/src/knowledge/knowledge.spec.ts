@@ -98,4 +98,22 @@ describe('Knowledge service', () => {
     const gif = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#fff' } }).gif().toBuffer();
     await expect(service.upload({ buffer: gif, size: gif.length } as any)).rejects.toBeInstanceOf(BadRequestException);
   });
+  it('includes every public rubric and active repair landing page in the sitemap', async () => {
+    const updatedAt = new Date('2026-09-07T00:00:00.000Z');
+    const service = new KnowledgeService(
+      { find: jest.fn().mockResolvedValue([{ slug: 'article', updatedAt, rubricId: 1, repairCategoryId: 1 }]) } as any,
+      { find: jest.fn().mockResolvedValue([{ id: 1, slug: 'repairs' }, { id: 2, slug: 'guides' }]) } as any,
+      { findBy: jest.fn().mockResolvedValue([{ id: 1, categoryKey: 'vik' }, { id: 2, categoryKey: 'full_renovation' }]) } as any,
+      {} as any,
+    );
+
+    const sitemap = await service.sitemap();
+    const locations = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1]);
+    expect(sitemap).toContain('<loc>https://bricky.bg/knowledge/guides</loc>');
+    expect(sitemap).toContain('<loc>https://bricky.bg/knowledge/repairs/full_renovation</loc>');
+    expect(sitemap).toContain('<loc>https://bricky.bg/blog/article</loc>');
+    expect(locations.every(location => !location.includes('?'))).toBe(true);
+    expect(locations.every(location => !location.includes('/requests'))).toBe(true);
+    expect(locations.every(location => location.startsWith('https://'))).toBe(true);
+  });
 });

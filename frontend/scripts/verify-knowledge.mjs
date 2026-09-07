@@ -4,6 +4,7 @@ import { validateKnowledgeArticle } from '../src/services/knowledgeValidation.js
 import { clearKnowledgeDraft, readKnowledgeDraft, writeKnowledgeDraft } from '../src/services/knowledgeDraft.js';
 import { localizeKnowledgeMetadata } from '../src/components/knowledge/metadata.js';
 import { articleOutline, articlePath, calculatorPath, newTextBlock, readingMinutes, safeImage, splitTextWithImage } from '../src/components/knowledge/content.js';
+import { INDEX_FOLLOW, NOINDEX_FOLLOW, knowledgeListingRobots } from '../src/services/seoPolicy.js';
 
 const guide = count => ({ title: 'Покрив', slug: 'roof', excerpt: 'Ръководство', author: 'Bricky', status: 'published', tags: [], keywords: [], blocks: Array.from({ length: count }, (_, i) => i % 2 ? { id: `b-${i}`, type: 'image', image: { url: '/uploads/knowledge/abc.webp', alt: 'Покрив', caption: '', align: 'wide', kind: 'infographic' } } : { id: `b-${i}`, type: 'text', markdown: '## Проверка\n\nТекст' }) });
 
@@ -95,4 +96,10 @@ test('only controlled image assets can render', () => {
 test('reading time has a one-minute minimum and scales with text only', () => {
   assert.equal(readingMinutes([]), 1);
   assert.equal(readingMinutes([newTextBlock(Array(401).fill('word').join(' ')), { type: 'image' }]), 3);
+});
+
+test('knowledge SEO indexes real landing pages even when they have no articles', () => {
+  assert.equal(knowledgeListingRobots({ hasSearchQuery: false, routeMissing: false }), INDEX_FOLLOW);
+  assert.equal(knowledgeListingRobots({ hasSearchQuery: true, routeMissing: false }), NOINDEX_FOLLOW);
+  assert.equal(knowledgeListingRobots({ hasSearchQuery: false, routeMissing: true }), NOINDEX_FOLLOW);
 });

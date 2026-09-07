@@ -153,7 +153,7 @@ export class KnowledgeService {
     const articles = await this.articles.find({ where: { status: 'published', deletedAt: IsNull() }, select: { slug: true, updatedAt: true, rubricId: true, repairCategoryId: true } });
     const rubrics = await this.rubrics.find();
     const repairs = await this.repairs.findBy({ isActive: true });
-    const urls = ['/knowledge', ...rubrics.filter(r => articles.some(a => a.rubricId === r.id)).map(r => `/knowledge/${r.slug}`), ...repairs.filter(r => articles.some(a => a.repairCategoryId === r.id)).map(r => `/knowledge/repairs/${encodeURIComponent(r.categoryKey)}`)];
+    const urls = ['/knowledge', ...rubrics.map(r => `/knowledge/${encodeURIComponent(r.slug)}`), ...repairs.map(r => `/knowledge/repairs/${encodeURIComponent(r.categoryKey)}`)];
     return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(path => `<url><loc>https://bricky.bg${path}</loc></url>`).join('')}${articles.map(a => `<url><loc>https://bricky.bg/blog/${a.slug}</loc><lastmod>${a.updatedAt.toISOString()}</lastmod></url>`).join('')}</urlset>`;
   }
 }
