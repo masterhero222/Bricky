@@ -53,6 +53,12 @@
 .client-roadmap-card strong { color: #c9fbe5; font-size: 19px; line-height: 1.5; }
 .client-roadmap-proof { display: flex; gap: 9px; margin-top: 10px; padding-top: 18px; border-top: 1px solid #284052; color: #9fb0be; font-size: 14px; line-height: 1.6; }
 .client-roadmap-proof svg { flex: none; margin-top: 2px; color: #34d399; }
+.client-roadmap-link { align-items: flex-start; text-decoration: none; transition: color .15s ease; }
+.client-roadmap-link span { flex: 1; }
+.client-roadmap-link svg:last-child { margin-left: 2px; transition: transform .15s ease; }
+.client-roadmap-link:hover { color: #d8f7e9; }
+.client-roadmap-link:hover svg:last-child { transform: translateX(3px); }
+.client-roadmap-link:focus-visible { border-radius: 4px; outline: 2px solid #67e8f9; outline-offset: 5px; }
 
 .client-roadmap-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 52px; margin-top: 56px; }
 .client-roadmap-progress { position: sticky; top: 118px; align-self: start; min-height: 310px; padding: 28px 24px; border-left: 1px solid #2a4b5e; }
