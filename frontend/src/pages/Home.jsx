@@ -1,7 +1,9 @@
-import { createElement } from 'react';
+import { createElement, useRef, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   UserCheck,
   Wrench,
@@ -28,7 +30,45 @@ const steps = [
   },
 ];
 
+const clientRoadmap = [
+  ['Не знам откъде да започна.', 'Виж ремонта стъпка по стъпка.', 'Ясни ръководства и правилен ред на етапите.'],
+  ['Не знам какво трябва да се направи.', 'Разбери дейностите зад конкретния проблем.', 'Проблем, нужни стъпки и целта на всяка от тях.'],
+  ['Не знам кое е правилно.', 'Ползвай надеждна база за решенията си.', 'Проверена информация без майсторски митове.'],
+  ['Не знам колко трябва да струва.', 'Изчисли ориентировъчен бюджет.', 'Разбивка по труд, материали, количества и сценарии.'],
+  ['Не разбирам защо офертата е скъпа.', 'Виж какво реално влиза в цената.', 'Всеки етап и разход са показани отделно.'],
+  ['Не знам откъде да намеря изпълнител.', 'Открий майстори за конкретната работа.', 'Специализация, район, профил и реални обекти.'],
+  ['Не знам на кого да се доверя.', 'Работи с майстори по общи правила.', 'Проверки, сигнали и последователни мерки при нарушения.'],
+  ['Не знам как да сравня офертите.', 'Сравни съдържанието, не само сумата.', 'Дейности, материали, срок и ясни изключения.'],
+  ['Не знам какво да попитам.', 'Подготви се преди разговора.', 'Checklist с важните въпроси за конкретния ремонт.'],
+  ['Не мога да си представя резултата.', 'Виж концептуална AI визуализация.', 'Реалистична посока, ясно означена като концепция.'],
+  ['Страх ме е работата да бъде направена зле.', 'Следи как напредва изпълнението.', 'Снимки по етапи, статус, история, оценки и сигнали.'],
+  ['Страх ме е бюджетът да излезе извън контрол.', 'Следи началната оферта и промените.', 'Функция в развитие за ясно проследяване на бюджета.'],
+  ['Губя важните уговорки в разговори.', 'Дръж процеса на едно място.', 'Подредена комуникация и история на действията.'],
+  ['Не знам какво следва.', 'Виж следващата ясна стъпка.', 'Статуси от заявката до завършването и отзива.'],
+  ['Не искам да измислям всичко от нулата.', 'Използвай готова структура за ремонта.', 'По-малко догадки и повече информирани решения.'],
+].map(([problem, solution, proof], index) => ({ id: index + 1, problem, solution, proof }));
+
 export default function Home() {
+  const roadmapRef = useRef(null);
+  const [roadmapStep, setRoadmapStep] = useState(1);
+
+  function moveRoadmap(direction) {
+    const track = roadmapRef.current;
+    if (!track) return;
+    const card = track.querySelector('.client-roadmap-card');
+    const gap = Number.parseFloat(window.getComputedStyle(track).columnGap) || 0;
+    track.scrollBy({ left: direction * ((card?.offsetWidth || 360) + gap), behavior: 'smooth' });
+  }
+
+  function updateRoadmapStep() {
+    const track = roadmapRef.current;
+    const card = track?.querySelector('.client-roadmap-card');
+    if (!track || !card) return;
+    const gap = Number.parseFloat(window.getComputedStyle(track).columnGap) || 0;
+    const atEnd = track.scrollWidth - track.clientWidth - track.scrollLeft < 2;
+    setRoadmapStep(atEnd ? clientRoadmap.length : Math.min(clientRoadmap.length, Math.max(1, Math.round(track.scrollLeft / (card.offsetWidth + gap)) + 1)));
+  }
+
   useDocumentMeta({
     title: 'Bricky | Майстори и ремонтни заявки на едно място',
     description:
@@ -73,6 +113,39 @@ export default function Home() {
               период.
             </p>
           </div>
+        </div>
+      </section>
+
+      <section className="client-roadmap" aria-labelledby="client-roadmap-title">
+        <div className="bricky-container">
+          <div className="client-roadmap-header">
+            <div>
+              <p className="client-roadmap-eyebrow">ТВОЯТ РЕМОНТ, ПОДРЕДЕН</p>
+              <h2 id="client-roadmap-title">От първия въпрос до завършения обект</h2>
+              <p>Разгледай как Bricky превръща несигурността в ясна следваща стъпка.</p>
+            </div>
+            <div className="client-roadmap-controls" aria-label="Управление на roadmap">
+              <span><strong>{String(roadmapStep).padStart(2, '0')}</strong> / {clientRoadmap.length}</span>
+              <button type="button" onClick={() => moveRoadmap(-1)} aria-label="Предишна стъпка" title="Предишна стъпка"><ChevronLeft size={21} /></button>
+              <button type="button" onClick={() => moveRoadmap(1)} aria-label="Следваща стъпка" title="Следваща стъпка"><ChevronRight size={21} /></button>
+            </div>
+          </div>
+          <div className="client-roadmap-line" aria-hidden="true" />
+          <div ref={roadmapRef} onScroll={updateRoadmapStep} className="client-roadmap-track" tabIndex="0" aria-label="Пътят на клиента през ремонта">
+            {clientRoadmap.map(item => (
+              <article className="client-roadmap-card" key={item.id}>
+                <span className="client-roadmap-number">{String(item.id).padStart(2, '0')}</span>
+                <div className="client-roadmap-copy">
+                  <p className="client-roadmap-label">Проблем</p>
+                  <h3>„{item.problem}“</h3>
+                  <p className="client-roadmap-label">Решението на Bricky</p>
+                  <strong>{item.solution}</strong>
+                  <p className="client-roadmap-proof"><BadgeCheck size={18} /> {item.proof}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <p className="client-roadmap-hint">Плъзни, за да продължиш</p>
         </div>
       </section>
 
