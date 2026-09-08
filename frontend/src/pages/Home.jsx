@@ -1,9 +1,7 @@
-import { createElement, useRef, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   UserCheck,
   Wrench,
@@ -46,28 +44,24 @@ const clientRoadmap = [
   ['Губя важните уговорки в разговори.', 'Дръж процеса на едно място.', 'Подредена комуникация и история на действията.'],
   ['Не знам какво следва.', 'Виж следващата ясна стъпка.', 'Статуси от заявката до завършването и отзива.'],
   ['Не искам да измислям всичко от нулата.', 'Използвай готова структура за ремонта.', 'По-малко догадки и повече информирани решения.'],
-].map(([problem, solution, proof], index) => ({ id: index + 1, problem, solution, proof }));
+].map(([problem, solution, proof], index) => ({ id: index + 1, problem, solution, proof, image: null }));
 
 export default function Home() {
   const roadmapRef = useRef(null);
   const [roadmapStep, setRoadmapStep] = useState(1);
 
-  function moveRoadmap(direction) {
-    const track = roadmapRef.current;
-    if (!track) return;
-    const card = track.querySelector('.client-roadmap-card');
-    const gap = Number.parseFloat(window.getComputedStyle(track).columnGap) || 0;
-    track.scrollBy({ left: direction * ((card?.offsetWidth || 360) + gap), behavior: 'smooth' });
-  }
-
-  function updateRoadmapStep() {
-    const track = roadmapRef.current;
-    const card = track?.querySelector('.client-roadmap-card');
-    if (!track || !card) return;
-    const gap = Number.parseFloat(window.getComputedStyle(track).columnGap) || 0;
-    const atEnd = track.scrollWidth - track.clientWidth - track.scrollLeft < 2;
-    setRoadmapStep(atEnd ? clientRoadmap.length : Math.min(clientRoadmap.length, Math.max(1, Math.round(track.scrollLeft / (card.offsetWidth + gap)) + 1)));
-  }
+  useEffect(() => {
+    const cards = roadmapRef.current?.querySelectorAll('.client-roadmap-card');
+    if (!cards?.length) return undefined;
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+      if (visible) setRoadmapStep(Number(visible.target.dataset.step));
+    }, { rootMargin: '-28% 0px -48% 0px', threshold: [0, 0.2, 0.5, 0.8] });
+    cards.forEach(card => observer.observe(card));
+    return () => observer.disconnect();
+  }, []);
 
   useDocumentMeta({
     title: 'Bricky | Майстори и ремонтни заявки на едно място',
@@ -124,28 +118,31 @@ export default function Home() {
               <h2 id="client-roadmap-title">От първия въпрос до завършения обект</h2>
               <p>Разгледай как Bricky превръща несигурността в ясна следваща стъпка.</p>
             </div>
-            <div className="client-roadmap-controls" aria-label="Управление на roadmap">
+          </div>
+          <div ref={roadmapRef} className="client-roadmap-layout">
+            <aside className="client-roadmap-progress" aria-label={`Стъпка ${roadmapStep} от ${clientRoadmap.length}`}>
               <span><strong>{String(roadmapStep).padStart(2, '0')}</strong> / {clientRoadmap.length}</span>
-              <button type="button" onClick={() => moveRoadmap(-1)} aria-label="Предишна стъпка" title="Предишна стъпка"><ChevronLeft size={21} /></button>
-              <button type="button" onClick={() => moveRoadmap(1)} aria-label="Следваща стъпка" title="Следваща стъпка"><ChevronRight size={21} /></button>
+              <div aria-hidden="true"><i style={{ '--roadmap-progress': `${(roadmapStep / clientRoadmap.length) * 100}%` }} /></div>
+              <p>{clientRoadmap[roadmapStep - 1].solution}</p>
+            </aside>
+            <div className="client-roadmap-steps" aria-label="Пътят на клиента през ремонта">
+              {clientRoadmap.map(item => (
+                <article className="client-roadmap-card" data-step={item.id} key={item.id}>
+                  <div className="client-roadmap-copy">
+                    <span className="client-roadmap-number">{String(item.id).padStart(2, '0')}</span>
+                    <p className="client-roadmap-label">Проблем</p>
+                    <h3>„{item.problem}“</h3>
+                    <p className="client-roadmap-label">Решението на Bricky</p>
+                    <strong>{item.solution}</strong>
+                    <p className="client-roadmap-proof"><BadgeCheck size={18} /> {item.proof}</p>
+                  </div>
+                  <div className="client-roadmap-media" aria-label={`Илюстрация към стъпка ${item.id}`}>
+                    {item.image ? <img src={item.image} alt="" /> : <span aria-hidden="true">{String(item.id).padStart(2, '0')}</span>}
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
-          <div className="client-roadmap-line" aria-hidden="true" />
-          <div ref={roadmapRef} onScroll={updateRoadmapStep} className="client-roadmap-track" tabIndex="0" aria-label="Пътят на клиента през ремонта">
-            {clientRoadmap.map(item => (
-              <article className="client-roadmap-card" key={item.id}>
-                <span className="client-roadmap-number">{String(item.id).padStart(2, '0')}</span>
-                <div className="client-roadmap-copy">
-                  <p className="client-roadmap-label">Проблем</p>
-                  <h3>„{item.problem}“</h3>
-                  <p className="client-roadmap-label">Решението на Bricky</p>
-                  <strong>{item.solution}</strong>
-                  <p className="client-roadmap-proof"><BadgeCheck size={18} /> {item.proof}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-          <p className="client-roadmap-hint">Плъзни, за да продължиш</p>
         </div>
       </section>
 
