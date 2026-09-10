@@ -34,30 +34,35 @@ const clientRoadmap = [
     solution: 'Разбери ремонта, преди да започнеш.',
     proof: 'Ръководства и информационна база, които обясняват ремонта лесно, стъпка по стъпка.',
     href: '/knowledge',
+    image: '/assets/home/client-roadmap-01.webp',
   },
   {
     problem: 'Не знам колко трябва да струва.',
     solution: 'Виж откъде идва крайната цена.',
     proof: 'Bricky Калкулатор разбива ремонта по етапи, труд и материали.',
     href: '/requests',
+    image: '/assets/home/client-roadmap-02.webp',
   },
   {
     problem: 'Не знам на кого да се доверя.',
     solution: 'Виж кой стои зад профила, преди да го поканиш в дома си.',
     proof: 'Специализация, портфолио, история и правила за работа в Bricky.',
     href: '/workers',
+    image: '/assets/home/client-roadmap-03.webp',
   },
   {
     problem: 'Не знам как да сравня офертите.',
     solution: 'Сравнявай какво получаваш, не само крайната цена.',
     proof: 'Дейности, труд, материали и срок - подредени по един и същ начин.',
+    image: '/assets/home/client-roadmap-04.webp',
   },
   {
     problem: 'Страх ме е ремонтът да не излезе извън контрол.',
     solution: 'Знай какво се случва по време на ремонта.',
     proof: 'Статусите и историята на заявката остават на едно място.',
+    image: '/assets/home/client-roadmap-05.webp',
   },
-].map((item, index) => ({ id: index + 1, image: null, ...item }));
+].map((item, index) => ({ id: index + 1, ...item }));
 
 export default function Home() {
   const roadmapRef = useRef(null);
