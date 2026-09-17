@@ -16,6 +16,7 @@ import { PasswordResetTokenEntity } from './password-reset-token.entity';
 import { MailModule } from '../mail/mail.module';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { EmailVerificationTokenEntity } from './email-verification-token.entity';
+import { GoogleIdentityService } from './google-identity.service';
 import { PrivacyModule } from '../privacy/privacy.module';
 
 @Module({
@@ -44,7 +45,12 @@ import { PrivacyModule } from '../privacy/privacy.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthRateLimitService, JwtStrategy],
+  providers: [
+    AuthService,
+    AuthRateLimitService,
+    GoogleIdentityService,
+    JwtStrategy,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

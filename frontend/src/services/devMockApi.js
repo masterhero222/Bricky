@@ -244,7 +244,7 @@ function guessRepairCategory(text) {
 function seedDb() {
   const referralRewardEndsAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
   return {
-    mapSeedVersion: 10,
+    mapSeedVersion: 11,
     nextRequestId: 1,
     nextMediaId: 3,
     nextReviewId: 1,
@@ -408,6 +408,14 @@ function readDb() {
           mapSeedVersion: 10,
           pricingRules: Array.isArray(db.pricingRules) ? db.pricingRules : [],
           requestEvents: Array.isArray(db.requestEvents) ? db.requestEvents : [],
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 11) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 11,
         };
         writeDb(migrated);
         return migrated;
@@ -1425,7 +1433,7 @@ function completeMockWorkerStep(db, req, workerUserId, allowedStatuses, nextStat
 
 export async function mockRequest(method, url, data) {
   const db = readDb();
-  const path = asPath(url);
+  let path = asPath(url);
   const scope = queryParam(url, "scope");
   const user = currentUser();
   const role = localStorage.getItem("role") || user.role;
@@ -1453,6 +1461,20 @@ export async function mockRequest(method, url, data) {
         : db.clients[0];
     setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
     return response({ token: localStorage.getItem("token"), user: publicUser(first, db) });
+  }
+
+  if (method === "post" && path === "/auth/google/register") {
+    const googleRole = data?.role === "worker" ? "worker" : "client";
+    data = {
+      ...data,
+      email:
+        data?.mockEmail ||
+        `google.${googleRole}.${db.nextUserId}@bricky.dev`,
+      password: "MockGooglePassword1",
+      name: data?.name || "Google клиент",
+      fullName: data?.fullName || "Google майстор",
+    };
+    path = "/auth/register";
   }
 
   if (method === "post" && path === "/auth/register") {

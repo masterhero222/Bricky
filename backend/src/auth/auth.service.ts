@@ -14,6 +14,8 @@ import { PasswordResetTokenEntity } from './password-reset-token.entity';
 import { UserEntity } from '../users/user.entity';
 import { EmailVerificationTokenEntity } from './email-verification-token.entity';
 import { PrivacyService } from '../privacy/privacy.service';
+import { GoogleRegisterDto } from './dto/google-register.dto';
+import { GoogleIdentityService } from './google-identity.service';
 
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -36,11 +38,13 @@ export class AuthService {
     @InjectRepository(EmailVerificationTokenEntity)
     private readonly emailVerificationTokens: Repository<EmailVerificationTokenEntity>,
     private readonly privacy: PrivacyService,
+    private readonly googleIdentity: GoogleIdentityService,
   ) {}
 
   async register(
     dto: RegisterUserDto,
     context: { ip?: string | null; userAgent?: string | null } = {},
+    options: { emailVerified?: boolean } = {},
   ) {
     this.privacy.assertCurrentAcceptance(dto);
     const exists = await this.users.findByEmail(dto.email);
@@ -63,6 +67,7 @@ export class AuthService {
             email: dto.email,
             password: passwordHash,
             role: 'client',
+            emailVerifiedAt: options.emailVerified ? new Date() : null,
           },
           manager,
         );
@@ -91,7 +96,13 @@ export class AuthService {
       });
 
       const [emailVerification] = await Promise.all([
-        this.requestEmailVerification(user.id),
+        options.emailVerified
+          ? Promise.resolve({
+              ok: true,
+              deliveryStatus: 'verified',
+              message: 'Имейлът е потвърден чрез Google.',
+            })
+          : this.requestEmailVerification(user.id),
         this.mail.sendNewUserRegistrationNotification({
           userId: user.id,
           role: 'client',
@@ -129,6 +140,7 @@ export class AuthService {
             email: dto.email,
             password: passwordHash,
             role: 'worker',
+            emailVerifiedAt: options.emailVerified ? new Date() : null,
           },
           manager,
         );
@@ -162,7 +174,13 @@ export class AuthService {
       });
 
       const [emailVerification] = await Promise.all([
-        this.requestEmailVerification(user.id),
+        options.emailVerified
+          ? Promise.resolve({
+              ok: true,
+              deliveryStatus: 'verified',
+              message: 'Имейлът е потвърден чрез Google.',
+            })
+          : this.requestEmailVerification(user.id),
         this.mail.sendNewUserRegistrationNotification({
           userId: user.id,
           role: 'worker',
@@ -180,6 +198,82 @@ export class AuthService {
     }
 
     throw new BadRequestException('Невалидна роля');
+  }
+
+  async registerWithGoogle(
+    dto: GoogleRegisterDto,
+    context: { ip?: string | null; userAgent?: string | null } = {},
+  ) {
+    this.privacy.assertCurrentAcceptance(dto);
+    const identity = await this.googleIdentity.verifyCredential(dto.credential);
+    const existing = await this.users.findByEmail(identity.email);
+
+    if (existing) {
+      if (existing.status !== 'active') {
+        throw new BadRequestException('Акаунтът е временно спрян');
+      }
+      if (existing.role !== dto.role) {
+        throw new BadRequestException(
+          'Google профилът вече е свързан с друг тип Bricky акаунт',
+        );
+      }
+
+      const verifiedAt = existing.emailVerifiedAt || new Date();
+      await this.dataSource.transaction(async (manager) => {
+        if (!existing.emailVerifiedAt) {
+          await manager
+            .getRepository(UserEntity)
+            .update({ id: existing.id }, { emailVerifiedAt: verifiedAt });
+        }
+        await this.privacy.recordRegistrationAcceptance(
+          manager,
+          existing.id,
+          context,
+        );
+      });
+
+      const token = await this.jwt.signAsync({
+        id: existing.id,
+        role: existing.role,
+        authVersion: existing.authVersion || 0,
+      });
+      return {
+        token,
+        provider: 'google',
+        user: this.publicUser({
+          ...existing,
+          emailVerifiedAt: verifiedAt,
+        } as UserEntity),
+      };
+    }
+
+    const password = `${randomBytes(32).toString('hex')}Aa1`;
+    const result = await this.register(
+      {
+        role: dto.role,
+        email: identity.email,
+        password,
+        name: dto.name || identity.name,
+        fullName: dto.fullName || identity.name,
+        phone: dto.phone,
+        city: dto.city,
+        skills: dto.skills,
+        profile: dto.profile,
+        referralCode: dto.referralCode,
+        legalAccepted: dto.legalAccepted,
+        termsVersion: dto.termsVersion,
+        privacyVersion: dto.privacyVersion,
+      } as RegisterUserDto,
+      context,
+      { emailVerified: true },
+    );
+    const token = await this.jwt.signAsync({
+      id: result.user.id,
+      role: result.user.role,
+      authVersion: 0,
+    });
+
+    return { ...result, token, provider: 'google' };
   }
 
   async devLogin(role: 'client' | 'worker') {

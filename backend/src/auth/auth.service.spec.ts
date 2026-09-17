@@ -11,6 +11,8 @@ describe('AuthService registration', () => {
   let passwordResetTokens: any;
   let emailVerificationTokens: any;
   let privacy: any;
+  let jwt: any;
+  let googleIdentity: any;
   let service: AuthService;
 
   beforeEach(() => {
@@ -71,16 +73,27 @@ describe('AuthService registration', () => {
       assertCurrentAcceptance: jest.fn(),
       recordRegistrationAcceptance: jest.fn().mockResolvedValue(undefined),
     };
+    jwt = {
+      signAsync: jest.fn().mockResolvedValue('signed-token'),
+    };
+    googleIdentity = {
+      verifyCredential: jest.fn().mockResolvedValue({
+        subject: 'google-subject-1',
+        email: 'google@bricky.bg',
+        name: 'Google User',
+      }),
+    };
     service = new AuthService(
       users,
       workers,
-      {} as any,
+      jwt,
       referrals,
       dataSource,
       mail,
       passwordResetTokens,
       emailVerificationTokens,
       privacy,
+      googleIdentity,
     );
   });
 
@@ -244,6 +257,84 @@ describe('AuthService registration', () => {
     expect(result.user).not.toHaveProperty('password');
     expect(result.user).not.toHaveProperty('passwordHash');
     expect(mail.sendEmailVerificationLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers a Google client with a verified email and returns a Bricky token', async () => {
+    users.create.mockResolvedValue({
+      id: 42,
+      email: 'google@bricky.bg',
+      name: 'Google User',
+      role: 'client',
+      status: 'active',
+      emailVerifiedAt: new Date(),
+    });
+
+    const result = await service.registerWithGoogle({
+      credential: 'google-id-token',
+      role: 'client',
+      legalAccepted: true,
+      termsVersion: '2026-09-01',
+      privacyVersion: '2026-09-01',
+    });
+
+    expect(googleIdentity.verifyCredential).toHaveBeenCalledWith(
+      'google-id-token',
+    );
+    expect(users.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'google@bricky.bg',
+        role: 'client',
+        emailVerifiedAt: expect.any(Date),
+      }),
+      manager,
+    );
+    expect(mail.sendEmailVerificationLink).not.toHaveBeenCalled();
+    expect(jwt.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42, role: 'client' }),
+    );
+    expect(result).toMatchObject({
+      token: 'signed-token',
+      provider: 'google',
+      user: { email: 'google@bricky.bg', emailVerified: true },
+    });
+  });
+
+  it('signs in an existing account only when the selected Google role matches', async () => {
+    users.findByEmail.mockResolvedValue({
+      id: 55,
+      email: 'google@bricky.bg',
+      name: 'Existing Client',
+      role: 'client',
+      status: 'active',
+      authVersion: 3,
+      emailVerifiedAt: new Date(),
+    });
+
+    const result = await service.registerWithGoogle({
+      credential: 'google-id-token',
+      role: 'client',
+      legalAccepted: true,
+      termsVersion: '2026-09-01',
+      privacyVersion: '2026-09-01',
+    });
+
+    expect(users.create).not.toHaveBeenCalled();
+    expect(jwt.signAsync).toHaveBeenCalledWith({
+      id: 55,
+      role: 'client',
+      authVersion: 3,
+    });
+    expect(result.token).toBe('signed-token');
+
+    await expect(
+      service.registerWithGoogle({
+        credential: 'google-id-token',
+        role: 'worker',
+        legalAccepted: true,
+        termsVersion: '2026-09-01',
+        privacyVersion: '2026-09-01',
+      }),
+    ).rejects.toThrow('друг тип Bricky акаунт');
   });
 
   it('returns the same reset response for unknown accounts without sending email', async () => {

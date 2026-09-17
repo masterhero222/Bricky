@@ -29,6 +29,7 @@ function shouldUseMock(url) {
     DEV_MOCK_ENABLED &&
     (String(getToken()).startsWith("local-dev-token") ||
       path.includes("/auth/dev-login") ||
+      path === "/auth/google/register" ||
       path.startsWith("/auth/password-reset/") ||
       path === "/auth/register" ||
       path === "/repair-categories" ||

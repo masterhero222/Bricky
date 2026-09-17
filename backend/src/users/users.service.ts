@@ -69,7 +69,13 @@ export class UsersService {
   }
 
   async create(
-    data: { name: string; email: string; password: string; role: string },
+    data: {
+      name: string;
+      email: string;
+      password: string;
+      role: string;
+      emailVerifiedAt?: Date | null;
+    },
     manager?: EntityManager,
   ) {
     const repo = manager?.getRepository(UserEntity) ?? this.repo;
@@ -80,6 +86,7 @@ export class UsersService {
       passwordHash: data.password,
       role: data.role,
       status: 'active',
+      emailVerifiedAt: data.emailVerifiedAt ?? null,
     });
 
     return repo.save(user);

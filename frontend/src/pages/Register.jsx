@@ -10,6 +10,7 @@ import {
 import { REPAIR_CATEGORY_OPTIONS } from '../constants/repairCatalog';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../constants/legal';
 import { Link } from 'react-router-dom';
+import GoogleRegisterButton from '../components/auth/GoogleRegisterButton';
 
 const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
   key: category.key,
@@ -40,6 +41,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
 
   const change = (e) =>
     setForm({
@@ -121,6 +123,61 @@ export default function Register() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const googleRegistrationPayload = () => {
+    const payload = {
+      role,
+      legalAccepted: form.legalAccepted,
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+    };
+
+    if (role === 'client') {
+      payload.name = form.name;
+    } else {
+      Object.assign(payload, {
+        fullName: form.fullName,
+        phone: form.phone,
+        city: form.city,
+        skills: form.skills,
+      });
+    }
+    if (referralCode.trim()) payload.referralCode = referralCode.trim();
+    return payload;
+  };
+
+  const googleDisabled =
+    !form.legalAccepted ||
+    (role === 'worker' &&
+      (!form.phone.trim() || !form.city.trim() || form.skills.length === 0));
+
+  const registerWithGoogle = async (credential) => {
+    setError('');
+    setSuccess('');
+    setGoogleSubmitting(true);
+
+    try {
+      const response = await apiPost('/auth/google/register', {
+        ...googleRegistrationPayload(),
+        credential,
+      });
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('role', user.role);
+      localStorage.setItem('userName', user.name || '');
+      window.location.href =
+        user.role === 'worker' ? '/worker/profile' : '/client/profile';
+    } catch (err) {
+      const message = err.response?.data?.message;
+      setError(
+        Array.isArray(message)
+          ? message.join(' ')
+          : message || 'Google регистрацията не беше успешна.',
+      );
+    } finally {
+      setGoogleSubmitting(false);
     }
   };
 
@@ -302,8 +359,21 @@ export default function Register() {
           </span>
         </label>
 
+        <GoogleRegisterButton
+          disabled={googleDisabled || submitting}
+          loading={googleSubmitting}
+          onCredential={registerWithGoogle}
+          onError={setError}
+        />
+
+        <div className="flex items-center gap-3 text-xs font-bold uppercase text-gray-500">
+          <span className="h-px flex-1 bg-gray-700" />
+          или с имейл и парола
+          <span className="h-px flex-1 bg-gray-700" />
+        </div>
+
         <button
-          disabled={submitting || Boolean(success) || !form.legalAccepted}
+          disabled={submitting || googleSubmitting || Boolean(success) || !form.legalAccepted}
           className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 p-3 rounded font-bold"
         >
           {submitting ? 'Регистриране...' : 'Регистрация'}

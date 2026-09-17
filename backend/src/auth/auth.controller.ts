@@ -9,6 +9,7 @@ import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ConfirmEmailDto } from './dto/confirm-email.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { GoogleRegisterDto } from './dto/google-register.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -21,6 +22,12 @@ export class AuthController {
   register(@Body() dto: RegisterUserDto, @Req() request: Request) {
     this.limit(request, 'register', 5, 60 * 60_000);
     return this.auth.register(dto, this.registrationContext(request));
+  }
+
+  @Post('google/register')
+  googleRegister(@Body() dto: GoogleRegisterDto, @Req() request: Request) {
+    this.limit(request, 'google-register', 10, 60 * 60_000);
+    return this.auth.registerWithGoogle(dto, this.registrationContext(request));
   }
 
   @Post('dev-login')
