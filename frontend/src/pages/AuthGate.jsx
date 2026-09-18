@@ -1,36 +1,21 @@
-// src/pages/AuthGate.jsx
-import { useNavigate } from "react-router-dom";
+import { ArrowRight, LogIn, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AuthShell } from '../components/registration/RegistrationShell';
+import '../styles/auth.css';
 
 export default function AuthGate() {
-  const navigate = useNavigate();
-
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white px-6">
-
-      <h1 className="text-4xl font-bold mb-12 text-center">
-        Вход или Регистрация
-      </h1>
-
-      <div className="flex gap-6">
-
-        {/* ВХОД */}
-        <button
-          onClick={() => navigate("/auth/login")}
-          className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xl"
-        >
-          Вход
-        </button>
-
-        {/* РЕГИСТРАЦИЯ */}
-        <button
-          onClick={() => navigate("/auth/register")}
-          className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xl"
-        >
-          Регистрация
-        </button>
-
+    <AuthShell mode="gate" role="gate" pageClass="registration-gate-page" surfaceClass="registration-gate-surface">
+      <div className="registration-form-panel registration-gate-panel">
+        <div className="registration-gate-content">
+          <div className="registration-form-heading"><div><span className="registration-eyebrow">Добре дошли в Bricky</span><h1>Вход или регистрация</h1><p>Влезте в профила си, за да продължите, или създайте нов профил.</p></div></div>
+          <div className="registration-gate-actions">
+            <Link to="/auth/login" className="registration-gate-action"><span><LogIn size={30} /></span><div><strong>Вход</strong><small>Влезте в съществуващия си профил и продължете оттам, докъдето сте стигнали.</small></div><ArrowRight size={21} /></Link>
+            <Link to="/auth/register" className="registration-gate-action is-primary"><span><UserPlus size={30} /></span><div><strong>Регистрация</strong><small>Създайте нов профил и използвайте Bricky като клиент или майстор.</small></div><ArrowRight size={21} /></Link>
+          </div>
+          <p className="registration-gate-note">Регистрацията е безплатна по време на beta периода.</p>
+        </div>
       </div>
-
-    </div>
+    </AuthShell>
   );
 }

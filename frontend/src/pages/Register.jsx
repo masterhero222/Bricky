@@ -11,6 +11,8 @@ import { REPAIR_CATEGORY_OPTIONS } from '../constants/repairCatalog';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../constants/legal';
 import { Link } from 'react-router-dom';
 import GoogleRegisterButton from '../components/auth/GoogleRegisterButton';
+import { AuthShell, RoleSelector } from '../components/registration/RegistrationShell';
+import '../styles/auth.css';
 
 const WORKER_SKILL_OPTIONS = REPAIR_CATEGORY_OPTIONS.map((category) => ({
   key: category.key,
@@ -182,36 +184,18 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center pt-24 px-6">
-      <h1 className="text-3xl font-bold mb-8">Регистрация</h1>
-
-      {/* ROLE SWITCH */}
-      <div className="flex gap-4 mb-6">
-        <button
-          type="button"
-          onClick={() => setRole('client')}
-          className={`px-6 py-2 rounded-lg font-bold ${
-            role === 'client' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-          }`}
-        >
-          Клиент
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setRole('worker')}
-          className={`px-6 py-2 rounded-lg font-bold ${
-            role === 'worker' ? 'bg-green-600' : 'bg-gray-700 hover:bg-gray-600'
-          }`}
-        >
-          Майстор
-        </button>
-      </div>
-
+    <AuthShell role={role}>
       <form
         onSubmit={submit}
-        className="bg-gray-800 p-8 rounded-xl w-full max-w-lg space-y-4 shadow-xl"
+        className="registration-form-panel registration-production-form"
       >
+        <RoleSelector role={role} onChange={setRole} />
+        <div className="registration-form-heading">
+          <div>
+            <h1>{role === 'worker' ? 'Създай профил на майстор' : 'Създай клиентски профил'}</h1>
+            <p>{role === 'worker' ? 'Добавете информация за дейността и района си.' : 'Създайте профил и започнете да разглеждате майстори.'}</p>
+          </div>
+        </div>
         {(error || success) && (
           <div
             className={`rounded-lg border px-4 py-3 text-sm font-bold ${error ? 'border-red-400/25 bg-red-500/10 text-red-200' : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'}`}
@@ -229,7 +213,7 @@ export default function Register() {
           <input
             name="name"
             placeholder="Име"
-            className="w-full p-3 rounded bg-gray-700"
+            className="registration-production-input"
             value={form.name}
             onChange={change}
             required
@@ -239,7 +223,7 @@ export default function Register() {
             <input
               name="fullName"
               placeholder="Трите имена"
-              className="w-full p-3 rounded bg-gray-700"
+              className="registration-production-input"
               value={form.fullName}
               onChange={change}
               required
@@ -248,7 +232,7 @@ export default function Register() {
             <input
               name="phone"
               placeholder="Телефон"
-              className="w-full p-3 rounded bg-gray-700"
+              className="registration-production-input"
               value={form.phone}
               onChange={change}
               required
@@ -257,32 +241,31 @@ export default function Register() {
             <input
               name="city"
               placeholder="Град"
-              className="w-full p-3 rounded bg-gray-700"
+              className="registration-production-input"
               value={form.city}
               onChange={change}
               required
             />
 
-            <div className="flex gap-2 flex-wrap">
+            <fieldset className="registration-specialties registration-production-specialties">
+              <legend>Категории услуги</legend>
+              <div>
               {WORKER_SKILL_OPTIONS.map((skill) => (
                 <button
                   type="button"
                   key={skill.key}
                   onClick={() => toggleSkill(skill.key)}
-                  className={`px-3 py-1 rounded ${
-                    form.skills.includes(skill.key)
-                      ? 'bg-blue-600'
-                      : 'bg-gray-700'
-                  }`}
+                  className={form.skills.includes(skill.key) ? 'is-selected' : ''}
                 >
                   {skill.label}
                 </button>
               ))}
-            </div>
+              </div>
+            </fieldset>
           </>
         )}
 
-        <div className="rounded-lg border border-gray-700 bg-gray-900 p-3">
+        <div className="registration-production-referral">
           <label className="mb-2 block text-sm font-semibold text-gray-300">
             Referral код
           </label>
@@ -290,7 +273,7 @@ export default function Register() {
             value={referralCode}
             onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
             placeholder="Например BRABC123"
-            className="w-full rounded bg-gray-700 p-3"
+            className="registration-production-input"
           />
           {referralCode ? (
             <p className="mt-2 text-sm text-green-300">
@@ -302,7 +285,7 @@ export default function Register() {
         <input
           name="email"
           placeholder="Имейл"
-          className="w-full p-3 rounded bg-gray-700"
+          className="registration-production-input"
           value={form.email}
           onChange={change}
           required
@@ -312,7 +295,7 @@ export default function Register() {
           name="password"
           type="password"
           placeholder="Парола"
-          className="w-full p-3 rounded bg-gray-700"
+          className="registration-production-input"
           value={form.password}
           onChange={change}
           minLength={PASSWORD_MIN_LENGTH}
@@ -329,7 +312,7 @@ export default function Register() {
           name="confirmPassword"
           type="password"
           placeholder="Потвърди парола"
-          className="w-full p-3 rounded bg-gray-700"
+          className="registration-production-input"
           value={form.confirmPassword}
           onChange={change}
           minLength={PASSWORD_MIN_LENGTH}
@@ -337,7 +320,7 @@ export default function Register() {
           required
         />
 
-        <label className="flex items-start gap-3 rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+        <label className="registration-consent registration-production-consent">
           <input
             name="legalAccepted"
             type="checkbox"
@@ -366,7 +349,7 @@ export default function Register() {
           onError={setError}
         />
 
-        <div className="flex items-center gap-3 text-xs font-bold uppercase text-gray-500">
+        <div className="registration-production-divider">
           <span className="h-px flex-1 bg-gray-700" />
           или с имейл и парола
           <span className="h-px flex-1 bg-gray-700" />
@@ -374,11 +357,11 @@ export default function Register() {
 
         <button
           disabled={submitting || googleSubmitting || Boolean(success) || !form.legalAccepted}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 p-3 rounded font-bold"
+          className="registration-primary-action registration-login-submit"
         >
           {submitting ? 'Регистриране...' : 'Регистрация'}
         </button>
       </form>
-    </div>
+    </AuthShell>
   );
 }

@@ -1,141 +1,53 @@
-﻿import { useState } from "react";
-import { apiPost } from "../services/api";
-import { Link } from "react-router-dom";
+import { useState } from 'react';
+import { ArrowRight, LockKeyhole, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { apiPost } from '../services/api';
+import { AuthShell } from '../components/registration/RegistrationShell';
+import { FormField, PasswordInput } from '../components/registration/RegistrationControls';
+import '../styles/auth.css';
 
 export default function Login() {
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
-  const [devLoading, setDevLoading] = useState("");
-
-  const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [devLoading, setDevLoading] = useState('');
+  const change = (event) => setForm({ ...form, [event.target.name]: event.target.value });
   const finishLogin = (data) => {
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("role", data.user.role);
-    localStorage.setItem("userName", data.user.name || "");
-
-    const destination =
-      data.user.role === "client"
-        ? "/client/profile"
-        : ["admin", "super_admin"].includes(data.user.role)
-          ? "/admin"
-          : "/worker/profile";
+    localStorage.setItem('token', data.token); localStorage.setItem('role', data.user.role); localStorage.setItem('userName', data.user.name || '');
+    const destination = data.user.role === 'client' ? '/client/profile' : ['admin', 'super_admin'].includes(data.user.role) ? '/admin' : '/worker/profile';
     window.location.href = destination;
   };
-
-
-  const finishDevLoginOffline = (role) => {
-    finishLogin({
-      token: `local-dev-token-${role}`,
-      user: {
-        id: role === "client" ? 1 : 2,
-        role,
-        name: role === "client" ? "Dev Client" : "Dev Worker",
-        email: `${role}.dev@bricky.local`,
-      },
-    });
-  };
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    try {
-      const res = await apiPost("/auth/login", form);
-      finishLogin(res.data);
-    } catch (err) {
-      if (!err.response) {
-        console.error("NETWORK ERROR:", err);
-        setError("Няма връзка с backend API. Провери дали backend работи на localhost:3000.");
-        return;
-      }
-
-      const msg = err.response?.data?.message;
-      console.error("LOGIN ERROR:", err.response?.data || err);
-      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Грешен имейл или парола.");
+  const finishDevLoginOffline = (role) => finishLogin({ token: `local-dev-token-${role}`, user: { id: role === 'client' ? 1 : 2, role, name: role === 'client' ? 'Dev Client' : 'Dev Worker', email: `${role}.dev@bricky.local` } });
+  const submit = async (event) => {
+    event.preventDefault(); setError('');
+    try { const response = await apiPost('/auth/login', form); finishLogin(response.data); }
+    catch (err) {
+      if (!err.response) { console.error('NETWORK ERROR:', err); setError('Няма връзка с backend API. Провери дали backend работи на localhost:3000.'); return; }
+      const message = err.response?.data?.message; console.error('LOGIN ERROR:', err.response?.data || err); setError(Array.isArray(message) ? message.join(', ') : message || 'Грешен имейл или парола.');
     }
   };
-
   const devLogin = async (role) => {
-    setError("");
-    setDevLoading(role);
-
-    try {
-      const res = await apiPost("/auth/dev-login", { role });
-      finishLogin(res.data);
-    } catch (err) {
-      console.error("DEV LOGIN ERROR:", err?.response?.data || err.message);
-      finishDevLoginOffline(role);
-    } finally {
-      setDevLoading("");
-    }
+    setError(''); setDevLoading(role);
+    try { const response = await apiPost('/auth/dev-login', { role }); finishLogin(response.data); }
+    catch (err) { console.error('DEV LOGIN ERROR:', err?.response?.data || err.message); finishDevLoginOffline(role); }
+    finally { setDevLoading(''); }
   };
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-6">
-      <form className="bg-gray-800 p-8 rounded-xl w-full max-w-md space-y-4 shadow-lg" onSubmit={submit}>
-        <h1 className="text-2xl font-bold text-center">Вход</h1>
-
-        <input
-          type="email"
-          name="email"
-          placeholder="Имейл"
-          value={form.email}
-          onChange={change}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
-
-        <input
-          type="password"
-          name="password"
-          placeholder="Парола"
-          value={form.password}
-          onChange={change}
-          className="w-full p-3 rounded bg-gray-700"
-          required
-        />
-
-        {error && <p className="text-red-400 text-center">{error}</p>}
-
-        <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
-        <Link to="/reset-password" className="block text-center text-sm font-semibold text-cyan-300 hover:text-cyan-200">
-          Забравена парола?
-        </Link>
-
-        {import.meta.env.DEV && (
-          <div className="border-t border-gray-700 pt-4 space-y-2">
-            <p className="text-sm text-gray-300 text-center">Локално тестване</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => devLogin("client")}
-                disabled={Boolean(devLoading)}
-                className="rounded bg-emerald-700 px-3 py-2 text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60"
-              >
-                {devLoading === "client" ? "Влизам..." : "Като клиент"}
-              </button>
-              <button
-                type="button"
-                onClick={() => devLogin("worker")}
-                disabled={Boolean(devLoading)}
-                className="rounded bg-amber-700 px-3 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
-              >
-                {devLoading === "worker" ? "Влизам..." : "Като майстор"}
-              </button>
-              <button
-                type="button"
-                onClick={() => devLogin("super_admin")}
-                disabled={Boolean(devLoading)}
-                className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold hover:bg-cyan-700 disabled:opacity-60"
-              >
-                {devLoading === "super_admin" ? "Влизам..." : "Като админ"}
-              </button>
-            </div>
+    <AuthShell mode="login" role="login" pageClass="registration-login-page" surfaceClass="registration-login-surface">
+      <form className="registration-form-panel registration-login-panel" onSubmit={submit}>
+        <div className="registration-login-content">
+          <span className="registration-login-icon"><LockKeyhole size={28} /></span>
+          <div className="registration-form-heading"><div><h1>Вход в Bricky</h1><p>Въведете данните си, за да продължите към своя профил.</p></div></div>
+          <div className="registration-login-fields">
+            <FormField label="Имейл"><div className="registration-input-with-icon"><Mail size={18} /><input type="email" name="email" value={form.email} onChange={change} autoComplete="email" required /></div></FormField>
+            <FormField label="Парола"><PasswordInput name="password" value={form.password} onChange={change} /></FormField>
           </div>
-        )}
+          <div className="registration-login-options"><span /><Link to="/reset-password">Забравена парола?</Link></div>
+          {error && <p className="registration-notice" role="alert">{error}</p>}
+          <button type="submit" className="registration-primary-action registration-login-submit">Вход <ArrowRight size={19} /></button>
+          <p className="registration-login-register">Нямате профил? <Link to="/auth/register">Регистрация</Link></p>
+          {import.meta.env.DEV && <div className="registration-dev-login"><span>Локално тестване</span><div>{[['client', 'Клиент'], ['worker', 'Майстор'], ['super_admin', 'Админ']].map(([role, label]) => <button type="button" onClick={() => devLogin(role)} disabled={Boolean(devLoading)} key={role}>{devLoading === role ? 'Влизане...' : label}</button>)}</div></div>}
+        </div>
       </form>
-    </div>
+    </AuthShell>
   );
 }
-
-

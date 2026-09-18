@@ -1,0 +1,148 @@
+.registration-page{--reg-bg:#06111f;--reg-panel:#0b1b2d;--reg-border:#294057;--reg-muted:#9aaac0;--reg-green:#20c967;min-height:100vh;background:var(--reg-bg);color:#fff;letter-spacing:0}.registration-header{height:68px;border-bottom:1px solid #243447;background:#071322}.registration-header-inner{width:min(1180px,calc(100% - 40px));height:100%;margin:auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:24px}.registration-brand{display:inline-flex;align-items:center;gap:10px;color:#fff;font-size:20px;font-weight:800;text-decoration:none;justify-self:start}.registration-brand-mark{display:grid;width:40px;height:40px;place-items:center;border:1px solid rgb(74 222 128/20%);border-radius:8px;background:rgb(34 197 94/15%);color:#86efac;box-shadow:0 8px 22px rgb(5 46 22/30%)}.registration-back-link{display:inline-flex;align-items:center;gap:8px;color:#cbd5e1;text-decoration:none;font-weight:650}.registration-back-link:hover{color:#fff}.registration-login-prompt{display:flex;align-items:center;justify-self:end;gap:16px;color:#cbd5e1}.registration-login-button{min-height:42px;padding:10px 24px;border:1px solid #22c55e;border-radius:6px;color:#fff;font-weight:750;text-decoration:none}.registration-login-button:hover{background:rgb(34 197 94/12%)}
+.registration-main{padding:34px 22px 48px}.registration-surface{display:grid;grid-template-columns:minmax(300px,34%) minmax(0,66%);width:min(1180px,100%);min-height:720px;margin:auto;overflow:hidden;border:1px solid var(--reg-border);border-radius:8px;background:var(--reg-panel);box-shadow:0 22px 60px rgb(0 0 0/28%)}.registration-value-panel{position:relative;display:flex;flex-direction:column;padding:68px 42px 28px;overflow:hidden;border-right:1px solid var(--reg-border);background:#081727}.registration-value-blueprint{position:absolute;inset:0;opacity:.16;background-image:linear-gradient(90deg,#081727 0%,transparent 32%,transparent 72%,#081727 100%),url('/assets/worker-banners/v1/blueprint-general.svg');background-position:center;background-size:cover;pointer-events:none}.registration-value-panel>*:not(.registration-value-blueprint){position:relative}.registration-value-panel h1{max-width:330px;margin:0 0 44px;font-size:34px;line-height:1.2;font-weight:800}.registration-value-panel h1 strong{color:var(--reg-green)}.registration-value-panel ul{display:grid;gap:31px;margin:0;padding:0;list-style:none}.registration-value-panel li{display:grid;grid-template-columns:56px 1fr;align-items:start;gap:16px}.registration-benefit-icon{display:grid;width:56px;height:56px;place-items:center;border:1px solid #50677d;border-radius:8px;color:#36e078;background:rgb(6 17 31/54%)}.registration-value-panel li strong,.registration-value-panel li small{display:block}.registration-value-panel li strong{margin:3px 0 5px;font-size:16px}.registration-value-panel li small{color:var(--reg-muted);font-size:14px;line-height:1.5}.registration-beta-note{display:flex;align-items:center;gap:11px;margin:auto -42px -28px;padding:22px 42px;border-top:1px solid var(--reg-border);color:#c4cfdd;background:rgb(6 17 31/48%)}.registration-beta-note svg{color:var(--reg-green)}
+.registration-form-panel{display:flex;min-width:0;flex-direction:column;padding:26px 46px 22px}.registration-role-selector{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 28px;padding:0;border:0}.registration-role-selector button{position:relative;display:grid;grid-template-columns:42px 1fr;min-height:86px;align-items:center;gap:12px;padding:16px 18px;border:1px solid #3a4f64;border-radius:7px;background:#0b1a2b;color:#c8d3df;text-align:left;cursor:pointer}.registration-role-selector button:hover{border-color:#668096}.registration-role-selector button.is-selected{border-color:var(--reg-green);background:rgb(32 201 103/9%);color:#fff;box-shadow:inset 0 0 0 1px rgb(32 201 103/20%)}.registration-role-selector button>svg{color:#8fa0b5}.registration-role-selector button.is-selected>svg{color:var(--reg-green)}.registration-role-selector strong,.registration-role-selector small{display:block}.registration-role-selector strong{margin-bottom:4px;font-size:17px}.registration-role-selector small{color:var(--reg-muted);font-size:13px}.role-check{position:absolute;top:10px;right:10px;padding:2px;border-radius:50%;background:var(--reg-green);color:#062514!important}.registration-form-heading{display:flex;justify-content:space-between;gap:24px;align-items:start}.registration-form-heading h1{margin:0 0 7px;font-size:27px;line-height:1.2}.registration-form-heading p{margin:0;color:var(--reg-muted)}.registration-form-heading>span{flex:0 0 auto;margin-top:7px;color:#cbd5e1;font-size:14px}
+.registration-stepper{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;margin:27px 0 22px;padding-bottom:20px}.registration-step{position:relative;z-index:2;display:flex;align-items:center;gap:9px;color:#8191a6}.registration-step>span{display:grid;width:24px;height:24px;place-items:center;border-radius:50%;background:#68778a;color:#091523;font-size:12px;font-weight:800}.registration-step strong{font-size:13px}.registration-step.is-current,.registration-step.is-complete{color:#e5edf6}.registration-step.is-current>span,.registration-step.is-complete>span{background:var(--reg-green)}.registration-progress-track{position:absolute;right:0;bottom:3px;left:0;height:4px;overflow:hidden;border-radius:2px;background:#314154}.registration-progress-track:after{content:'';display:block;width:var(--registration-progress);height:100%;background:var(--reg-green);transition:width .25s ease}.registration-step-content{flex:1;padding-top:18px;border-top:1px solid #2a3e52;animation:registration-enter .24s ease both}@keyframes registration-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.registration-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}.registration-field{display:block;min-width:0}.registration-field>span,.registration-referral label>span{display:block;margin-bottom:7px;color:#e5edf6;font-size:13px;font-weight:700}.registration-field input,.registration-field select,.registration-field textarea,.registration-referral input{width:100%;min-height:48px;padding:12px 14px;border:1px solid #354b61;border-radius:6px;outline:0;background:#071526;color:#fff}.registration-field textarea{resize:vertical}.registration-field input:focus,.registration-field select:focus,.registration-field textarea:focus,.registration-referral input:focus{border-color:#35d878;box-shadow:0 0 0 3px rgb(32 201 103/12%)}.registration-field small{display:block;margin-top:6px;color:var(--reg-muted);font-size:12px}.registration-field-error,.registration-referral small{color:#fda4af!important}.registration-field.is-wide,.is-wide{grid-column:1/-1}.registration-password-wrap{position:relative;display:block!important;margin:0!important}.registration-password-wrap button{position:absolute;top:4px;right:4px;display:grid;width:40px;height:40px;place-items:center;border:0;background:transparent;color:#9fb0c3;cursor:pointer}.registration-password-rules{display:flex;flex-wrap:wrap;gap:8px 18px;margin:-3px 0 0;padding:0;list-style:none;color:#8fa0b5;font-size:12px}.registration-password-rules li{display:inline-flex;align-items:center;gap:4px}.registration-password-rules li.is-passed{color:#6ee7a0}.registration-consent{display:flex;align-items:start;gap:10px;color:#bdc9d7;font-size:13px;line-height:1.5}.registration-consent input{width:18px;height:18px;margin-top:1px;accent-color:var(--reg-green)}.registration-consent a{color:#6ee7a0}.registration-step-fields{display:grid;gap:18px}
+.registration-card-group{margin:0;padding:0;border:0}.registration-card-group legend,.registration-specialties legend{margin-bottom:8px;color:#e5edf6;font-size:13px;font-weight:700}.registration-card-group>div{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.registration-card-group label{position:relative;display:grid;grid-template-columns:32px 1fr 18px;min-height:66px;align-items:center;gap:8px;padding:11px;border:1px solid #354b61;border-radius:6px;background:#0a1828;cursor:pointer}.registration-card-group label.is-selected{border-color:var(--reg-green);background:rgb(32 201 103/8%)}.registration-card-group input{position:absolute;opacity:0}.registration-card-group svg{color:#8fa0b5}.registration-card-group label.is-selected svg{color:var(--reg-green)}.registration-card-group strong,.registration-card-group small{display:block}.registration-card-group strong{font-size:13px}.registration-card-group small{margin-top:2px;color:var(--reg-muted);font-size:11px}.registration-card-group i{width:17px;height:17px;border:1px solid #52667a;border-radius:50%}.registration-card-group label.is-selected i{border:5px solid var(--reg-green)}.registration-specialties{margin:0;padding:0;border:0}.registration-specialties legend small{color:var(--reg-muted);font-weight:500}.registration-specialties>div{display:flex;max-height:132px;flex-wrap:wrap;gap:7px;overflow-y:auto}.registration-specialties label{padding:8px 11px;border:1px solid #354b61;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer}.registration-specialties label.is-selected{border-color:#27cf6c;background:rgb(32 201 103/10%);color:#fff}.registration-specialties input{position:absolute;opacity:0}
+.registration-summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.registration-summary-row{padding:14px;border:1px solid #33495e;border-radius:6px;background:#081626}.registration-summary-row span,.registration-summary-row strong{display:block}.registration-summary-row span{margin-bottom:5px;color:var(--reg-muted);font-size:12px}.registration-summary-row strong{overflow-wrap:anywhere;font-size:14px}.registration-summary>p{grid-column:1/-1;margin:9px 0 0;padding:13px;border-left:3px solid var(--reg-green);color:#c6d2df;background:rgb(32 201 103/6%);font-size:13px}.registration-referral{margin-top:18px}.registration-referral>button{display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:transparent;color:#9fb0c3;font-weight:700;cursor:pointer}.registration-referral>button svg{transition:transform .2s}.registration-referral>button svg.is-open{transform:rotate(180deg)}.registration-referral label{display:block;max-width:420px;margin-top:12px}.registration-referral label>div{position:relative}.registration-referral label svg{position:absolute;top:15px;right:14px}.registration-referral label .is-valid{color:#4ade80}
+.registration-actions{display:flex;justify-content:space-between;gap:14px;margin-top:24px}.registration-primary-action,.registration-secondary-action{display:inline-flex;min-height:48px;align-items:center;justify-content:center;gap:9px;padding:12px 22px;border-radius:6px;font-weight:800;text-decoration:none;cursor:pointer}.registration-primary-action{min-width:220px;border:1px solid #26d36e;background:var(--reg-green);color:#03170d}.registration-primary-action:hover{background:#3cdd7d}.registration-primary-action:disabled{cursor:wait;opacity:.55}.registration-secondary-action{border:1px solid #465d72;background:transparent;color:#e2e8f0}.registration-secondary-action:hover{border-color:#70869b;background:rgb(148 163 184/6%)}.registration-save-state{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px 0 0;color:#8496aa;font-size:11px}.registration-notice{margin:18px 0 0;padding:12px 14px;border:1px solid #f87171;border-radius:6px;color:#fecaca;background:rgb(127 29 29/24%)}.registration-complete{display:grid;flex:1;place-items:center;align-content:center;text-align:center}.registration-complete>span{display:grid;width:72px;height:72px;place-items:center;border:1px solid #44df82;border-radius:50%;background:rgb(32 201 103/12%);color:#5bea94}.registration-complete h1{margin:20px 0 8px}.registration-complete p{max-width:520px;margin:0;color:#afbed0;line-height:1.6}.registration-complete>div{display:flex;gap:12px;margin-top:26px}.is-spinning{animation:registration-spin .8s linear infinite}@keyframes registration-spin{to{transform:rotate(360deg)}}.registration-page.is-modal{min-height:0;background:transparent}.registration-page.is-modal .registration-main{padding:0}.registration-page.is-modal .registration-surface{min-height:min(720px,86vh)}
+@media(max-width:900px){.registration-surface{grid-template-columns:260px minmax(0,1fr)}.registration-value-panel{padding:48px 25px 25px}.registration-value-panel h1{font-size:27px}.registration-value-panel li{grid-template-columns:44px 1fr}.registration-benefit-icon{width:44px;height:44px}.registration-beta-note{margin-right:-25px;margin-bottom:-25px;margin-left:-25px;padding:18px 25px}.registration-form-panel{padding:24px 28px 20px}.registration-role-selector button{grid-template-columns:34px 1fr;padding:13px}.registration-step strong{display:none}}
+@media(max-width:700px){.registration-header{height:62px}.registration-header-inner{width:calc(100% - 24px);grid-template-columns:auto 1fr auto;gap:10px}.registration-back-link span,.registration-login-prompt>span{display:none}.registration-brand{justify-self:center}.registration-login-prompt{justify-self:end}.registration-login-button{min-height:40px;padding:8px 14px}.registration-main{padding:14px 10px 28px}.registration-surface{display:block;min-height:0;border-radius:7px}.registration-value-panel{min-height:118px;padding:22px 20px;border-right:0;border-bottom:1px solid var(--reg-border)}.registration-value-panel h1{max-width:none;margin:0;font-size:23px}.registration-value-panel ul,.registration-beta-note{display:none}.registration-form-panel{padding:18px 16px}.registration-role-selector{grid-template-columns:1fr;gap:9px;margin-bottom:22px}.registration-role-selector button{min-height:68px}.registration-form-heading{display:block}.registration-form-heading h1{font-size:22px}.registration-form-heading p{font-size:13px;line-height:1.45}.registration-form-heading>span{display:block;margin-top:10px}.registration-stepper{margin:20px 0 15px}.registration-step{justify-content:center}.registration-fields-grid{grid-template-columns:1fr}.registration-field.is-wide,.is-wide{grid-column:auto}.registration-card-group>div{grid-template-columns:1fr}.registration-summary{grid-template-columns:1fr}.registration-summary>p{grid-column:auto}.registration-actions{flex-direction:column-reverse}.registration-primary-action,.registration-secondary-action{width:100%;min-width:0}.registration-complete>div{width:100%;flex-direction:column}}
+@media(max-width:360px){.registration-header-inner{gap:7px}.registration-brand{font-size:17px}.registration-brand-mark{width:36px;height:36px}.registration-login-button{padding:8px 10px}.registration-form-panel{padding-right:12px;padding-left:12px}.registration-value-panel{padding-right:14px;padding-left:14px}.registration-value-panel h1{font-size:21px}}
+.registration-login-surface{min-height:650px}.registration-login-panel{display:flex;align-items:center;justify-content:center}.registration-login-content{width:min(100%,560px)}.registration-login-icon{display:grid;width:54px;height:54px;margin-bottom:20px;place-items:center;border:1px solid rgb(32 201 103/45%);border-radius:8px;background:rgb(32 201 103/10%);color:#4ade80}.registration-login-content .registration-form-heading{margin-bottom:28px}.registration-login-fields{display:grid;gap:18px}.registration-input-with-icon{position:relative}.registration-input-with-icon>svg{position:absolute;top:15px;left:15px;color:#71849a;pointer-events:none}.registration-input-with-icon>input{padding-left:46px}.registration-login-options{display:flex;justify-content:space-between;margin:14px 0 22px}.registration-login-options a,.registration-login-register a{color:#4ade80;font-weight:750;text-decoration:none}.registration-login-options a:hover,.registration-login-register a:hover{text-decoration:underline}.registration-login-submit{width:100%}.registration-login-register{margin:20px 0 0;color:#9fb0c3;text-align:center}.registration-dev-login{margin-top:27px;padding-top:18px;border-top:1px solid #2a3e52}.registration-dev-login>span{display:block;margin-bottom:10px;color:#8191a6;font-size:12px;text-align:center}.registration-dev-login>div{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.registration-dev-login button{min-height:38px;border:1px solid #33495e;border-radius:6px;background:#102338;color:#d7e2ee;font-weight:700;cursor:pointer}.registration-dev-login button:hover{border-color:#20c967;color:#fff}.registration-dev-login button:disabled{cursor:wait;opacity:.55}.registration-page.is-modal{min-height:auto;background:transparent}.registration-page.is-modal .registration-main{padding:0}.registration-page.is-modal .registration-surface{box-shadow:none}@media(max-width:700px){.registration-login-surface{min-height:0}.registration-login-page .registration-value-panel{min-height:105px}.registration-login-panel{padding-top:26px;padding-bottom:28px}.registration-login-icon{width:46px;height:46px;margin-bottom:16px}.registration-dev-login>div{grid-template-columns:1fr}}
+/* Shared Bricky Auth refinements */
+.registration-page {
+  --reg-bg: var(--bricky-bg, #08111f);
+  --reg-panel: var(--bricky-bg-elevated, #111d30);
+  --reg-border: var(--bricky-border-strong, rgba(148, 163, 184, 0.3));
+  --reg-muted: var(--bricky-text-muted, #94a3b8);
+  --reg-green: var(--bricky-green, #22c55e);
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  background:
+    linear-gradient(rgba(56, 189, 248, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.035) 1px, transparent 1px),
+    #06111f;
+  background-size: 44px 44px;
+}
+
+.registration-page::before,
+.registration-page::after {
+  position: fixed;
+  z-index: -1;
+  width: 36vw;
+  height: 36vw;
+  border: 1px solid rgba(59, 223, 242, 0.08);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+  user-select: none;
+}
+
+.registration-page::before { top: -24vw; right: -12vw; }
+.registration-page::after { bottom: -28vw; left: -14vw; }
+.registration-surface { background: rgba(11, 27, 45, 0.96); }
+.registration-form-panel { background: rgba(8, 21, 37, 0.58); }
+.registration-eyebrow { display: block; margin-bottom: 10px; color: #67e8f9; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+
+.registration-role-selector {
+  width: min(100%, 520px);
+  margin-inline: auto;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #33495e;
+  border-radius: 8px;
+  background: #071526;
+}
+
+.registration-role-selector button,
+.registration-role-selector button.is-selected {
+  grid-template-columns: 28px 1fr;
+  min-height: 62px;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.registration-role-selector button.is-selected { background: rgba(34, 197, 94, 0.14); }
+.registration-role-selector button > svg { width: 21px; }
+.registration-role-selector .role-check { top: 8px; right: 8px; width: 17px; height: 17px; }
+
+.registration-primary-categories { margin: 0; padding: 0; border: 0; }
+.registration-primary-categories legend { margin-bottom: 9px; color: #e5edf6; font-size: 13px; font-weight: 700; }
+.registration-primary-categories > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.registration-primary-categories label { position: relative; padding: 9px 12px; border: 1px solid #354b61; border-radius: 6px; background: #0a1828; color: #cbd5e1; font-size: 13px; font-weight: 700; cursor: pointer; }
+.registration-primary-categories label:hover { border-color: #5f7890; color: #fff; }
+.registration-primary-categories label.is-selected { border-color: var(--reg-green); background: rgba(32, 201, 103, 0.12); color: #fff; }
+.registration-primary-categories input { position: absolute; opacity: 0; pointer-events: none; }
+.registration-primary-categories small { display: block; margin-top: 8px; }
+
+.registration-gate-surface { min-height: 650px; }
+.registration-gate-panel { display: flex; align-items: center; justify-content: center; }
+.registration-gate-content { width: min(100%, 690px); }
+.registration-gate-content .registration-form-heading { margin-bottom: 30px; }
+.registration-gate-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.registration-gate-action { display: grid; grid-template-columns: 48px 1fr; align-content: start; gap: 18px; min-height: 230px; padding: 24px; border: 1px solid #33495e; border-radius: 8px; background: #0a192a; color: #fff; text-decoration: none; transition: border-color .2s, background .2s, transform .2s; }
+.registration-gate-action:hover { border-color: #60a5fa; background: #0c2230; transform: translateY(-1px); }
+.registration-gate-action > span { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(96, 165, 250, 0.42); border-radius: 8px; color: #93c5fd; }
+.registration-gate-action div { grid-column: 1 / -1; }
+.registration-gate-action strong,.registration-gate-action small { display: block; }
+.registration-gate-action strong { margin-bottom: 9px; font-size: 21px; }
+.registration-gate-action small { color: #9fb0c3; font-size: 14px; line-height: 1.6; }
+.registration-gate-action > svg { align-self: center; justify-self: end; color: #60a5fa; }
+.registration-gate-action.is-primary { border-color: rgba(34, 197, 94, 0.55); background: rgba(32, 201, 103, 0.08); }
+.registration-gate-action.is-primary:hover { border-color: var(--reg-green); background: rgba(32, 201, 103, 0.12); }
+.registration-gate-action.is-primary > span,.registration-gate-action.is-primary > svg { border-color: rgba(32, 201, 103, 0.45); color: #4ade80; }
+.registration-gate-note { margin: 24px 0 0; color: #8191a6; text-align: center; }
+
+.registration-google-choice { display: grid; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid #2a3e52; }
+.registration-google-choice > span { color: #94a6ba; font-size: 12px; text-align: center; }
+.registration-google-mock { width: 100%; min-height: 46px; border: 1px solid #60758b; border-radius: 6px; background: #0a1828; color: #fff; font-weight: 800; cursor: pointer; }
+.registration-google-mock:hover { border-color: #94a3b8; background: #102338; }
+.registration-google-mock:disabled { cursor: not-allowed; opacity: .5; }
+.registration-google-live { display: flex; min-height: 44px; justify-content: center; overflow: hidden; }
+
+.registration-login-page .registration-primary-action { border-color: #3b82f6; background: #2563eb; color: #fff; }
+.registration-login-page .registration-primary-action:hover { background: #3b82f6; }
+.registration-login-page .registration-login-icon { border-color: rgba(96, 165, 250, 0.5); background: rgba(37, 99, 235, 0.12); color: #93c5fd; }
+.registration-field input[aria-invalid='true'],.registration-field textarea[aria-invalid='true'],.registration-field select[aria-invalid='true'] { border-color: #fb7185; }
+
+@media (max-width: 900px) {
+  .registration-surface { grid-template-columns: minmax(220px, 30%) minmax(0, 1fr); }
+  .registration-gate-actions { grid-template-columns: 1fr; }
+  .registration-gate-action { min-height: 160px; }
+}
+
+@media (max-width: 700px) {
+  .registration-surface { display: flex; flex-direction: column; }
+  .registration-form-panel { order: 1; }
+  .registration-value-panel { order: 2; min-height: 96px; padding: 20px; border-top: 1px solid var(--reg-border); border-bottom: 0; }
+  .registration-role-selector { grid-template-columns: 1fr 1fr; }
+  .registration-role-selector button { grid-template-columns: 1fr; min-height: 58px; padding: 10px; text-align: center; }
+  .registration-role-selector button > svg,.registration-role-selector small,.registration-role-selector .role-check { display: none; }
+  .registration-gate-action { min-height: 0; grid-template-columns: 42px 1fr auto; padding: 18px; }
+  .registration-gate-action > span { width: 42px; height: 42px; }
+  .registration-gate-action div { grid-column: auto; }
+  .registration-gate-action strong { font-size: 18px; }
+  .registration-gate-action small { font-size: 12px; }
+  .registration-primary-categories > div { gap: 7px; }
+  .registration-primary-categories label { flex: 1 1 auto; text-align: center; }
+}
+
+/* Production form compatibility: keeps the current live submit logic intact. */
+.registration-production-form { gap: 18px; }
+.registration-production-form > .registration-form-heading { margin-bottom: 4px; }
+.registration-production-input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid #354b61; border-radius: 6px; outline: 0; background: #071526; color: #fff; }
+.registration-production-input:focus { border-color: #35d878; box-shadow: 0 0 0 3px rgba(32, 201, 103, .12); }
+.registration-production-specialties > div { max-height: none; }
+.registration-production-specialties button { padding: 9px 12px; border: 1px solid #354b61; border-radius: 6px; background: #0a1828; color: #cbd5e1; font-size: 13px; font-weight: 700; cursor: pointer; }
+.registration-production-specialties button:hover { border-color: #5f7890; color: #fff; }
+.registration-production-specialties button.is-selected { border-color: var(--reg-green); background: rgba(32, 201, 103, .12); color: #fff; }
+.registration-production-referral { padding: 14px; border: 1px solid #2f455a; border-radius: 7px; background: rgba(7, 21, 38, .7); }
+.registration-production-referral label { display: block; margin-bottom: 8px; color: #dce6f0; font-size: 13px; font-weight: 700; }
+.registration-production-referral p { margin: 8px 0 0; color: #86efac; font-size: 12px; }
+.registration-production-consent { padding: 14px; border: 1px solid #2f455a; border-radius: 7px; background: rgba(7, 21, 38, .7); }
+.registration-production-divider { display: flex; align-items: center; gap: 12px; color: #7f91a5; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.registration-production-divider span { height: 1px; flex: 1; background: #2f455a; }
+.registration-production-form > [role='status'] { border-radius: 6px; }
