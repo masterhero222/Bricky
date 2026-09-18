@@ -101,7 +101,7 @@
   .client-roadmap-header h2 { font-size: 30px; }
   .client-roadmap-header h2 + p { font-size: 16px; }
   .client-roadmap-layout { display: block; margin-top: 38px; }
-  .client-roadmap-progress { z-index: 2; top: 78px; display: flex; width: 100vw; min-height: 0; box-sizing: border-box; align-items: center; gap: 10px; margin-inline: calc(50% - 50vw); padding: 12px 24px; border: 0; border-block: 1px solid #29475b; background: rgba(8, 21, 35, .94); backdrop-filter: blur(12px); }
+  .client-roadmap-progress { z-index: 2; top: 78px; display: flex; width: auto; min-height: 0; box-sizing: border-box; align-items: center; gap: 10px; margin-inline: -14px; padding: 12px 24px; border: 0; border-block: 1px solid #29475b; background: rgba(8, 21, 35, .94); backdrop-filter: blur(12px); }
   .client-roadmap-progress strong { font-size: 22px; }
   .client-roadmap-progress > div { flex: 1; width: auto; height: 3px; margin: 0; }
   .client-roadmap-progress i { width: var(--roadmap-progress); height: 100%; transition: width .25s ease; }
