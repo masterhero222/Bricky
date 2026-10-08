@@ -113,7 +113,7 @@ NestJS Backend
 
 ## My Role / Technical Contribution
 
-Моята роля в Bricky е комбинация от product ownership, системно мислене и техническо управление на AI-assisted development workflow.
+Моята роля в Bricky е комбинация от product ownership, системно мислене, техническо управление на AI-assisted development workflow и практическо go-to-market изпълнение.
 
 Основните ми отговорности включват:
 
@@ -127,9 +127,17 @@ NestJS Backend
 - проверка дали реализираните промени следват зададената продуктова и техническа посока;
 - разбиване на сложни проблеми на по-малки задачи и проследяване на прогреса между различни работни блокове;
 - участие в debugging на database, application и production проблеми;
-- валидиране на функционалности чрез тестове, build проверки и реално поведение на системата.
+- валидиране на функционалности чрез тестове, build проверки и реално поведение на системата;
+- участие в product positioning и комуникационната посока на Bricky;
+- планиране на маркетингово съдържание за социални мрежи, основно Facebook и Instagram;
+- създаване на визуални концепции, изображения и кратко видео съдържание за представяне на продукта;
+- използване на AI инструменти за content production, image generation и video workflows;
+- проучване на content formats, audience behavior, social media trends и acquisition канали;
+- анализ на представянето на съдържанието и итеративно подобряване на messaging и content strategy;
+- работа по разпознаваемостта на Bricky и по привличането на клиенти и майстори;
+- изграждане на повторяеми content workflows, които могат да бъдат оптимизирани с времето.
 
-AI се използва като development tool за ускоряване на анализа и реализацията, а не като заместител на техническата преценка, валидирането и вземането на решения.
+AI се използва като development и creative tool за ускоряване на анализа, реализацията и content production, а не като заместител на техническата или продуктовата преценка.
 
 ## Engineering Challenges
 
@@ -226,6 +234,36 @@ Idea
 - използване на GitHub workflow за branches, pull requests, merges и история на промените;
 - проверка на build, тестове и production поведение преди следваща итерация.
 
+## Product, Marketing & Content
+
+Bricky се развива не само като техническа система, а и като продукт, който трябва да бъде разбираем и позициониран ясно спрямо реални клиенти и майстори.
+
+Работата в тази област включва:
+
+- development of Bricky's positioning and communication strategy;
+- social media content planning for Facebook and Instagram;
+- creation of visual concepts and AI-assisted content;
+- AI image generation and AI video production workflows;
+- research of audience behavior, content formats, acquisition channels and platform trends;
+- iterative content improvement based on performance and audience response;
+- alignment between product development, marketing messaging and marketplace growth goals.
+
+### AI Creative Workflow
+
+Развивам практически AI-assisted creative workflows, които допълват product и go-to-market работата по Bricky.
+
+Те включват:
+
+- image generation;
+- structured prompt engineering за визуална консистентност;
+- AI video generation;
+- keyframe-based workflows;
+- Blender / CGI-assisted scene creation;
+- iterative visual testing;
+- content production за маркетингови цели.
+
+Фокусът е върху изграждането на повторяем и практически използваем creative process, а не върху представяне на ролята като professional 3D art или professional video editing.
+
 ## Разработка
 
 **Начало на разработката:** 2025  
@@ -295,7 +333,7 @@ Bricky се развива итеративно чрез MVP подход и ф�
 - JWT authentication и role-based access.
 - Moderation, admin tools, audit history и structured marketplace lifecycle.
 - CI / automated testing и реален deployment върху VPS, Nginx и `PM2`.
-- AI-assisted development workflow с structured prompt engineering, debugging, documentation и iterative technical validation.
+- Combined product development, technical execution and AI-assisted marketing/content workflows for a live marketplace product.
 
 ## Live Project / Repository
 
@@ -323,3 +361,4 @@ Bricky има за цел да превърне ремонта от хаотич
 - Contributed to VPS, Nginx, PM2, Google Console and SEO configuration while supporting production deployment and operational stability.
 - Troubleshot issues involving database migrations, legacy production code, environment configuration and inconsistent application behavior across development and production.
 - Structured complex technical problems into smaller work blocks, validated implementation against product requirements and maintained iterative development documentation.
+- Contributed to product positioning, go-to-market communication and AI-assisted content creation for Bricky, including social media planning, visual concepts, content experimentation and audience-focused messaging.
