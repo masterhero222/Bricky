@@ -1,21 +1,23 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import "./index.css";
-import "./styles/theme.css";
-import { AuthModalProvider } from "./context/AuthModalContext";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+import './styles/theme.css';
+import { AuthModalProvider } from './context/AuthModalContext';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
-const rootElement = document.getElementById("root");
+const rootElement = document.getElementById('root');
 
 if (!rootElement) {
-  console.error('❌ Не е намерен <div id="root"></div> в index.html');
+  console.error('Липсва <div id="root"></div> в index.html');
 } else {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(
+  ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <AuthModalProvider>
-        <App />
-      </AuthModalProvider>
-    </React.StrictMode>
+      <AppErrorBoundary>
+        <AuthModalProvider>
+          <App />
+        </AuthModalProvider>
+      </AppErrorBoundary>
+    </React.StrictMode>,
   );
 }

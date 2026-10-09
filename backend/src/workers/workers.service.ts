@@ -1,24 +1,66 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { Worker } from './worker.entity';
 import { WorkerGalleryImage } from './worker-gallery-image.entity';
-import { RequestEntity } from '../requests/entities/request.entity';
-import { RequestImageEntity } from '../requests/entities/request-image.entity';
-import { deleteStoredMedia } from '../common/media-storage';
-import { UserEntity } from '../users/user.entity';
+import { WorkerProfileEntity } from './worker-profile.entity';
+import { WorkerSkillEntity } from './worker-skill.entity';
+import { RepairRequestEntity } from '../requests/entities/repair-request.entity';
+import { MediaService } from '../media/media.service';
+import { ReferralRewardEntity } from '../referrals/referral-reward.entity';
+import { REPAIR_CATEGORY_BY_KEY, REPAIR_CATEGORY_KEYS, RepairCategoryKey } from '../requests/repair-catalog';
+import {
+  DEFAULT_WORKER_BANNER_KEY,
+  WORKER_BANNER_POLICY_BY_KEY,
+  isWorkerBannerAllowed,
+  resolveWorkerBannerKey,
+} from './worker-banner.catalog';
 import * as bcrypt from 'bcrypt';
+import { UsersService } from '../users/users.service';
+import { UpdateWorkerOnboardingStepDto } from './dto/update-worker-onboarding-step.dto';
+import { WorkerProfileCompletionService } from './worker-profile-completion.service';
 
 type CreateWorkerProfileInput = {
   userId: number;
+  publicName?: string;
   phone?: string;
+  defaultAddress?: string | null;
   city?: string;
   skills?: string[];
+  bio?: string | null;
+  experience?: string | null;
+  equipment?: string | null;
+};
+
+type WorkerMediaVisibilityOptions = {
+  includeUnapprovedMedia?: boolean;
+};
+
+export type AdminWorkerFilters = {
+  incomplete?: boolean;
+  missingPhone?: boolean;
+  onboardingIncomplete?: boolean;
+  sort?: 'completion_asc' | 'newest';
+};
+
+const SKILL_CATEGORY_ALIASES: Record<string, RepairCategoryKey> = {
+  вик: 'vik',
+  vik: 'vik',
+  електро: 'electro',
+  electro: 'electro',
+  ток: 'electro',
+  шпакловка: 'plaster',
+  'шпакловка и боя': 'plaster',
+  боя: 'painting',
+  боядисване: 'painting',
+  зидария: 'plaster',
+  плочки: 'tiles',
 };
 
 @Injectable()
 export class WorkersService {
   private readonly logger = new Logger(WorkersService.name);
+  private readonly missingLegacyTableWarnings = new Set<string>();
 
   constructor(
     @InjectRepository(Worker)
@@ -27,34 +69,22 @@ export class WorkersService {
     @InjectRepository(WorkerGalleryImage)
     private readonly galleryRepo: Repository<WorkerGalleryImage>,
 
-    @InjectRepository(RequestEntity)
-    private readonly requestRepo: Repository<RequestEntity>,
+    @InjectRepository(WorkerProfileEntity)
+    private readonly workerProfilesRepo: Repository<WorkerProfileEntity>,
 
-    @InjectRepository(RequestImageEntity)
-    private readonly requestImageRepo: Repository<RequestImageEntity>,
+    @InjectRepository(WorkerSkillEntity)
+    private readonly workerSkillsRepo: Repository<WorkerSkillEntity>,
 
-    @InjectRepository(UserEntity)
-    private readonly usersRepo: Repository<UserEntity>,
+    @InjectRepository(RepairRequestEntity)
+    private readonly repairRequestsRepo: Repository<RepairRequestEntity>,
+
+    @InjectRepository(ReferralRewardEntity)
+    private readonly referralRewardsRepo: Repository<ReferralRewardEntity>,
+
+    private readonly media: MediaService,
+    private readonly users: UsersService,
+    private readonly profileCompletion: WorkerProfileCompletionService,
   ) {}
-
-  private async activeWorkerUserIds(userIds: number[]) {
-    const ids = Array.from(new Set(userIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)));
-    if (!ids.length) return new Set<number>();
-    const users = await this.usersRepo.find({
-      where: { id: In(ids), role: 'worker', accountStatus: 'active' },
-      select: { id: true },
-    });
-    return new Set(users.map((user) => Number(user.id)));
-  }
-
-  private async assertPublicWorker(worker: Worker) {
-    if (worker.moderationStatus !== 'approved') throw new NotFoundException('Worker not found');
-    const user = await this.usersRepo.findOne({
-      where: { id: Number(worker.userId), role: 'worker', accountStatus: 'active' },
-      select: { id: true },
-    });
-    if (!user) throw new NotFoundException('Worker not found');
-  }
 
   /**
    * LEGACY: Register worker as standalone account in workers table
@@ -91,16 +121,31 @@ export class WorkersService {
   }
 
   async findByEmail(email: string) {
-    return this.workerRepository.findOne({ where: { email } });
+    return this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { email } }),
+      null,
+    );
   }
 
   async findById(id: number) {
-    return this.workerRepository.findOne({ where: { id } });
+    return this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { id } }),
+      null,
+    );
   }
 
-  async findByUserId(userId: number) {
-    const worker = await this.workerRepository.findOne({ where: { userId } });
-    return worker ? this.withGallerySummary(worker, true) : worker;
+  async findByUserId(userId: number, options: WorkerMediaVisibilityOptions = {}) {
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
+    if (profile) return this.withV2WorkerSummary(profile, options);
+
+    const worker = await this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.findOne({ where: { userId } }),
+      null,
+    );
+    return worker ? this.withGallerySummary(worker, options) : worker;
   }
 
   /**
@@ -111,47 +156,73 @@ export class WorkersService {
     const n = Number(idOrUserId);
     if (!Number.isFinite(n) || n <= 0) throw new BadRequestException('Invalid worker identifier');
 
-    // 1) try as userId
-    let worker = await this.workerRepository.findOne({ where: { userId: n } });
+    // 1) try v2/public canonical userId
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId: n } });
+    if (profile) {
+      const user = await this.users.findOne(n);
+      if (
+        !user ||
+        user.status !== 'active' ||
+        profile.approvalStatus !== 'approved' ||
+        profile.visibilityStatus !== 'public'
+      ) {
+        throw new NotFoundException('Worker not found');
+      }
+      return this.withV2WorkerSummary(profile);
+    }
 
-    // 2) fallback: try as primary key id
-    if (!worker) worker = await this.workerRepository.findOne({ where: { id: n } });
+    // 2) legacy fallback: try as userId
+    const worker = await this.optionalLegacyRead(
+      'worker',
+      async () => {
+        const byUserId = await this.workerRepository.findOne({ where: { userId: n } });
+        return byUserId || this.workerRepository.findOne({ where: { id: n } });
+      },
+      null,
+    );
 
-    if (!worker) throw new NotFoundException('Worker not found');
-    await this.assertPublicWorker(worker);
+    if (!worker || !worker.isApproved) {
+      throw new NotFoundException('Worker not found');
+    }
+    const user = await this.users.findOne(Number(worker.userId));
+    if (!user || user.status !== 'active') {
+      throw new NotFoundException('Worker not found');
+    }
     return this.withGallerySummary(worker);
   }
 
   /**
    * NEW: Create worker profile linked to users.id (userId)
    */
-  async createWorkerProfile(data: CreateWorkerProfileInput) {
+  async createWorkerProfile(data: CreateWorkerProfileInput, manager?: EntityManager) {
     const uid = Number(data?.userId);
     if (!uid) throw new BadRequestException('Missing userId');
 
-    const existing = await this.findByUserId(uid);
-    if (existing) return existing;
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const existing = await profilesRepo.findOne({ where: { userId: uid } });
+    if (existing) return manager ? existing : this.withV2WorkerSummary(existing);
 
-    const worker = this.workerRepository.create({
+    const worker = profilesRepo.create({
       userId: uid,
-      phone: data.phone ?? null,
+      publicName: data.publicName || `Майстор #${uid}`,
       city: data.city ?? null,
-      skills: data.skills ?? [],
-      isApproved: false,
-      moderationStatus: 'pending_review',
-      moderationReason: null,
-      moderatedByUserId: null,
-      moderatedAt: null,
-      avatarModerationStatus: 'pending_review',
-      avatarModerationReason: null,
-      avatarModeratedByUserId: null,
-      avatarModeratedAt: null,
-    } as any);
+      bio: data.bio ?? null,
+      experience: data.experience ?? null,
+      equipment: data.equipment ?? null,
+      phonePrivate: data.phone
+        ? this.profileCompletion.normalizePhone(data.phone)
+        : null,
+      defaultAddress: data.defaultAddress ?? null,
+      approvalStatus: 'pending',
+      visibilityStatus: 'private',
+      profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
+    });
 
-    const saved = (await this.workerRepository.save(worker as any)) as Worker;
+    const saved = await profilesRepo.save(worker);
+    await this.replaceWorkerSkills(uid, data.skills ?? [], manager);
 
-    this.logger.log(`Worker profile created for userId=${saved.userId}`);
-    return saved;
+    this.logger.log(`Worker v2 profile created for userId=${saved.userId}`);
+    return manager ? saved : this.withV2WorkerSummary(saved);
   }
 
   async findByUserIds(userIds: number[]) {
@@ -163,9 +234,45 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    const workers = await this.workerRepository.find({ where: { userId: In(clean), moderationStatus: 'approved' } });
-    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
-    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
+    const profiles = await this.workerProfilesRepo.find({ where: { userId: In(clean) } });
+    const found = new Set(profiles.map((profile) => Number(profile.userId)));
+    const legacyIds = clean.filter((id) => !found.has(id));
+    const legacy = legacyIds.length
+      ? await this.optionalLegacyRead(
+          'worker',
+          () => this.workerRepository.find({ where: { userId: In(legacyIds) } }),
+          [] as Worker[],
+        )
+      : [];
+    const activeUsers = await this.users.findByIds([
+      ...profiles.map((profile) => Number(profile.userId)),
+      ...legacy.map((worker) => Number(worker.userId)),
+    ]);
+    const activeUserIds = new Set(
+      activeUsers
+        .filter((user) => user.status === 'active')
+        .map((user) => Number(user.id)),
+    );
+    const publicProfiles = profiles.filter(
+      (profile) =>
+        activeUserIds.has(Number(profile.userId)) &&
+        profile.approvalStatus === 'approved' &&
+        profile.visibilityStatus === 'public',
+    );
+    const publicLegacy = legacy.filter(
+      (worker) =>
+        activeUserIds.has(Number(worker.userId)) &&
+        Boolean(worker.isApproved),
+    );
+
+    return [
+      ...(await Promise.all(
+        publicProfiles.map((profile) => this.withV2WorkerSummary(profile)),
+      )),
+      ...(await Promise.all(
+        publicLegacy.map((worker) => this.withGallerySummary(worker)),
+      )),
+    ];
   }
 
   async findByIdsSmart(ids: number[]) {
@@ -177,11 +284,15 @@ export class WorkersService {
 
     if (clean.length === 0) return [];
 
-    const workers = await this.workerRepository.find({
-      where: [{ id: In(clean), moderationStatus: 'approved' }, { userId: In(clean), moderationStatus: 'approved' }],
-    });
-    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
-    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
+    const workers = await this.optionalLegacyRead(
+      'worker',
+      () =>
+        this.workerRepository.find({
+          where: [{ id: In(clean) }, { userId: In(clean) }],
+        }),
+      [] as Worker[],
+    );
+    return Promise.all(workers.map((worker) => this.withGallerySummary(worker)));
   }
 
   async updateProfile(id: number, data: Partial<Worker>) {
@@ -190,69 +301,387 @@ export class WorkersService {
   }
 
   async updateProfileByUserId(userId: number, data: Partial<Worker>) {
-    const profileFields = ['fullName', 'city', 'skills', 'description', 'experience', 'equipment'];
-    const touchesProfile = profileFields.some((field) => Object.prototype.hasOwnProperty.call(data, field));
-    const touchesAvatar = Object.prototype.hasOwnProperty.call(data, 'avatarUrl');
-    const update: Partial<Worker> = { ...data };
-    if (touchesProfile) {
-      update.moderationStatus = 'pending_review';
-      update.moderationReason = null;
-      update.moderatedByUserId = null;
-      update.moderatedAt = null;
-      update.isApproved = false;
+    const existing = await this.workerProfilesRepo.findOne({ where: { userId } });
+    const profileData: Partial<WorkerProfileEntity> = {
+      publicName: (data as any).publicName || (data as any).fullName || (data as any).name,
+      city: (data as any).city,
+      bio: (data as any).bio || (data as any).description,
+      experience: (data as any).experience,
+      equipment: (data as any).equipment,
+    };
+    Object.keys(profileData).forEach((key) => (profileData as any)[key] === undefined && delete (profileData as any)[key]);
+
+    if (existing) {
+      await this.workerProfilesRepo.update({ userId }, profileData);
+      if (Array.isArray((data as any).skills)) await this.replaceWorkerSkills(userId, (data as any).skills);
+      if ((data as any).avatarUrl) await this.setAvatar(userId, (data as any).avatarUrl);
+      return this.findByUserId(userId);
     }
-    if (touchesAvatar) {
-      update.avatarModerationStatus = 'pending_review';
-      update.avatarModerationReason = null;
-      update.avatarModeratedByUserId = null;
-      update.avatarModeratedAt = null;
-    }
-    await this.workerRepository.update({ userId }, update as any);
+
     return this.findByUserId(userId);
   }
 
-  async getAll() {
-    const workers = await this.workerRepository.find({ where: { moderationStatus: 'approved' } });
-    const activeIds = await this.activeWorkerUserIds(workers.map((worker) => worker.userId));
-    return Promise.all(workers.filter((worker) => activeIds.has(Number(worker.userId))).map((worker) => this.withGallerySummary(worker)));
+  async updateAppearanceByUserId(userId: number, data: { profileBannerKey?: string }) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId: uid } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+
+    const key = String(data?.profileBannerKey || '').trim();
+    if (!WORKER_BANNER_POLICY_BY_KEY[key]) throw new BadRequestException('Unknown worker banner key');
+
+    if (!isWorkerBannerAllowed(key)) throw new BadRequestException('Unknown worker banner key');
+
+    await this.workerProfilesRepo.update({ userId: uid }, { profileBannerKey: key });
+    return { profileBannerKey: key };
+  }
+
+  async getAll(options: WorkerMediaVisibilityOptions = {}) {
+    const allProfiles = await this.workerProfilesRepo.find({
+      order: { createdAt: 'DESC' },
+    });
+    const legacyWorkers = await this.optionalLegacyRead(
+      'worker',
+      () => this.workerRepository.find(),
+      [] as Worker[],
+    );
+    const activeUsers = await this.users.findByIds([
+      ...allProfiles.map((profile) => Number(profile.userId)),
+      ...legacyWorkers.map((worker) => Number(worker.userId)),
+    ]);
+    const activeUserIds = new Set(
+      activeUsers
+        .filter((user) => user.status === 'active')
+        .map((user) => Number(user.id)),
+    );
+    const profiles = allProfiles.filter(
+      (profile) =>
+        activeUserIds.has(Number(profile.userId)) &&
+        profile.approvalStatus === 'approved' &&
+        profile.visibilityStatus === 'public',
+    );
+    const allProfileUserIds = new Set(
+      allProfiles.map((profile) => Number(profile.userId)),
+    );
+    const legacyOnly = legacyWorkers.filter(
+      (worker) =>
+        activeUserIds.has(Number(worker.userId)) &&
+        Boolean(worker.isApproved) &&
+        !allProfileUserIds.has(Number(worker.userId)),
+    );
+
+    return [
+      ...(await Promise.all(profiles.map((profile) => this.withV2WorkerSummary(profile, options)))),
+      ...(await Promise.all(legacyOnly.map((worker) => this.withGallerySummary(worker, options)))),
+    ];
+  }
+
+  async getAllForAdmin(filters: AdminWorkerFilters = {}) {
+    const profiles = await this.workerProfilesRepo.find({ order: { createdAt: 'DESC' } });
+    const users = await this.users.findByIds(profiles.map((profile) => Number(profile.userId)));
+    const usersById = new Map(users.map((user) => [Number(user.id), user]));
+
+    return Promise.all(
+      profiles.map(async (profile) => {
+        const summary = await this.withV2WorkerSummary(profile, { includeUnapprovedMedia: true });
+        const completion = await this.getProfileCompletion(profile);
+        const user = usersById.get(Number(profile.userId));
+        return {
+          ...summary,
+          userStatus: user?.status || 'missing',
+          hasPhone: this.profileCompletion.isValidPhone(profile.phonePrivate),
+          completionPercent: completion.percentage,
+          missingItems: completion.missingItems,
+          onboardingStatus: completion.onboardingStatus,
+        };
+      }),
+    ).then((workers) => {
+      const filtered = workers.filter((worker) => {
+        if (filters.incomplete && worker.completionPercent >= 100) return false;
+        if (filters.missingPhone && worker.hasPhone) return false;
+        if (
+          filters.onboardingIncomplete &&
+          worker.onboardingStatus === 'completed'
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return filtered.sort((a, b) => {
+        if (filters.sort === 'completion_asc') {
+          return a.completionPercent - b.completionPercent;
+        }
+        return (
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime()
+        );
+      });
+    });
+  }
+
+  async getAdminDetail(workerUserId: number) {
+    const userId = Number(workerUserId);
+    if (!userId) throw new BadRequestException('Invalid worker user id');
+    const [profile, user] = await Promise.all([
+      this.workerProfilesRepo.findOne({ where: { userId } }),
+      this.users.findOne(userId),
+    ]);
+    if (!profile || !user) throw new NotFoundException('Worker not found');
+
+    const [skills, completion] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.getProfileCompletion(profile),
+    ]);
+
+    return {
+      workerUserId: userId,
+      publicName: profile.publicName,
+      city: profile.city,
+      phonePrivate: profile.phonePrivate || null,
+      email: user.email || null,
+      defaultAddress: profile.defaultAddress || null,
+      preferredContactMethod: profile.preferredContactMethod || null,
+      primaryCategoryKey:
+        profile.primaryCategoryKey || skills[0]?.categoryKey || null,
+      skills: skills.map((skill) => ({
+        categoryKey: skill.categoryKey,
+        activityKey: skill.activityKey,
+      })),
+      workType: profile.workType || null,
+      experienceRange: profile.experienceRange || null,
+      availabilityStatus: profile.availabilityStatus || null,
+      acquisitionSourceSelfReported:
+        profile.acquisitionSourceSelfReported || null,
+      acquisitionSourceDetail: profile.acquisitionSourceDetail || null,
+      projectPhotosReadiness: profile.projectPhotosReadiness || null,
+      serviceDescriptionReadiness:
+        profile.serviceDescriptionReadiness || null,
+      onboardingStep: Number(profile.onboardingStep || 1),
+      onboardingCompletedAt: profile.onboardingCompletedAt || null,
+      onboardingStatus: completion.onboardingStatus,
+      completionPercent: completion.percentage,
+      missingItems: completion.missingItems,
+      pendingModerationItems: completion.pendingModerationItems,
+      accountStatus: user.status,
+      approvalStatus: profile.approvalStatus,
+      visibilityStatus: profile.visibilityStatus,
+      createdAt: user.createdAt || profile.createdAt,
+    };
+  }
+
+  async getOnboardingState(workerUserId: number) {
+    const userId = Number(workerUserId);
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    const [skills, completion] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.getProfileCompletion(profile),
+    ]);
+
+    return {
+      currentStep: Number(profile.onboardingStep || 1),
+      completedAt: profile.onboardingCompletedAt || null,
+      contact: {
+        phone: profile.phonePrivate || '',
+        preferredContactMethod: profile.preferredContactMethod || '',
+        contactAccuracyConfirmed: Boolean(profile.contactAccuracyConfirmed),
+      },
+      activity: {
+        primaryCategoryKey:
+          profile.primaryCategoryKey || skills[0]?.categoryKey || '',
+        skills: skills.map((skill) => skill.categoryKey),
+        workType: profile.workType || '',
+        experienceRange: profile.experienceRange || '',
+        city: profile.city || '',
+        availabilityStatus: profile.availabilityStatus || '',
+      },
+      acquisition: {
+        source: profile.acquisitionSourceSelfReported || '',
+        detail: profile.acquisitionSourceDetail || '',
+      },
+      readiness: {
+        projectPhotosReadiness: profile.projectPhotosReadiness || '',
+        serviceDescriptionReadiness:
+          profile.serviceDescriptionReadiness || '',
+      },
+      completion,
+    };
+  }
+
+  async updateOnboardingStep(
+    workerUserId: number,
+    stepKey: string,
+    data: UpdateWorkerOnboardingStepDto,
+  ) {
+    const userId = Number(workerUserId);
+    const profile = await this.workerProfilesRepo.findOne({ where: { userId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+
+    const update: Partial<WorkerProfileEntity> = {};
+    if (stepKey === 'contact') {
+      const phone = this.profileCompletion.normalizePhone(data.phone);
+      if (!phone) throw new BadRequestException('Въведете валиден телефон');
+      if (!data.preferredContactMethod) {
+        throw new BadRequestException('Изберете предпочитан начин за контакт');
+      }
+      if (!data.contactAccuracyConfirmed) {
+        throw new BadRequestException('Потвърдете, че данните са точни');
+      }
+      Object.assign(update, {
+        phonePrivate: phone,
+        preferredContactMethod: data.preferredContactMethod,
+        contactAccuracyConfirmed: true,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 2),
+      });
+    } else if (stepKey === 'activity') {
+      const skills = Array.from(
+        new Set(
+          [data.primaryCategoryKey, ...(data.skills || [])]
+            .map((value) => String(value || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      if (
+        !data.primaryCategoryKey ||
+        !skills.length ||
+        !data.workType ||
+        !data.experienceRange ||
+        !String(data.city || '').trim() ||
+        !data.availabilityStatus
+      ) {
+        throw new BadRequestException('Попълнете всички полета за дейността');
+      }
+      Object.assign(update, {
+        primaryCategoryKey: data.primaryCategoryKey,
+        workType: data.workType,
+        experienceRange: data.experienceRange,
+        city: String(data.city).trim(),
+        availabilityStatus: data.availabilityStatus,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 3),
+      });
+      await this.replaceWorkerSkills(userId, skills);
+    } else if (stepKey === 'acquisition') {
+      const source = String(data.acquisitionSourceSelfReported || '');
+      const needsDetail = ['worker_referral', 'partner', 'other'].includes(source);
+      if (!source || (needsDetail && !String(data.acquisitionSourceDetail || '').trim())) {
+        throw new BadRequestException('Уточнете как научихте за Bricky');
+      }
+      Object.assign(update, {
+        acquisitionSourceSelfReported: source,
+        acquisitionSourceDetail: String(data.acquisitionSourceDetail || '').trim() || null,
+        onboardingStep: Math.max(Number(profile.onboardingStep || 1), 4),
+      });
+    } else if (stepKey === 'readiness') {
+      if (!data.projectPhotosReadiness || !data.serviceDescriptionReadiness) {
+        throw new BadRequestException('Попълнете готовността на профила');
+      }
+      Object.assign(update, {
+        projectPhotosReadiness: data.projectPhotosReadiness,
+        serviceDescriptionReadiness: data.serviceDescriptionReadiness,
+        onboardingStep: 4,
+        onboardingCompletedAt: profile.onboardingCompletedAt || new Date(),
+      });
+    } else {
+      throw new BadRequestException('Unknown onboarding step');
+    }
+
+    await this.workerProfilesRepo.update({ userId }, update);
+    return this.getOnboardingState(userId);
+  }
+
+  private async getProfileCompletion(profile: WorkerProfileEntity) {
+    const userId = Number(profile.userId);
+    const [skills, mediaRows] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }),
+      this.media.findByWorker(userId).catch(() => [] as any[]),
+    ]);
+    return this.profileCompletion.calculate(profile, skills, mediaRows);
   }
 
   // =========================
   // ✅ GALLERY
   // =========================
-  async getGalleryByUserId(userId: number, includeUnapproved = false) {
+  async getGalleryByUserId(userId: number, options: WorkerMediaVisibilityOptions = {}) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
+    const includeUnapprovedMedia = Boolean(options.includeUnapprovedMedia);
 
-    const rows = await this.galleryRepo.find({
-      where: includeUnapproved ? { userId: uid } : { userId: uid, moderationStatus: 'approved' },
-      order: { created_at: 'DESC' },
-    });
-    return rows.map((row) => ({
+    const [mediaRows, legacyRows] = await Promise.all([
+      this.media.findByWorker(uid).catch(() => [] as any[]),
+      this.optionalLegacyRead(
+        'worker_gallery_images',
+        () =>
+          this.galleryRepo.find({
+            where: { userId: uid },
+            order: { created_at: 'DESC' },
+          }),
+        [] as WorkerGalleryImage[],
+      ),
+    ]);
+
+    const galleryMedia = mediaRows
+      .filter((row) => row.kind === 'worker_gallery')
+      .filter((row) => includeUnapprovedMedia || row.moderationStatus === 'approved')
+      .map((row) => ({
+        id: row.id,
+        userId: uid,
+        url: this.normalizeUploadUrl(row.publicUrl),
+        storageKey: row.storageKey,
+        moderationStatus: row.moderationStatus,
+        displayOrder: row.displayOrder,
+        created_at: row.createdAt,
+      }));
+
+    const legacy = legacyRows.map((row) => ({
       ...row,
       url: this.normalizeUploadUrl(row.url),
-      thumbnailUrl: this.normalizeUploadUrl(row.thumbnailUrl),
+      moderationStatus: 'approved',
     }));
+
+    return [...galleryMedia, ...legacy];
   }
 
-  async addGalleryImages(userId: number, images: Array<string | { url: string; thumbnailUrl?: string; storageKey?: string; thumbnailStorageKey?: string }>) {
+  async addGalleryImages(userId: number, urls: string[]) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
-    const clean = (Array.isArray(images) ? images : []).map((image) => typeof image === 'string' ? { url: image } : image)
-      .filter((image) => Boolean(String(image?.url || '').trim()));
+    const clean = (Array.isArray(urls) ? urls : [])
+      .map((u) => String(u || '').trim())
+      .filter(Boolean);
 
     if (clean.length === 0) throw new BadRequestException('No images');
 
-    const rows = clean.map((image) => this.galleryRepo.create({
-      userId: uid, url: image.url, thumbnailUrl: image.thumbnailUrl || null,
-      storageKey: image.storageKey || null, thumbnailStorageKey: image.thumbnailStorageKey || null,
-      moderationStatus: 'pending_review', moderationReason: null,
-      moderatedByUserId: null, moderatedAt: null,
-    }));
-    await this.galleryRepo.save(rows);
+    await Promise.all(
+      clean.map((url) =>
+        this.media.createAsset({
+          ownerUserId: uid,
+          workerUserId: uid,
+          kind: 'worker_gallery',
+          storageKey: url,
+          publicUrl: url,
+          moderationStatus: 'pending',
+        }),
+      ),
+    );
 
-    return this.getGalleryByUserId(uid, true);
+    return this.getGalleryByUserId(uid, { includeUnapprovedMedia: true });
+  }
+
+  async setAvatar(userId: number, avatarUrl: string) {
+    const uid = Number(userId);
+    if (!uid) throw new BadRequestException('Invalid userId');
+
+    await this.media.createAsset({
+      ownerUserId: uid,
+      workerUserId: uid,
+      kind: 'worker_avatar',
+      storageKey: avatarUrl,
+      publicUrl: avatarUrl,
+      moderationStatus: 'pending',
+    });
+
+    return this.findByUserId(uid, { includeUnapprovedMedia: true });
   }
 
   async deleteGalleryImage(userId: number, imageId: number) {
@@ -262,106 +691,300 @@ export class WorkersService {
     if (!uid) throw new BadRequestException('Invalid userId');
     if (!id) throw new BadRequestException('Invalid imageId');
 
-    const img = await this.galleryRepo.findOne({ where: { id } });
+    const gallery = await this.getGalleryByUserId(uid, { includeUnapprovedMedia: true });
+    const img = gallery.find((row: any) => Number(row.id) === id);
     if (!img) throw new NotFoundException('Image not found');
-    if (Number(img.userId) !== uid) throw new BadRequestException('Not your image');
 
-    await this.galleryRepo.delete({ id });
-    await deleteStoredMedia(img.storageKey, img.thumbnailStorageKey);
+    await this.media.deleteAsset(id).catch(() => this.galleryRepo.delete({ id }));
     return { ok: true };
   }
 
-  storageKeyFromUploadUrl(url?: string | null) {
-    const value = String(url || '');
-    const marker = '/uploads/';
-    const index = value.indexOf(marker);
-    return index >= 0 ? value.slice(index + marker.length) : null;
+  async reorderPortfolioMedia(userId: number, requestId: number | null, mediaIds: number[]) {
+    const uid = Number(userId);
+    const orderedIds = (Array.isArray(mediaIds) ? mediaIds : []).map(Number);
+    if (!uid || orderedIds.length === 0 || orderedIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      throw new BadRequestException('Invalid media order');
+    }
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      throw new BadRequestException('Duplicate media ids');
+    }
+
+    let allowedRows: any[];
+    if (requestId) {
+      const request = await this.repairRequestsRepo.findOne({ where: { id: Number(requestId) } });
+      if (!request) throw new NotFoundException('Request not found');
+      if (Number(request.assignedWorkerUserId) !== uid || !request.archivedAt) {
+        throw new ForbiddenException('Completed worker project required');
+      }
+      allowedRows = (await this.media.findByRequest(Number(requestId)))
+        .filter((row) => ['request_before', 'request_after'].includes(row.kind))
+        .filter((row) => row.moderationStatus === 'approved');
+    } else {
+      allowedRows = (await this.media.findByWorker(uid))
+        .filter((row) => row.kind === 'worker_gallery');
+    }
+
+    const allowedIds = allowedRows.map((row) => Number(row.id));
+    if (
+      orderedIds.length !== allowedIds.length ||
+      orderedIds.some((id) => !allowedIds.includes(id))
+    ) {
+      throw new ForbiddenException('Media order does not match this portfolio album');
+    }
+
+    await this.media.setDisplayOrder(orderedIds);
+    return { ok: true, mediaIds: orderedIds };
   }
 
-  async getHistoryByUserId(userId: number, includeUnapproved = false) {
+  async setApprovalStatus(
+    workerUserId: number,
+    approvalStatus: string,
+    visibilityStatus?: string,
+    manager?: EntityManager,
+  ) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    const nextVisibility = visibilityStatus || (
+      approvalStatus === 'suspended'
+        ? 'hidden'
+        : approvalStatus === 'approved'
+          ? profile.visibilityStatus === 'hidden' ? 'private' : profile.visibilityStatus
+          : 'private'
+    );
+    await profilesRepo.update(
+      { userId: workerUserId },
+      {
+        approvalStatus,
+        visibilityStatus: nextVisibility,
+      },
+    );
+    if (manager) return profilesRepo.findOne({ where: { userId: workerUserId } });
+    return this.findByUserId(workerUserId);
+  }
+
+  async setWallVisibility(workerUserId: number, listed: boolean, manager?: EntityManager) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) throw new NotFoundException('Worker profile not found');
+    if (listed && profile.approvalStatus !== 'approved') {
+      throw new BadRequestException('Approve the worker before adding them to the public wall');
+    }
+
+    profile.visibilityStatus = listed ? 'public' : 'private';
+    const saved = await profilesRepo.save(profile);
+    return manager ? saved : this.findByUserId(workerUserId, { includeUnapprovedMedia: true });
+  }
+
+  async getHistoryByUserId(userId: number) {
     const uid = Number(userId);
     if (!uid) throw new BadRequestException('Invalid userId');
 
-    const rows = await this.requestRepo.find({
-      where: [{ assignedWorkerId: uid }, { completedByWorkerId: uid }],
+    const rows = await this.repairRequestsRepo.find({
+      where: {
+        assignedWorkerUserId: uid,
+        status: 'completed',
+        archivedAt: Not(IsNull()),
+      },
       relations: ['client'],
-      order: { completedAt: 'DESC', created_at: 'DESC' },
+      order: { completedAt: 'DESC', createdAt: 'DESC' },
     });
 
-    return this.hydrateHistoryImages(
-      rows.filter((request) => this.isCompletedRequest(request, uid) && (includeUnapproved || request.moderationStatus === 'approved')),
-      includeUnapproved,
+    return Promise.all(
+      rows.map(async (request) => {
+        const mediaRows = await this.media.findByRequest(request.id).catch(() => [] as any[]);
+        const approved = mediaRows.filter((row) => row.moderationStatus === 'approved');
+        const toPhotos = (kind: string) =>
+          approved
+            .filter((row) => row.kind === kind)
+            .map((row) => ({
+              id: row.id,
+              name: `media-${row.id}`,
+              url: this.normalizeUploadUrl(row.publicUrl),
+              storageKey: row.storageKey,
+              moderationStatus: row.moderationStatus,
+              displayOrder: row.displayOrder,
+              created_at: row.createdAt,
+            }));
+
+        const portfolioPhotos = approved
+          .filter((row) => ['request_before', 'request_after'].includes(row.kind))
+          .map((row) => ({
+            id: row.id,
+            name: `media-${row.id}`,
+            url: this.normalizeUploadUrl(row.publicUrl),
+            storageKey: row.storageKey,
+            moderationStatus: row.moderationStatus,
+            displayOrder: row.displayOrder,
+            created_at: row.createdAt,
+          }));
+
+        return {
+          id: request.id,
+          requestId: request.id,
+          category: REPAIR_CATEGORY_BY_KEY[request.categoryKey as RepairCategoryKey] || request.categoryKey,
+          categoryKey: request.categoryKey,
+          address: request.addressVisibility === 'rough_area' ? request.addressText : null,
+          description: request.description,
+          startedAt: request.createdAt,
+          completedAt: request.completedAt,
+          durationDays: this.completionDurationDays(request.createdAt, request.completedAt),
+          beforePhotos: toPhotos('request_before'),
+          afterPhotos: toPhotos('request_after'),
+          portfolioPhotos,
+          created_at: request.createdAt,
+        };
+      }),
     );
   }
 
-  private async hydrateHistoryImages(requests: RequestEntity[], includeUnapproved = false) {
-    const requestIds = requests.map((request) => Number(request.id)).filter(Boolean);
-    if (requestIds.length === 0) return requests;
-
-    const imageRows = await this.requestImageRepo.find({
-      where: includeUnapproved
-        ? { requestId: In(requestIds) }
-        : { requestId: In(requestIds), moderationStatus: 'approved' },
-      order: { requestId: 'ASC', kind: 'ASC', sortOrder: 'ASC', created_at: 'ASC' },
-    });
-
-    const imagesByRequest = new Map<number, RequestImageEntity[]>();
-    for (const image of imageRows) {
-      const images = imagesByRequest.get(image.requestId) || [];
-      images.push(image);
-      imagesByRequest.set(image.requestId, images);
-    }
-
-    return requests.map((request) => {
-      const rows = imagesByRequest.get(Number(request.id)) || [];
-      if (rows.length === 0) return request;
-
-      const toPhotos = (kind: RequestImageEntity['kind']) =>
-        rows
-          .filter((row) => row.kind === kind)
-          .map((row) => ({
-            id: row.id,
-            name: row.name || 'Photo',
-            url: this.normalizeUploadUrl(row.url),
-            thumbnailUrl: this.normalizeUploadUrl(row.thumbnailUrl),
-            storageKey: row.storageKey,
-            mimeType: row.mimeType,
-            sizeBytes: row.sizeBytes,
-            kind: row.kind,
-            created_at: row.created_at,
-          }));
-
-      const generalPhotos = toPhotos('general');
-      const beforePhotos = toPhotos('before');
-      const afterPhotos = toPhotos('after');
-
-      request.beforePhotos = beforePhotos.length ? beforePhotos : request.beforePhotos;
-      request.afterPhotos = afterPhotos.length ? afterPhotos : request.afterPhotos;
-      request.photos = [...generalPhotos, ...beforePhotos];
-      return request;
-    });
-  }
-
-  private async withGallerySummary(worker: Worker, includeUnapproved = false) {
+  private async withGallerySummary(worker: Worker, options: WorkerMediaVisibilityOptions = {}) {
     const userId = Number(worker?.userId);
     if (!userId) return worker;
 
-    const [gallery, completedJobs] = await Promise.all([
-      this.getGalleryByUserId(userId, includeUnapproved).catch(() => []),
-      this.getHistoryByUserId(userId, includeUnapproved).catch(() => []),
+    const [gallery, completedJobs, mediaRows] = await Promise.all([
+      this.getGalleryByUserId(userId, options).catch(() => []),
+      this.getHistoryByUserId(userId).catch(() => []),
+      this.media.findByWorker(userId).catch(() => [] as any[]),
     ]);
+    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
+    const publicWorker = this.withoutPrivateWorkerFields(worker);
 
     return {
-      ...worker,
-      avatarUrl: includeUnapproved || worker.avatarModerationStatus === 'approved'
-        ? this.normalizeUploadUrl(worker.avatarUrl)
-        : '',
-      avatarThumbnailUrl: includeUnapproved || worker.avatarModerationStatus === 'approved'
-        ? this.normalizeUploadUrl(worker.avatarThumbnailUrl)
-        : '',
+      ...publicWorker,
+      avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl || worker.avatarUrl),
+      profileBannerKey: DEFAULT_WORKER_BANNER_KEY,
       gallery,
       completedJobs,
     };
+  }
+
+  private async withV2WorkerSummary(profile: WorkerProfileEntity, options: WorkerMediaVisibilityOptions = {}) {
+    const userId = Number(profile.userId);
+    const [skills, gallery, completedJobs, mediaRows, activeBoost] = await Promise.all([
+      this.workerSkillsRepo.find({ where: { workerUserId: userId } }).catch(() => []),
+      this.getGalleryByUserId(userId, options).catch(() => []),
+      this.getHistoryByUserId(userId).catch(() => []),
+      this.media.findByWorker(userId).catch(() => [] as any[]),
+      this.referralRewardsRepo
+        .findOne({
+          where: {
+            userId,
+            rewardType: 'top_placement_30_days',
+            status: 'active',
+            endsAt: MoreThan(new Date()),
+          },
+          order: { endsAt: 'DESC' },
+        })
+        .catch(() => null),
+    ]);
+
+    const avatar = mediaRows.find((row) => row.kind === 'worker_avatar' && row.moderationStatus === 'approved');
+    const boostApplies =
+      !!activeBoost && profile.approvalStatus === 'approved' && profile.visibilityStatus !== 'hidden';
+
+    return {
+      id: userId,
+      userId,
+      workerUserId: userId,
+      fullName: profile.publicName,
+      publicName: profile.publicName,
+      city: profile.city,
+      skills: skills.map((skill) => REPAIR_CATEGORY_BY_KEY[skill.categoryKey as RepairCategoryKey] || skill.activityKey || skill.categoryKey).filter(Boolean),
+      skillKeys: skills.map((skill) => skill.categoryKey).filter(Boolean),
+      description: profile.bio,
+      bio: profile.bio,
+      experience: profile.experience,
+      equipment: profile.equipment,
+      profileBannerKey: resolveWorkerBannerKey(profile.profileBannerKey),
+      avatarUrl: this.normalizeUploadUrl(avatar?.publicUrl),
+      isApproved: profile.approvalStatus === 'approved',
+      approvalStatus: profile.approvalStatus,
+      visibilityStatus: profile.visibilityStatus,
+      isBoosted: boostApplies,
+      boostSource: boostApplies ? 'referral' : null,
+      boostEndsAt: boostApplies ? activeBoost.endsAt : null,
+      gallery,
+      completedJobs,
+      createdAt: profile.createdAt,
+    };
+  }
+
+  private withoutPrivateWorkerFields(
+    worker: Worker,
+  ): Record<string, unknown> & Pick<Worker, 'id' | 'userId'> {
+    const publicWorker: Record<string, unknown> &
+      Pick<Worker, 'id' | 'userId'> = { ...worker };
+    for (const key of [
+      'email',
+      'phone',
+      'phonePrivate',
+      'password',
+      'passwordHash',
+      'password_hash',
+      'accessToken',
+      'refreshToken',
+    ]) {
+      delete publicWorker[key];
+    }
+    return publicWorker;
+  }
+
+  private async replaceWorkerSkills(workerUserId: number, skills: string[], manager?: EntityManager) {
+    const skillsRepo = manager?.getRepository(WorkerSkillEntity) ?? this.workerSkillsRepo;
+    await skillsRepo.delete({ workerUserId });
+    const clean = (Array.isArray(skills) ? skills : [])
+      .map((skill) => String(skill || '').trim())
+      .filter(Boolean);
+
+    if (!clean.length) {
+      await this.resetIneligibleWorkerBanner(workerUserId, manager);
+      return [];
+    }
+
+    const rows = clean.map((skill) => {
+        const categoryKey = this.skillToKey(skill);
+        const categoryLabel = REPAIR_CATEGORY_BY_KEY[categoryKey as RepairCategoryKey];
+        const normalizedInput = String(skill || '').trim().toLowerCase();
+        const isCategoryOnly =
+          REPAIR_CATEGORY_KEYS.includes(skill as RepairCategoryKey) ||
+          normalizedInput === String(categoryLabel || '').toLowerCase() ||
+          SKILL_CATEGORY_ALIASES[normalizedInput] === categoryKey;
+
+        return skillsRepo.create({
+          workerUserId,
+          categoryKey,
+          activityKey: isCategoryOnly ? null : skill,
+        });
+      });
+    const uniqueRows = Array.from(new Map(rows.map((row) => [`${row.categoryKey}:${row.activityKey || ''}`, row])).values());
+
+    const saved = await skillsRepo.save(uniqueRows);
+    await this.resetIneligibleWorkerBanner(workerUserId, manager);
+    return saved;
+  }
+
+  private async resetIneligibleWorkerBanner(workerUserId: number, manager?: EntityManager) {
+    const profilesRepo = manager?.getRepository(WorkerProfileEntity) ?? this.workerProfilesRepo;
+    const profile = await profilesRepo.findOne({ where: { userId: workerUserId } });
+    if (!profile) return;
+
+    const currentKey = resolveWorkerBannerKey(profile.profileBannerKey);
+    if (isWorkerBannerAllowed(currentKey)) return;
+
+    await profilesRepo.update({ userId: workerUserId }, { profileBannerKey: DEFAULT_WORKER_BANNER_KEY });
+  }
+
+  private skillToKey(skill: string): RepairCategoryKey {
+    const raw = String(skill || '').trim();
+    const normalized = raw.toLowerCase();
+    if (REPAIR_CATEGORY_KEYS.includes(raw as RepairCategoryKey)) return raw as RepairCategoryKey;
+    if (SKILL_CATEGORY_ALIASES[normalized]) return SKILL_CATEGORY_ALIASES[normalized];
+
+    const byLabel = Object.entries(REPAIR_CATEGORY_BY_KEY).find(([, label]) => label.toLowerCase() === normalized);
+    if (byLabel) return byLabel[0] as RepairCategoryKey;
+
+    return 'small_repairs';
   }
 
   private normalizeUploadUrl(value: any): string {
@@ -376,14 +999,43 @@ export class WorkersService {
     return raw;
   }
 
-  private isCompletedRequest(request: RequestEntity, userId: number): boolean {
-    const status = String(request?.statusKey || request?.status || '').toLowerCase();
+  private async optionalLegacyRead<T>(
+    tableName: string,
+    operation: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!this.isMissingLegacyTableError(error)) throw error;
+
+      if (!this.missingLegacyTableWarnings.has(tableName)) {
+        this.missingLegacyTableWarnings.add(tableName);
+        this.logger.warn(`Legacy table "${tableName}" is unavailable; continuing with the v2 data model`);
+      }
+      return fallback;
+    }
+  }
+
+  private isMissingLegacyTableError(error: unknown): boolean {
+    const candidate = error as {
+      code?: string;
+      errno?: number;
+      driverError?: { code?: string; errno?: number };
+    };
     return (
-      Number(request?.completedByWorkerId) === Number(userId) ||
-      !!request?.completedAt ||
-      status.includes('зав') ||
-      status.includes('СЉСЂ') ||
-      status.includes('completed')
+      candidate?.code === 'ER_NO_SUCH_TABLE' ||
+      candidate?.errno === 1146 ||
+      candidate?.driverError?.code === 'ER_NO_SUCH_TABLE' ||
+      candidate?.driverError?.errno === 1146
     );
   }
+
+  private completionDurationDays(startedAt: Date, completedAt: Date | null): number {
+    const start = new Date(startedAt).getTime();
+    const end = new Date(completedAt || startedAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 1;
+    return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
+  }
+
 }

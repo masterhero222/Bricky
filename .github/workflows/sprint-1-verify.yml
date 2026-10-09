@@ -44,9 +44,34 @@ jobs:
       - name: Run Bricky verification gate
         run: node scripts/verify-sprint-1.mjs
 
+      - name: Package and verify immutable deployment bundle
+        working-directory: backend
+        env:
+          SPRINT3_CONFIRM_DEPLOYMENT_PACKAGE: PACKAGE_BRICKY_DEPLOYMENT
+          SPRINT3_DEPLOYMENT_BUNDLE_ROOT: ${{ runner.temp }}/sprint3-deployment-bundles
+        run: |
+          npm run release:package-deployment:sprint3
+          export SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST
+          SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST="$(find "$SPRINT3_DEPLOYMENT_BUNDLE_ROOT" -name deployment-manifest.json -type f -print -quit)"
+          test -n "$SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST"
+          npm run release:verify-deployment-bundle:sprint3
+
+          backend_archive="$(node -e "
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const manifestPath = process.env.SPRINT3_DEPLOYMENT_BUNDLE_MANIFEST;
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            process.stdout.write(path.resolve(path.dirname(manifestPath), manifest.artifacts.backend.file));
+          ")"
+          printf 'tamper' >> "$backend_archive"
+          if npm run release:verify-deployment-bundle:sprint3; then
+            echo "Tampered deployment bundle was accepted."
+            exit 1
+          fi
+
   migration-rehearsal:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     services:
       mysql:
@@ -71,7 +96,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install MySQL client
         run: |
@@ -91,17 +118,21 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Create isolated lifecycle database
+      - name: Install frontend browser dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Create isolated Sprint 3 lifecycle database
         env:
           MYSQL_PWD: root
         run: |
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint1_e2e; CREATE DATABASE bricky_sprint1_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260704_000_legacy_baseline.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_001_sprint2_foundation_up.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260705_002_moderation_gate_up.sql
-          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint1_e2e < scripts/migrations/20260706_003_controlled_request_lifecycle_up.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -e "DROP DATABASE IF EXISTS bricky_sprint3_e2e; CREATE DATABASE bricky_sprint3_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint3_e2e < backend/migrations/20260718_sprint3_v2_data_core.sql
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root bricky_sprint3_e2e < backend/migrations/20260719_sprint3_v2_schema_alignment.sql
 
-      - name: Run MySQL request lifecycle E2E
+      - name: Run Sprint 3 MySQL lifecycle smoke
         working-directory: backend
         env:
           NODE_ENV: test
@@ -109,10 +140,15 @@ jobs:
           DB_PORT: 3306
           DB_USER: root
           DB_PASS: root
-          DB_NAME: bricky_sprint1_e2e
+          DB_NAME: bricky_sprint3_e2e
           TYPEORM_SYNCHRONIZE: "false"
-          JWT_SECRET: sprint2-ci-only-secret
+          JWT_SECRET: sprint3-ci-only-secret
           UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          SPRINT3_API_URL: http://127.0.0.1:3000
+          SPRINT3_WEB_URL: http://127.0.0.1:4173
+          SPRINT3_SMOKE_SESSION_FILE: ${{ runner.temp }}/sprint3-browser-session.json
+          SPRINT3_BROWSER_SMOKE_REPORT: ${{ runner.temp }}/sprint3-browser-report.json
+          CORS_ORIGINS: http://127.0.0.1:4173
           MAIL_HOST: 127.0.0.1
           MAIL_PORT: 2525
           MAIL_USER: test
@@ -120,4 +156,107 @@ jobs:
           MAIL_FROM: test@example.test
         run: |
           mkdir -p "$UPLOADS_DIR"
-          npm run test:e2e -- --runInBand
+          npm run build
+          node dist/main.js > "$RUNNER_TEMP/sprint3-api.log" 2>&1 &
+          api_pid=$!
+          web_pid=""
+
+          cleanup() {
+            if [ -n "$web_pid" ]; then
+              kill "$web_pid" 2>/dev/null || true
+            fi
+            kill "$api_pid" 2>/dev/null || true
+            cat "$RUNNER_TEMP/sprint3-api.log"
+            if [ -f "$RUNNER_TEMP/sprint3-web.log" ]; then
+              cat "$RUNNER_TEMP/sprint3-web.log"
+            fi
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null; then
+              break
+            fi
+
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              echo "Sprint 3 API exited before becoming ready."
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          curl --fail --silent http://127.0.0.1:3000/health/ready >/dev/null
+          npm run smoke:api:sprint3
+
+          cd ../frontend
+          VITE_API_URL="$SPRINT3_API_URL" VITE_USE_DEV_MOCK=false npm run build
+          npm run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sprint3-web.log" 2>&1 &
+          web_pid=$!
+
+          for attempt in {1..30}; do
+            if curl --fail --silent "$SPRINT3_WEB_URL" >/dev/null; then
+              break
+            fi
+
+            if ! kill -0 "$web_pid" 2>/dev/null; then
+              echo "Sprint 3 frontend exited before becoming ready."
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          curl --fail --silent "$SPRINT3_WEB_URL" >/dev/null
+          npm run smoke:browser:sprint3
+
+      - name: Archive Sprint 3 browser smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-browser-smoke
+          path: ${{ runner.temp }}/sprint3-browser-report.json
+          if-no-files-found: error
+
+      - name: Rehearse Sprint 3 backup, migration and rollback restore
+        working-directory: backend
+        env:
+          NODE_ENV: production
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: root
+          DB_NAME: bricky_sprint3_e2e
+          TYPEORM_SYNCHRONIZE: "false"
+          JWT_SECRET: sprint3-ci-release-secret-with-more-than-32-characters
+          SPRINT3_UPLOADS_DIR: ${{ runner.temp }}/bricky-uploads
+          SPRINT3_BACKUP_ROOT: ${{ runner.temp }}/sprint3-backups
+          SPRINT3_REHEARSAL_DATABASE: bricky_sprint3_ci_rehearsal
+          SPRINT3_REHEARSAL_ROOT: ${{ runner.temp }}/bricky-sprint3-rehearsal-ci
+          SPRINT3_CONFIRM_BACKUP: BACKUP_BRICKY_PRODUCTION
+          SPRINT3_CONFIRM_REHEARSAL_RESTORE: RESTORE_BRICKY_REHEARSAL
+        run: |
+          npm run release:backup:sprint3
+          export SPRINT3_BACKUP_MANIFEST
+          SPRINT3_BACKUP_MANIFEST="$(find "$SPRINT3_BACKUP_ROOT" -name manifest.json -type f -print -quit)"
+          test -n "$SPRINT3_BACKUP_MANIFEST"
+
+          npm run release:verify-backup:sprint3
+          npm run release:restore-rehearsal:sprint3
+
+          node -e "
+            const fs = require('node:fs');
+            const report = JSON.parse(
+              fs.readFileSync(
+                process.env.SPRINT3_REHEARSAL_ROOT + '/restore-report.json',
+                'utf8',
+              ),
+            );
+            if (
+              report.rollbackRestoreVerified !== true ||
+              report.preMigrationFingerprint !== report.rollbackFingerprint ||
+              report.forwardMigrationCycles !== 2 ||
+              report.migrationPasses !== 4
+            ) {
+              throw new Error('Sprint 3 rollback restore evidence is incomplete');
+            }
+          "

@@ -1,0 +1,14 @@
+[Unit]
+Description=Back up Bricky production database and uploads
+After=mysql.service
+
+[Service]
+Type=oneshot
+Environment=BRICKY_BACKUP_ROOT=/var/backups/bricky
+Environment=BRICKY_UPLOADS_DIR=/var/www/Bricky-production-uploads
+ExecStart=/usr/local/sbin/bricky-backup-from-pm2
+User=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true

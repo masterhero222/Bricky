@@ -49,31 +49,52 @@ assert(setDevIdentity("client", 101), "Active client should be selectable");
 const created = await mockRequest("post", "/requests", {
   category: "ВиК ремонти",
   description: "Mock moderation contract request",
+  photos: [{ url: "/uploads/mock-pending-request.jpg" }],
   address: "София, тестов адрес 1",
 });
-assert(created.data.moderationStatus === "pending_review", "New request must enter pending review");
+assert(created.data.statusKey === "pending_admin", "New request must enter pending review");
 await expectStatus(mockRequest("get", "/requests/map"), 403, "Client gained access to the worker request map");
 
 assert(setDevIdentity("worker", 201), "Active worker should be selectable");
 let workerFeed = await mockRequest("get", "/requests/worker");
 assert(!workerFeed.data.some((request) => request.id === created.data.id), "Pending request leaked into worker feed");
 
-assert(setDevIdentity("admin", 999), "Admin should be selectable");
-await mockRequest("post", `/admin/requests/${created.data.id}/approved`, {});
+assert(setDevIdentity("super_admin", 1), "Admin should be selectable");
+await expectStatus(
+  mockRequest("post", `/admin/requests/${created.data.id}/status`, { status: "published" }),
+  400,
+  "Request was published with an unresolved photo",
+);
+const pendingRequestMedia = (await mockRequest("get", "/admin/media")).data.find(
+  (media) => Number(media.requestId) === Number(created.data.id) && media.kind === "request_before",
+);
+assert(pendingRequestMedia, "Pending request photo is missing from admin media");
+await mockRequest("post", `/admin/media/${pendingRequestMedia.id}/moderation`, {
+  moderationStatus: "rejected",
+});
+await mockRequest("post", `/admin/requests/${created.data.id}/status`, { status: "published" });
 
 assert(setDevIdentity("worker", 201), "Worker should remain active after request approval");
 workerFeed = await mockRequest("get", "/requests/worker");
-assert(workerFeed.data.some((request) => request.id === created.data.id), "Approved request is missing from worker feed");
+const publishedRequest = workerFeed.data.find((request) => request.id === created.data.id);
+assert(publishedRequest, "Approved request is missing from worker feed");
+assert(publishedRequest.beforePhotos.length === 0, "Rejected request photo leaked into worker feed");
 
-assert(setDevIdentity("admin", 999), "Admin should be selectable for rejection");
-await mockRequest("post", `/admin/requests/${created.data.id}/rejected`, { reason: "Contract rejection" });
+assert(setDevIdentity("super_admin", 1), "Admin should be selectable for rejection");
+await mockRequest("post", `/admin/requests/${created.data.id}/status`, {
+  status: "archived",
+  reason: "Contract rejection",
+});
 
 assert(setDevIdentity("worker", 201), "Worker should remain active after request rejection");
 workerFeed = await mockRequest("get", "/requests/worker");
 assert(!workerFeed.data.some((request) => request.id === created.data.id), "Rejected request leaked into worker feed");
 
-assert(setDevIdentity("admin", 999), "Admin should be selectable for suspension");
-await mockRequest("post", "/admin/users/201/suspend", { reason: "Contract suspension" });
+assert(setDevIdentity("super_admin", 1), "Admin should be selectable for suspension");
+await mockRequest("post", "/admin/users/201/status", {
+  status: "suspended",
+  reason: "Contract suspension",
+});
 assert(setDevIdentity("worker", 201) === null, "Suspended worker received a mock session");
 
 const publicWorkersWhileSuspended = await mockRequest("get", "/workers");
@@ -98,37 +119,72 @@ try {
 }
 assert(directProfileEditBlocked, "Suspended worker changed the profile through a direct mock helper");
 
-assert(setDevIdentity("admin", 999), "Admin should be selectable for reactivation");
-await mockRequest("post", "/admin/users/201/activate", { reason: "Contract reactivation" });
+assert(setDevIdentity("super_admin", 1), "Admin should be selectable for reactivation");
+await mockRequest("post", "/admin/users/201/status", {
+  status: "active",
+  reason: "Contract reactivation",
+});
 assert(setDevIdentity("worker", 201), "Reactivated worker did not regain access");
 
+const publicWorkerBeforeUpload = await mockRequest("get", "/workers/201");
 const mediaDb = JSON.parse(localStorage.getItem("bricky.dev.db"));
-const mediaWorker = mediaDb.workers.find((worker) => worker.userId === 201);
-mediaWorker.avatarUrl = "data:image/png;base64,mock-avatar";
-mediaWorker.avatarModerationStatus = "pending_review";
-mediaWorker.completedJobs[0].afterPhotos.push({
-  id: "pending-history-image",
-  url: "data:image/png;base64,pending-history",
-  moderationStatus: "pending_review",
-});
-mediaWorker.gallery.push({
-  id: "mock-gallery-pending",
-  userId: 201,
-  name: "Pending gallery image",
-  url: "data:image/png;base64,mock-gallery",
-  moderationStatus: "pending_review",
-  created_at: new Date().toISOString(),
-});
+const nextMediaId = Math.max(0, ...(mediaDb.media || []).map((item) => Number(item.id) || 0)) + 1;
+mediaDb.media.push(
+  {
+    id: nextMediaId,
+    kind: "worker_avatar",
+    ownerUserId: 201,
+    workerUserId: 201,
+    publicUrl: "data:image/png;base64,pending-avatar",
+    storageKey: "pending-avatar",
+    moderationStatus: "pending",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: nextMediaId + 1,
+    kind: "worker_gallery",
+    ownerUserId: 201,
+    workerUserId: 201,
+    publicUrl: "data:image/png;base64,pending-gallery",
+    storageKey: "pending-gallery",
+    moderationStatus: "pending",
+    createdAt: new Date().toISOString(),
+  },
+);
 localStorage.setItem("bricky.dev.db", JSON.stringify(mediaDb));
 
-assert(setDevIdentity("admin", 999), "Admin should be selectable for media verification");
-const pendingMedia = await mockRequest("get", "/admin/media?status=pending_review&page=1&limit=100");
-assert(pendingMedia.data.some((item) => item.source === "gallery" && item.id === "mock-gallery-pending"), "Pending gallery image is missing from admin media queue");
-assert(pendingMedia.data.some((item) => item.source === "avatar" && item.workerId === mediaWorker.id), "Pending avatar is missing from admin media queue");
+assert(setDevIdentity("super_admin", 1), "Admin should be selectable for media verification");
+const mediaQueue = await mockRequest("get", "/admin/media");
+assert(mediaQueue.data.some((item) => item.id === nextMediaId), "Pending avatar is missing from admin media queue");
+assert(mediaQueue.data.some((item) => item.id === nextMediaId + 1), "Pending gallery image is missing from admin media queue");
 
-const publicWorker = await mockRequest("get", "/workers/201");
-assert(publicWorker.data.avatarUrl === "", "Pending avatar leaked through public worker profile");
-const publicHistory = await mockRequest("get", "/workers/201/history");
-assert(!publicHistory.data.flatMap((job) => job.afterPhotos || []).some((image) => image.id === "pending-history-image"), "Pending job image leaked through public worker history");
+const publicWorkerWhilePending = await mockRequest("get", "/workers/201");
+assert(
+  publicWorkerWhilePending.data.avatarUrl === publicWorkerBeforeUpload.data.avatarUrl,
+  "Pending avatar replaced the approved public avatar",
+);
+const publicGalleryWhilePending = await mockRequest("get", "/workers/201/gallery");
+assert(
+  !publicGalleryWhilePending.data.some((item) => item.id === nextMediaId + 1),
+  "Pending gallery image leaked into the public profile",
+);
+
+await mockRequest("post", `/admin/media/${nextMediaId}/moderation`, {
+  moderationStatus: "approved",
+});
+await mockRequest("post", `/admin/media/${nextMediaId + 1}/moderation`, {
+  moderationStatus: "rejected",
+});
+
+const publicWorkerAfterApproval = await mockRequest("get", "/workers/201");
+assert(
+  publicWorkerAfterApproval.data.avatarUrl === "data:image/png;base64,pending-avatar",
+  "Approved avatar did not replace the previous public avatar",
+);
+const publicGalleryAfterRejection = await mockRequest("get", "/workers/201/gallery");
+assert(
+  !publicGalleryAfterRejection.data.some((item) => item.id === nextMediaId + 1),
+  "Rejected gallery image leaked into the public profile",
+);
 
 console.log("Mock moderation verified: publication, suspension, and reactivation gates pass.");

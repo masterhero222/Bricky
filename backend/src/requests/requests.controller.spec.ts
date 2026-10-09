@@ -1,139 +1,163 @@
 import { BadRequestException } from '@nestjs/common';
 import { RequestsController } from './requests.controller';
+import { storeUploadedImage } from '../common/media-storage';
 
-describe('RequestsController', () => {
-  let controller: RequestsController;
-  let service: any;
+jest.mock('../common/media-storage', () => ({
+  storeUploadedImage: jest.fn(),
+  deleteStoredMedia: jest.fn(),
+}));
 
-  beforeEach(() => {
-    service = {
-      draftRequest: jest.fn(),
+describe('RequestsController v2 routes', () => {
+  function setup() {
+    (storeUploadedImage as jest.Mock).mockImplementation(
+      async (
+        buffer: Buffer,
+        directorySegments: string[],
+        publicDirectory: string,
+        filenamePrefix: string,
+      ) => ({
+        url: `${publicDirectory}/${filenamePrefix}.webp`,
+        thumbnailUrl: null,
+        storageKey: `${directorySegments.join('/')}/${filenamePrefix}.webp`,
+        thumbnailStorageKey: null,
+        mimeType: 'image/webp',
+        sizeBytes: buffer.length,
+      }),
+    );
+    const service = {
       create: jest.fn(),
+      addBeforeMedia: jest.fn(),
+      addAfterMedia: jest.fn(),
+      draftRequest: jest.fn(),
       getByClientUserId: jest.fn(),
+      getHistoryByClientUserId: jest.fn(),
       getMapRequests: jest.fn(),
       getForWorkersFeed: jest.fn(),
       getCompletedForWorker: jest.fn(),
       applyToRequest: jest.fn(),
+      withdrawApplication: jest.fn(),
       assignWorker: jest.fn(),
       unassignWorker: jest.fn(),
+      workerConfirm: jest.fn(),
+      markWorkerOnSite: jest.fn(),
+      markInspected: jest.fn(),
+      startWork: jest.fn(),
+      finishWork: jest.fn(),
+      readyForClientConfirmation: jest.fn(),
+      clientConfirmWork: jest.fn(),
       completeRequest: jest.fn(),
-      addUploadedImages: jest.fn(),
-      addUploadedFiles: jest.fn(),
-      deleteUploadedImage: jest.fn(),
     };
-    controller = new RequestsController(service);
+
+    return {
+      service,
+      controller: new RequestsController(service as any),
+      clientRequest: { user: { id: 101, role: 'client' } },
+      workerRequest: { user: { id: 201, role: 'worker' } },
+    };
+  }
+
+  it('forwards the complete request lifecycle with canonical actor ids', async () => {
+    const { controller, service, clientRequest, workerRequest } = setup();
+    const afterPhotos = [{ url: '/uploads/after.jpg' }];
+
+    await controller.apply(workerRequest, '55');
+    await controller.withdraw(workerRequest, '55');
+    await controller.assign(clientRequest, '55', { workerUserId: 201 });
+    await controller.unassign(clientRequest, '55');
+    await controller.workerConfirm(workerRequest, '55');
+    await controller.onSite(workerRequest, '55');
+    await controller.inspect(workerRequest, '55');
+    await controller.startWork(workerRequest, '55');
+    await controller.finishWork(workerRequest, '55', { afterPhotos });
+    await controller.readyForClient(workerRequest, '55');
+    await controller.clientConfirm(clientRequest, '55');
+
+    expect(service.applyToRequest).toHaveBeenCalledWith(55, 201);
+    expect(service.withdrawApplication).toHaveBeenCalledWith(55, 201);
+    expect(service.assignWorker).toHaveBeenCalledWith(55, 101, 201);
+    expect(service.unassignWorker).toHaveBeenCalledWith(55, 101);
+    expect(service.workerConfirm).toHaveBeenCalledWith(55, 201);
+    expect(service.markWorkerOnSite).toHaveBeenCalledWith(55, 201);
+    expect(service.markInspected).toHaveBeenCalledWith(55, 201);
+    expect(service.startWork).toHaveBeenCalledWith(55, 201);
+    expect(service.finishWork).toHaveBeenCalledWith(55, 201, afterPhotos);
+    expect(service.readyForClientConfirmation).toHaveBeenCalledWith(55, 201);
+    expect(service.clientConfirmWork).toHaveBeenCalledWith(55, 101);
   });
 
-  it('creates a request for a client using the authenticated user id', async () => {
-    service.create.mockResolvedValue({ id: 7 });
+  it('routes active and historical feeds to separate service methods', async () => {
+    const { controller, service, clientRequest, workerRequest } = setup();
 
-    await expect(
-      controller.create({ user: { id: 101, role: 'client' } }, { clientName: 'Client' } as any),
-    ).resolves.toEqual({ id: 7 });
-    expect(service.create).toHaveBeenCalledWith(expect.any(Object), 101);
-  });
+    await controller.myRequests(clientRequest, undefined);
+    await controller.myRequests(clientRequest, 'history');
+    await controller.workerFeed(workerRequest, undefined);
+    await controller.workerFeed(workerRequest, 'history');
 
-  it('rejects request creation by a worker', async () => {
-    await expect(
-      controller.create({ user: { id: 201, role: 'worker' } }, {} as any),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('returns only the current client requests', async () => {
-    service.getByClientUserId.mockResolvedValue([{ id: 1 }]);
-
-    await expect(controller.myRequests({ user: { id: 101, role: 'client' } })).resolves.toEqual([
-      { id: 1 },
-    ]);
     expect(service.getByClientUserId).toHaveBeenCalledWith(101);
+    expect(service.getHistoryByClientUserId).toHaveBeenCalledWith(101);
+    expect(service.getForWorkersFeed).toHaveBeenCalledWith(201);
+    expect(service.getCompletedForWorker).toHaveBeenCalledWith(201);
   });
 
-  it('rejects the client request list for a worker', async () => {
-    await expect(
-      controller.myRequests({ user: { id: 201, role: 'worker' } }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
+  it('routes multipart request media with canonical actor ids', async () => {
+    const { controller, service, clientRequest, workerRequest } = setup();
+    const beforeFiles = [
+      {
+        buffer: Buffer.from('before'),
+        mimetype: 'image/jpeg',
+      },
+    ];
+    const afterFiles = [
+      {
+        buffer: Buffer.from('after'),
+        mimetype: 'image/webp',
+      },
+    ];
 
-  it('passes the authenticated actor to map visibility logic', async () => {
-    const actor = { id: 201, role: 'worker' };
-    service.getMapRequests.mockResolvedValue([{ id: 4 }]);
-
-    await expect(controller.mapRequests({ user: actor })).resolves.toEqual([{ id: 4 }]);
-    expect(service.getMapRequests).toHaveBeenCalledWith(actor);
-  });
-
-  it('rejects map access for clients', async () => {
-    await expect(
-      controller.mapRequests({ user: { id: 101, role: 'client' } }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(service.getMapRequests).not.toHaveBeenCalled();
-  });
-
-  it('allows only workers to load the worker feed', async () => {
-    service.getForWorkersFeed.mockResolvedValue([{ id: 4 }]);
-
-    await expect(controller.workerFeed({ user: { id: 201, role: 'worker' } })).resolves.toEqual([
-      { id: 4 },
-    ]);
-    await expect(
-      controller.workerFeed({ user: { id: 101, role: 'client' } }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('allows only workers to apply', async () => {
-    service.applyToRequest.mockResolvedValue({ id: 9 });
-
-    await expect(controller.apply({ user: { id: 201, role: 'worker' } }, '9')).resolves.toEqual({
-      id: 9,
-    });
-    expect(service.applyToRequest).toHaveBeenCalledWith(9, 201);
-    await expect(
-      controller.apply({ user: { id: 101, role: 'client' } }, '9'),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('validates the assigned worker id and passes client ownership context', async () => {
-    service.assignWorker.mockResolvedValue({ id: 9, assignedWorkerId: 201 });
-
-    await expect(
-      controller.assign({ user: { id: 101, role: 'client' } }, '9', { workerUserId: 201 }),
-    ).resolves.toEqual({ id: 9, assignedWorkerId: 201 });
-    expect(service.assignWorker).toHaveBeenCalledWith(9, 101, 201);
-    await expect(
-      controller.assign({ user: { id: 101, role: 'client' } }, '9', {}),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('allows only a worker to close a client-confirmed request', async () => {
-    service.completeRequest.mockResolvedValue({ id: 9 });
-
-    await expect(
-      controller.complete({ user: { id: 201, role: 'worker' } }, '9'),
-    ).resolves.toEqual({ id: 9 });
-    expect(service.completeRequest).toHaveBeenCalledWith(9, 201);
-    await expect(
-      controller.complete({ user: { id: 101, role: 'client' } }, '9'),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('passes multipart before-image metadata with client ownership context', async () => {
-    service.addUploadedFiles.mockResolvedValue({ id: 9 });
-    const file = {
-      originalname: 'before.png',
-      mimetype: 'image/png',
-      size: 68,
-      buffer: Buffer.from('png'),
-    };
-
-    await expect(
-      controller.uploadBefore({ user: { id: 101, role: 'client' } }, '9', [file]),
-    ).resolves.toEqual({ id: 9 });
-    expect(service.addUploadedFiles).toHaveBeenCalledWith(
-      9,
-      101,
-      'client',
-      'before',
-      [file],
+    await controller.uploadBeforeMedia(
+      clientRequest,
+      '55',
+      beforeFiles,
     );
+    await controller.uploadAfterMedia(workerRequest, '55', afterFiles);
+
+    expect(service.addBeforeMedia).toHaveBeenCalledWith(55, 101, [
+      expect.objectContaining({
+        url: '/uploads/requests/55/before/request_55_before.webp',
+        storageKey: 'requests/55/before/request_55_before.webp',
+        mimeType: 'image/webp',
+        sizeBytes: 6,
+      }),
+    ]);
+    expect(service.addAfterMedia).toHaveBeenCalledWith(55, 201, [
+      expect.objectContaining({
+        url: '/uploads/requests/55/after/request_55_after.webp',
+        storageKey: 'requests/55/after/request_55_after.webp',
+        mimeType: 'image/webp',
+        sizeBytes: 5,
+      }),
+    ]);
+  });
+
+  it('rejects client-only routes for workers', async () => {
+    const { controller, workerRequest } = setup();
+
+    await expect(controller.create(workerRequest, {} as any)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.assign(workerRequest, '55', { workerUserId: 201 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.clientConfirm(workerRequest, '55')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects worker-only routes for clients', async () => {
+    const { controller, clientRequest } = setup();
+
+    await expect(controller.apply(clientRequest, '55')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.workerConfirm(clientRequest, '55')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.startWork(clientRequest, '55')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects assignment without a canonical worker user id', async () => {
+    const { controller, clientRequest } = setup();
+
+    await expect(controller.assign(clientRequest, '55', {})).rejects.toThrow('Missing workerUserId');
   });
 });

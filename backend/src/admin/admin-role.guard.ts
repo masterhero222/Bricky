@@ -8,4 +8,3 @@ export class AdminRoleGuard implements CanActivate {
     return true;
   }
 }
-

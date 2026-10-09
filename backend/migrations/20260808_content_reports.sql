@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS content_reports (
+  id INT NOT NULL AUTO_INCREMENT,
+  reporter_user_id INT NOT NULL,
+  target_type VARCHAR(40) NOT NULL,
+  target_id INT NOT NULL,
+  category VARCHAR(40) NOT NULL,
+  details TEXT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'open',
+  resolution_note TEXT NULL,
+  resolved_by_user_id INT NULL,
+  resolved_at DATETIME NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_content_reports_reporter (reporter_user_id),
+  KEY idx_content_reports_target (target_type, target_id),
+  KEY idx_content_reports_status (status),
+  CONSTRAINT fk_content_reports_reporter FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_content_reports_resolver FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

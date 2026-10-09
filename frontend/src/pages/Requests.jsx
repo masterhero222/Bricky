@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Bath,
   Brush,
@@ -16,13 +17,14 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { apiPost } from "../services/api";
+import { apiGet, apiPost } from "../services/api";
 import {
   REPAIR_CATEGORY_FLOW,
   REPAIR_CATEGORY_OPTIONS,
 } from "../constants/repairCatalog";
 import { getPricingActivity } from "../constants/repairPricingConfig";
 import { calculateRepairEstimate, MAX_EXACT_AREA_M2 } from "../utils/repairPriceCalculator";
+import { calculateCatalogEstimate } from "../utils/pricingCatalogAdapter";
 import { useAuthModal } from "../context/AuthModalContext";
 
 const GOALS = [
@@ -96,17 +98,24 @@ export default function Requests() {
 }
 
 export function RequestFlow({ embedded = false, onCreated }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showLogin } = useAuthModal();
+  const presetCategoryKey = searchParams.get("category");
+  const initialCategoryKey = REPAIR_CATEGORY_OPTIONS.some((item) => item.key === presetCategoryKey)
+    ? presetCategoryKey
+    : "bathroom_renovation";
   const [isLogged, setIsLogged] = useState(false);
   const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pricingCatalog, setPricingCatalog] = useState(null);
   const [locationStatus, setLocationStatus] = useState("idle");
   const [locationMessage, setLocationMessage] = useState("Позволи текуща локация или въведи точния адрес ръчно.");
   const locationAskedRef = useRef(false);
 
   const [form, setForm] = useState({
-    categoryKey: "bathroom_renovation",
+    categoryKey: initialCategoryKey,
     activities: [],
     quantity: "",
     exactAreaM2: "",
@@ -117,9 +126,6 @@ export function RequestFlow({ embedded = false, onCreated }) {
     locationSource: "manual",
     goal: "compare",
     contactPreference: "offers",
-    clientName: localStorage.getItem("userName") || "",
-    email: "",
-    phone: "",
     description: "",
     photos: [],
   });
@@ -127,6 +133,36 @@ export function RequestFlow({ embedded = false, onCreated }) {
   useEffect(() => {
     setIsLogged(Boolean(localStorage.getItem("token")));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiGet("/catalog")
+      .then((response) => active && setPricingCatalog(response.data || null))
+      .catch(() => active && setPricingCatalog(null));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const categoryKey = searchParams.get("category");
+
+    if (!REPAIR_CATEGORY_OPTIONS.some((item) => item.key === categoryKey)) {
+      return;
+    }
+
+    setForm((prev) => {
+      if (prev.categoryKey === categoryKey) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        categoryKey,
+        activities: [],
+        quantity: "",
+        exactAreaM2: "",
+      };
+    });
+  }, [searchParams]);
 
   const category = useMemo(
     () => REPAIR_CATEGORY_OPTIONS.find((item) => item.key === form.categoryKey) || REPAIR_CATEGORY_OPTIONS[0],
@@ -139,7 +175,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
   );
   const asksForArea = selectedPricingActivities.some((item) => item.areaBased);
   const quantityPrompt = QUANTITY_PROMPTS[category.key] || "Какъв е приблизителният обхват?";
-  const estimate = useMemo(
+  const fallbackEstimate = useMemo(
     () => calculateRepairEstimate({
       categoryKey: category.key,
       selectedActivities: form.activities,
@@ -149,6 +185,18 @@ export function RequestFlow({ embedded = false, onCreated }) {
       location: "sofia_regular",
     }),
     [category.key, form.activities, form.quantity, form.exactAreaM2, form.pricingMode]
+  );
+  const estimate = useMemo(
+    () => calculateCatalogEstimate({
+      catalog: pricingCatalog,
+      categoryKey: category.key,
+      selectedActivities: form.activities,
+      quantity: form.quantity,
+      exactAreaM2: form.exactAreaM2,
+      pricingMode: form.pricingMode,
+      fallbackEstimate,
+    }),
+    [category.key, fallbackEstimate, form.activities, form.exactAreaM2, form.pricingMode, form.quantity, pricingCatalog]
   );
 
   function setField(field, value) {
@@ -198,8 +246,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
 
     try {
       const photos = await filesToPhotos(files);
-      const withFiles = photos.map((photo, index) => ({ ...photo, file: files[index] }));
-      setForm((prev) => ({ ...prev, photos: [...(prev.photos || []), ...withFiles] }));
+      setForm((prev) => ({ ...prev, photos: [...(prev.photos || []), ...photos] }));
     } catch (err) {
       console.error(err);
       setStatus("Не успях да прочета избраните снимки.");
@@ -248,7 +295,6 @@ export function RequestFlow({ embedded = false, onCreated }) {
     if (step === 3) {
       return Boolean(form.address.trim()) || (Number.isFinite(form.latitude) && Number.isFinite(form.longitude));
     }
-    if (step === 5) return Boolean(form.phone.trim());
     return true;
   }
 
@@ -293,23 +339,14 @@ export function RequestFlow({ embedded = false, onCreated }) {
       return;
     }
     if (localStorage.getItem("role") !== "client") {
-      setStatus("За да изпратиш заявка, превключи mock акаунта на клиент от Dev test.");
-      return;
-    }
-    if (!form.clientName.trim() || !form.phone.trim()) {
-      setStatus("Попълни име и телефон за връзка с профила.");
-      setStep(5);
+      setStatus("Само клиентски профил може да изпраща заявки.");
       return;
     }
 
     try {
       setSubmitting(true);
       setStatus("");
-      const isDevMock = String(localStorage.getItem("token") || "").startsWith("local-dev-token");
       const requestPayload = {
-        clientName: form.clientName,
-        email: form.email || "client@bricky.mock",
-        phone: form.phone,
         address: form.address.trim(),
         latitude: form.latitude,
         longitude: form.longitude,
@@ -320,14 +357,9 @@ export function RequestFlow({ embedded = false, onCreated }) {
         estimateMin: estimate.expectedMin,
         estimateMax: estimate.expectedMax,
         estimateCurrency: estimate.currency,
-        photos: isDevMock
-          ? (form.photos || []).map(({ file: _file, ...photo }) => photo)
-          : [],
-      };
-
-      if (isDevMock) {
-        requestPayload.pricingSnapshot = {
+        pricingSnapshot: {
           pricingVersion: estimate.pricingVersion,
+          pricingSource: estimate.source || "fallback",
           materialPricingVersion: estimate.materialPricingVersion,
           materialPriceIndexVersion: estimate.materialPriceIndexVersion,
           pricingMode: estimate.pricingMode,
@@ -358,19 +390,30 @@ export function RequestFlow({ embedded = false, onCreated }) {
           excludedMaterialKeys: estimate.excludedMaterialKeys,
           warnings: estimate.warnings,
           notes: estimate.notes,
-        };
-      }
+        },
+        photos: String(localStorage.getItem("token") || "").startsWith("local-dev-token")
+          ? form.photos || []
+          : [],
+      };
 
-      const created = await apiPost("/requests", requestPayload);
-      const requestId = Number(created.data?.id);
-      const files = (form.photos || []).map((photo) => photo.file).filter(Boolean);
-      if (!isDevMock && requestId && files.length) {
-        const data = new FormData();
-        files.forEach((file) => data.append("images", file));
-        await apiPost(`/requests/${requestId}/images/before`, data);
+      const createdResponse = await apiPost("/requests", requestPayload);
+      const createdRequestId = Number(createdResponse?.data?.id);
+      const realImageFiles = (form.photos || [])
+        .map((photo) => photo?.file)
+        .filter((file) => file instanceof File);
+
+      if (
+        !String(localStorage.getItem("token") || "").startsWith("local-dev-token") &&
+        createdRequestId &&
+        realImageFiles.length
+      ) {
+        const mediaPayload = new FormData();
+        realImageFiles.forEach((file) => mediaPayload.append("images", file));
+        await apiPost(`/requests/${createdRequestId}/media/before`, mediaPayload);
       }
-      setStatus(isDevMock ? "Заявката е записана в mock средата." : "Заявката е създадена успешно.");
-      onCreated?.();
+      setStatus("Заявката е изпратена за одобрение от админ.");
+      if (onCreated) onCreated();
+      else navigate("/client/profile?tab=requests", { replace: true });
       setStep(0);
       locationAskedRef.current = false;
       setLocationStatus("idle");
@@ -389,7 +432,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
       }));
     } catch (err) {
       console.error(err);
-      setStatus("Не успях да изпратя заявката.");
+      setStatus("Не успях да изпратя заявката. Опитай отново.");
     } finally {
       setSubmitting(false);
     }
@@ -399,10 +442,10 @@ export function RequestFlow({ embedded = false, onCreated }) {
     <div className={embedded ? "text-white" : "min-h-screen bg-gray-900 px-6 py-24 text-white"}>
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <p className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-300">Mock request flow</p>
+          <p className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-300">Нова заявка</p>
           <h1 className="mt-2 text-3xl font-black">Заяви проект за ремонт</h1>
           <p className="mt-2 max-w-3xl text-gray-300">
-            Избери тип ремонт, уточни дейностите и логистиката. Това е mock flow за тестване на бъдещата структура в базата.
+            Избери тип ремонт, уточни дейностите и мястото, а Bricky ще изпрати заявката за одобрение.
           </p>
         </div>
 
@@ -423,7 +466,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
           <section className="rounded-2xl border border-gray-700 bg-gray-800 p-6 shadow-lg">
             {!isLogged && (
               <div className="mb-5 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-yellow-100">
-                За да изпратиш заявка, влез в mock акаунт от `Dev test` или през login страницата.
+                За да изпратиш заявка, влез в клиентския си профил.
               </div>
             )}
 
@@ -583,18 +626,13 @@ export function RequestFlow({ embedded = false, onCreated }) {
             {step === 5 && (
               <div>
                 <StepTitle category={category} title="Как предпочиташ да комуникираш?" step={step} onGoToStep={goToStep} />
-                <p className="mt-2 text-gray-300">Контактът с майсторите остава през Bricky. Телефонът е само за твоя профил/верификация в mock flow-а.</p>
+                <p className="mt-2 text-gray-300">Контактът с майсторите остава защитен в Bricky.</p>
                 <div className="mt-6 space-y-3">
                   {CONTACT_PREFS.map((pref) => (
                     <RadioCard key={pref.value} selected={form.contactPreference === pref.value} onClick={() => setField("contactPreference", pref.value)}>
                       {pref.label}
                     </RadioCard>
                   ))}
-                </div>
-                <div className="mt-6 grid gap-3 md:grid-cols-2">
-                  <input value={form.clientName} onChange={(e) => setField("clientName", e.target.value)} placeholder="Име" className="rounded-lg border border-gray-700 bg-gray-900 p-3" />
-                  <input value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="Телефон за профила" className="rounded-lg border border-gray-700 bg-gray-900 p-3" />
-                  <input value={form.email} onChange={(e) => setField("email", e.target.value)} placeholder="Имейл (по желание в mock)" className="rounded-lg border border-gray-700 bg-gray-900 p-3 md:col-span-2" />
                 </div>
               </div>
             )}
@@ -620,7 +658,7 @@ export function RequestFlow({ embedded = false, onCreated }) {
                     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                       {form.photos.map((photo) => (
                         <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
-                          <img src={photo.url} alt={photo.name || "Снимка към заявка"} className="h-24 w-full object-cover" />
+                          <img src={photo.url} alt={photo.name || "Снимка към заявка"} loading="lazy" decoding="async" className="h-24 w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => removePhoto(photo.id)}
@@ -759,6 +797,7 @@ function filesToPhotos(files) {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: file.name,
       url: await imageFileToDataUrl(file),
+      file,
       created_at: new Date().toISOString(),
     }))
   );

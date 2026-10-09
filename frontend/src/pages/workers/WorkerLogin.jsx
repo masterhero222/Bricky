@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { apiPost } from "../../services/api";
+import { Link } from "react-router-dom";
 
 export default function WorkerLogin() {
   const [form, setForm] = useState({
@@ -99,6 +100,9 @@ export default function WorkerLogin() {
         <button className="w-full bg-blue-600 p-3 rounded font-bold">
           Вход
         </button>
+        <Link to="/reset-password" className="block text-center text-sm font-semibold text-cyan-300 hover:text-cyan-200">
+          Забравена парола?
+        </Link>
 
         {import.meta.env.DEV && (
           <button

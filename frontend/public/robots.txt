@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /client/profile
+Disallow: /worker/profile
+Disallow: /requests
+Disallow: /repair-map
+Disallow: /reset-password
+Disallow: /blog
+
+Sitemap: https://bricky.bg/sitemap.xml

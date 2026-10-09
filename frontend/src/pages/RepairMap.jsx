@@ -1,8 +1,9 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../services/api";
-import { photoMediaUrl, photoThumbnailUrl } from "../utils/mediaUrls";
+import WorkerProfileSidebar from "../components/workers/WorkerProfileSidebar";
+import { photoMediaUrl } from "../utils/mediaUrls";
 import { cleanRequestDescription, formatRequestExpectedRange } from "../utils/requestPresentation";
 
 const TILE_SIZE = 256;
@@ -50,11 +51,11 @@ function photoUrl(photo) {
   return photoMediaUrl(photo);
 }
 
-function statusTone(status = "") {
-  const s = String(status).toLowerCase();
-  if (s.includes("зав")) return "border-emerald-300 text-emerald-200 bg-emerald-500/15";
-  if (s.includes("проц")) return "border-amber-300 text-amber-200 bg-amber-500/15";
-  if (s.includes("кандид")) return "border-sky-300 text-sky-200 bg-sky-500/15";
+function statusTone(statusKey = "") {
+  const s = String(statusKey).toLowerCase();
+  if (["client_confirmed", "reviewed", "completed"].includes(s)) return "border-emerald-300 text-emerald-200 bg-emerald-500/15";
+  if (["worker_confirmed", "worker_on_site", "inspected", "in_progress", "work_finished", "ready_for_client_confirmation"].includes(s)) return "border-amber-300 text-amber-200 bg-amber-500/15";
+  if (["applied", "assigned", "worker_selected"].includes(s)) return "border-sky-300 text-sky-200 bg-sky-500/15";
   return "border-white/70 text-white bg-white/10";
 }
 
@@ -226,6 +227,8 @@ function SofiaTileMap({ requests, activeId, expandedClusterId, onSelect, onClust
             src={tile.url}
             alt=""
             draggable={false}
+            loading="lazy"
+            decoding="async"
             className="absolute select-none repair-map-tile"
             style={{ left: tile.left, top: tile.top, width: TILE_SIZE, height: TILE_SIZE }}
           />
@@ -278,6 +281,7 @@ function SofiaTileMap({ requests, activeId, expandedClusterId, onSelect, onClust
 }
 
 export default function RepairMap() {
+  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -330,21 +334,28 @@ export default function RepairMap() {
   }
 
   const activeRequest = requests.find((request) => String(request.id) === String(activeId)) || requests[0] || null;
-  const hasApplied =
-    activeRequest &&
-    Array.isArray(activeRequest.appliedWorkers) &&
-    activeRequest.appliedWorkers.map(Number).includes(currentUserId);
-  const isClosed = ["завършена", "отказана"].includes(String(activeRequest?.status || "").toLowerCase());
-  const activePhotos = Array.from(
-    new Map(
-      [...(Array.isArray(activeRequest?.beforePhotos) ? activeRequest.beforePhotos : []), ...(Array.isArray(activeRequest?.photos) ? activeRequest.photos : [])]
-        .filter((photo) => photoUrl(photo))
-        .map((photo) => [String(photo.id || photoUrl(photo)), photo]),
-    ).values(),
-  );
+  const hasApplied = Array.isArray(activeRequest?.applications)
+    ? activeRequest.applications.some(
+        (application) =>
+          Number(application?.workerUserId) === currentUserId &&
+          !["withdrawn", "rejected"].includes(application?.status),
+      )
+    : false;
+  const activeStatusKey = activeRequest?.statusKey || "";
+  const isClosed = ["completed", "canceled", "archived"].includes(activeStatusKey);
+  const canApply = Array.isArray(activeRequest?.allowedActions)
+    ? activeRequest.allowedActions.includes("apply")
+    : ["published", "applied"].includes(activeStatusKey);
+  const activePhotos = Array.isArray(activeRequest?.photos) ? activeRequest.photos : [];
+
+  function selectWorkerTab(tab) {
+    if (tab !== "map") navigate(`/worker/profile?tab=${tab}`);
+  }
 
   return (
-    <div className="min-h-screen bg-[#07101d] text-white px-6 py-24">
+    <>
+    <WorkerProfileSidebar activeTab="map" onSelect={selectWorkerTab} />
+    <div className="min-h-screen bg-[#07101d] px-4 pb-20 pt-40 text-white sm:px-6 lg:ml-64 lg:px-10 lg:pt-24">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
           <div>
@@ -359,7 +370,7 @@ export default function RepairMap() {
             <button onClick={loadMapRequests} className="px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 font-bold">
               Обнови
             </button>
-            <Link to="/worker/profile" className="px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 font-bold">
+            <Link to="/worker/profile?tab=requests" className="px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 font-bold">
               Към заявки
             </Link>
           </div>
@@ -420,15 +431,15 @@ export default function RepairMap() {
             )}
           </div>
 
-          <aside aria-label="Избрана заявка" className="rounded-xl border border-gray-700 bg-gray-900/90 p-5 min-h-[520px]">
+          <aside className="rounded-xl border border-gray-700 bg-gray-900/90 p-5 min-h-[520px]">
             <h2 className="text-xl font-black mb-4">Избран обект</h2>
 
             {!activeRequest ? (
               <p className="text-gray-400">Избери заявка от картата.</p>
             ) : (
-              <div key={activeRequest.id} aria-live="polite" data-request-id={activeRequest.id} className="space-y-4">
-                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeRequest.status)}`}>
-                  {activeRequest.statusKey || activeRequest.status || "нова"}
+              <div className="space-y-4">
+                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusTone(activeStatusKey)}`}>
+                  {activeRequest.statusLabel || activeStatusKey}
                 </div>
 
                 <div>
@@ -461,7 +472,7 @@ export default function RepairMap() {
                     <div className="grid grid-cols-2 gap-3">
                       {activePhotos.slice(0, 4).map((photo) => (
                         <a key={photo.id || photoUrl(photo)} href={photoUrl(photo)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                          <img src={photoThumbnailUrl(photo)} alt={photo.name || "Снимка към заявката"} className="h-24 w-full object-cover hover:scale-105 transition-transform" />
+                          <img src={photoUrl(photo)} alt={photo.name || "Снимка към заявката"} loading="lazy" decoding="async" className="h-24 w-full object-cover hover:scale-105 transition-transform" />
                         </a>
                       ))}
                     </div>
@@ -485,7 +496,7 @@ export default function RepairMap() {
                 <button
                   type="button"
                   onClick={() => applyFromMap(activeRequest.id)}
-                  disabled={Boolean(applyingId) || hasApplied || isClosed}
+                  disabled={Boolean(applyingId) || hasApplied || isClosed || !canApply}
                   className="w-full rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-300 px-4 py-3 font-black"
                 >
                   {hasApplied
@@ -636,5 +647,6 @@ export default function RepairMap() {
         }
       `}</style>
     </div>
+    </>
   );
 }

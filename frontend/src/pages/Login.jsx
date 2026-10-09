@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { apiPost } from "../services/api";
+import { Link } from "react-router-dom";
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -13,12 +14,12 @@ export default function Login() {
     localStorage.setItem("role", data.user.role);
     localStorage.setItem("userName", data.user.name || "");
 
-    const destination = {
-      admin: "/admin",
-      client: "/client/profile",
-      worker: "/worker/profile",
-    }[data.user.role] || "/auth";
-
+    const destination =
+      data.user.role === "client"
+        ? "/client/profile"
+        : ["admin", "super_admin"].includes(data.user.role)
+          ? "/admin"
+          : "/worker/profile";
     window.location.href = destination;
   };
 
@@ -97,11 +98,14 @@ export default function Login() {
         {error && <p className="text-red-400 text-center">{error}</p>}
 
         <button className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Вход</button>
+        <Link to="/reset-password" className="block text-center text-sm font-semibold text-cyan-300 hover:text-cyan-200">
+          Забравена парола?
+        </Link>
 
         {import.meta.env.DEV && (
           <div className="border-t border-gray-700 pt-4 space-y-2">
             <p className="text-sm text-gray-300 text-center">Локално тестване</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => devLogin("client")}
@@ -117,6 +121,14 @@ export default function Login() {
                 className="rounded bg-amber-700 px-3 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
               >
                 {devLoading === "worker" ? "Влизам..." : "Като майстор"}
+              </button>
+              <button
+                type="button"
+                onClick={() => devLogin("super_admin")}
+                disabled={Boolean(devLoading)}
+                className="rounded bg-cyan-800 px-3 py-2 text-sm font-semibold hover:bg-cyan-700 disabled:opacity-60"
+              >
+                {devLoading === "super_admin" ? "Влизам..." : "Като админ"}
               </button>
             </div>
           </div>

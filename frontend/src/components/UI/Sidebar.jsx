@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { Home, ClipboardList, Users, Settings, Wrench, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 
 const navItems = [
   { name: "Начало", icon: <Home size={18} />, path: "/" },
@@ -42,7 +42,7 @@ export default function Sidebar({ open, setOpen }) {
       <AnimatePresence>
         {open && (
           <>
-            <motion.div
+            <Motion.div
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
@@ -75,10 +75,10 @@ export default function Sidebar({ open, setOpen }) {
                   </NavLink>
                 ))}
               </nav>
-            </motion.div>
+            </Motion.div>
 
             {/* Overlay */}
-            <motion.div
+            <Motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}

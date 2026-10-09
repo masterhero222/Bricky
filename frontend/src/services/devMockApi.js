@@ -1,6 +1,92 @@
 import { REPAIR_CATEGORY_OPTIONS, REPAIR_CATEGORY_FLOW, getRepairCategoryByLabel } from "../constants/repairCatalog.js";
+import {
+  DEFAULT_WORKER_BANNER_KEY,
+  WORKER_BANNER_CATALOG,
+} from "../constants/workerBannerCatalog.js";
 
 const STORAGE_KEY = "bricky.dev.db";
+
+const REQUEST_STATUS_LABELS = {
+  draft: "чернова",
+  pending_admin: "чака одобрение",
+  published: "нова",
+  applied: "кандидатствана",
+  assigned: "избран майстор",
+  worker_selected: "избран майстор",
+  worker_confirmed: "майсторът потвърди",
+  worker_on_site: "майсторът е на адреса",
+  inspected: "огледана",
+  in_progress: "в процес",
+  work_finished: "работата е свършена",
+  ready_for_client_confirmation: "чака потвърждение от клиента",
+  client_confirmed: "клиентът потвърди",
+  reviewed: "оставен отзив",
+  completed: "завършена",
+  canceled: "отказана",
+  archived: "архивирана",
+};
+
+const REQUEST_LIFECYCLE_STATUS = {
+  draft: "pending_review",
+  pending_admin: "pending_review",
+  published: "approved",
+  applied: "approved",
+  assigned: "assigned",
+  worker_selected: "assigned",
+  worker_confirmed: "assigned",
+  worker_on_site: "worker_arrived",
+  inspected: "worker_arrived",
+  in_progress: "in_progress",
+  work_finished: "waiting_client_confirmation",
+  ready_for_client_confirmation: "waiting_client_confirmation",
+  client_confirmed: "client_confirmed",
+  reviewed: "reviewed",
+  completed: "completed",
+  canceled: "canceled",
+  archived: "hidden",
+};
+
+const REQUEST_LIFECYCLE_LABELS = {
+  pending_review: "Чака одобрение",
+  approved: "Одобрена",
+  assigned: "Избран майстор",
+  worker_arrived: "Майсторът е на адреса",
+  in_progress: "В процес",
+  waiting_client_confirmation: "Чака потвърждение от клиента",
+  client_confirmed: "Чака отзив от клиента",
+  reviewed: "Чака майсторът да затвори",
+  completed: "Завършена",
+  canceled: "Отказана",
+  hidden: "Скрита",
+};
+
+const REQUEST_LIFECYCLE_NEXT_ACTOR = {
+  pending_review: "admin",
+  approved: "worker",
+  assigned: "worker",
+  worker_arrived: "worker",
+  in_progress: "worker",
+  waiting_client_confirmation: "client",
+  client_confirmed: "client",
+  reviewed: "worker",
+  completed: null,
+  canceled: null,
+  hidden: null,
+};
+
+const REQUEST_LIFECYCLE_ALLOWED_ACTIONS = {
+  pending_review: ["approve", "reject", "hide"],
+  approved: ["apply", "assign", "withdraw_application", "cancel", "hide"],
+  assigned: ["unassign", "mark_arrived", "cancel", "hide"],
+  worker_arrived: ["unassign", "start_work", "cancel", "hide"],
+  in_progress: ["mark_ready", "cancel", "hide"],
+  waiting_client_confirmation: ["confirm_completion", "dispute", "hide"],
+  client_confirmed: ["leave_review", "dispute", "hide"],
+  reviewed: ["close", "hide"],
+  completed: [],
+  canceled: [],
+  hidden: [],
+};
 
 const CLIENTS = [
   {
@@ -29,11 +115,22 @@ const CLIENTS = [
   }
 ];
 
+const ADMINS = [
+  {
+    id: 1,
+    role: "super_admin",
+    name: "Bricky Admin",
+    email: "admin@bricky.dev",
+    status: "active",
+  },
+];
+
 const WORKERS = [
   {
     "id": 1,
     "userId": 201,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 1 - Георги ВиК",
     "name": "Майстор 1 - Георги ВиК",
     "email": "worker1@bricky.dev",
@@ -44,12 +141,21 @@ const WORKERS = [
     ],
     "description": "ВиК ремонти, течове, сифони и смесители.",
     "experience": "8 години",
-    "equipment": "Професионални инструменти за ВиК диагностика."
+    "equipment": "Професионални инструменти за ВиК диагностика.",
+    "avatarUrl": "/media_files/maistor.png",
+    "profileBannerKey": "blueprint_plumbing_v1",
+    "approvalStatus": "approved",
+    "visibilityStatus": "public",
+    "gallery": [
+      { id: "gallery-201-1", userId: 201, name: "Смяна на сифон", url: "/media_files/banq.jpg", created_at: "2026-07-01T09:00:00.000Z" },
+      { id: "gallery-201-2", userId: 201, name: "Баня след ремонт", url: "/media_files/banq2.jpg", created_at: "2026-07-02T09:00:00.000Z" }
+    ]
   },
   {
     "id": 2,
     "userId": 202,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 2 - Елена Електро",
     "name": "Майстор 2 - Елена Електро",
     "email": "worker2@bricky.dev",
@@ -60,12 +166,24 @@ const WORKERS = [
     ],
     "description": "Контакти, табла, осветление и аварийни ремонти.",
     "experience": "6 години",
-    "equipment": "Тестер, инструменти за ел. инсталации."
+    "equipment": "Тестер, инструменти за ел. инсталации.",
+    "avatarUrl": "/media_files/worker_1011_1781367743213.jpg",
+    "profileBannerKey": "blueprint_electrical_v1",
+    "approvalStatus": "approved",
+    "visibilityStatus": "public",
+    "gallery": [
+      { id: "gallery-202-1", userId: 202, name: "Ел. табло", url: "/media_files/images.jpg", created_at: "2026-07-03T09:00:00.000Z" },
+      { id: "gallery-202-2", userId: 202, name: "Осветление", url: "/media_files/download.jpg", created_at: "2026-07-04T09:00:00.000Z" }
+    ],
+    "isBoosted": true,
+    "boostSource": "referral",
+    "boostEndsAt": "2026-08-15T23:59:59.000Z"
   },
   {
     "id": 3,
     "userId": 203,
     "role": "worker",
+    "status": "active",
     "fullName": "Майстор 3 - Никола Плочки",
     "name": "Майстор 3 - Никола Плочки",
     "email": "worker3@bricky.dev",
@@ -77,7 +195,15 @@ const WORKERS = [
     ],
     "description": "Бани, плочки, шпакловка и довършителни работи.",
     "experience": "10 години",
-    "equipment": "Машина за рязане на плочки, лазерен нивелир."
+    "equipment": "Машина за рязане на плочки, лазерен нивелир.",
+    "avatarUrl": "/media_files/worker_1010_1771026735538.png",
+    "profileBannerKey": "blueprint_tiles_v1",
+    "approvalStatus": "pending",
+    "visibilityStatus": "hidden",
+    "gallery": [
+      { id: "gallery-203-1", userId: 203, name: "Плочки баня", url: "/media_files/banq3.jpg", created_at: "2026-07-05T09:00:00.000Z" },
+      { id: "gallery-203-2", userId: 203, name: "Фаянс", url: "/media_files/sadsadasd.jpg", created_at: "2026-07-06T09:00:00.000Z" }
+    ]
   }
 ];
 function nowIso() {
@@ -116,201 +242,75 @@ function guessRepairCategory(text) {
 }
 
 function seedDb() {
-  const completedJob = {
-    id: "job-seed-completed-201",
-    requestId: 9001,
-    category: repairCategoryByKey("bathroom_renovation").label,
-    clientName: CLIENTS[0].name,
-    address: "Sofia, Lozenets",
-    description: "Completed bathroom renovation verified through Bricky.",
-    startedAt: "2026-06-24T08:00:00.000Z",
-    completedAt: "2026-06-29T16:00:00.000Z",
-    durationDays: 6,
-    beforePhotos: [
-      { id: "seed-job-before-1", name: "Before renovation", url: "/media_files/banq.jpg", created_at: "2026-06-24T08:00:00.000Z" },
-      { id: "seed-job-before-2", name: "Before renovation detail", url: "/media_files/banq2.jpg", created_at: "2026-06-24T08:01:00.000Z" },
-    ],
-    afterPhotos: [
-      { id: "seed-job-after-1", name: "Completed renovation", url: "/media_files/banq3.jpg", created_at: "2026-06-29T16:00:00.000Z" },
-      { id: "seed-job-after-2", name: "Completed renovation detail", url: "/media_files/download.jpg", created_at: "2026-06-29T16:01:00.000Z" },
-    ],
-    created_at: "2026-06-29T16:00:00.000Z",
-  };
-  const workers = WORKERS.map((worker) => ({ ...worker, skills: [...(worker.skills || [])] }));
-  workers[0].completedJobs = [completedJob];
-  workers[0].gallery = [
-    ...completedJob.beforePhotos.map((photo) => ({ ...photo, userId: workers[0].userId, requestId: completedJob.requestId, phase: "before" })),
-    ...completedJob.afterPhotos.map((photo) => ({ ...photo, userId: workers[0].userId, requestId: completedJob.requestId, phase: "after" })),
-  ];
-
+  const referralRewardEndsAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
   return {
-    mapSeedVersion: 5,
-    nextRequestId: 7,
+    mapSeedVersion: 10,
+    nextRequestId: 1,
+    nextMediaId: 3,
     nextReviewId: 1,
+    nextUserId: 301,
+    nextWorkerId: 4,
+    nextReferralId: 3,
+    nextRewardId: 2,
+    admins: ADMINS,
     repairCategories: REPAIR_CATEGORY_OPTIONS.map((category) => ({
       ...category,
       flow: REPAIR_CATEGORY_FLOW[category.key] || REPAIR_CATEGORY_FLOW.other,
     })),
+    pricingRules: [],
+    requestEvents: [],
     clients: CLIENTS,
-    workers,
+    workers: WORKERS,
     reviews: [],
-    requests: [
+    referrals: [
       {
         id: 1,
-        clientUserId: 101,
-        clientName: CLIENTS[0].name,
-        email: CLIENTS[0].email,
-        phone: CLIENTS[0].phone,
-        address: "София, ул. Граф Игнатиев 18",
-        latitude: 42.690781,
-        longitude: 23.326193,
-        locationSource: "seed",
-        category: "ВиК",
-        description: "Тече под мивката в кухнята.",
-        status: "нова",
-        photos: [
-          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", moderationStatus: "pending_review", created_at: nowIso() },
-          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
+        code: "BRGEO201",
+        type: "worker_invites_worker",
+        referrerUserId: 201,
+        referredUserId: 202,
+        status: "rewarded",
+        qualifiedRepairCount: 2,
+        createdAt: "2026-07-01T09:00:00.000Z",
+        rewards: [
+          {
+            id: 1,
+            referralId: 1,
+            rewardType: "worker_visibility_boost_30d",
+            status: "active",
+            startsAt: "2026-07-15T00:00:00.000Z",
+            endsAt: referralRewardEndsAt,
+          },
         ],
-        beforePhotos: [
-          { id: "seed-1-a", name: "Проблем под мивка", url: "/media_files/banq.jpg", created_at: nowIso() },
-          { id: "seed-1-b", name: "Снимка на сифона", url: "/media_files/banq2.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
       },
       {
         id: 2,
-        clientUserId: 102,
-        clientName: CLIENTS[1].name,
-        email: CLIENTS[1].email,
-        phone: CLIENTS[1].phone,
-        address: "София, бул. Витоша 72",
-        latitude: 42.687389,
-        longitude: 23.319482,
-        locationSource: "seed",
-        category: "Електро",
-        description: "Няколко контакта не работят след ремонт.",
-        status: "кандидатствана",
-        photos: [
-          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
-        ],
-        beforePhotos: [
-          { id: "seed-2-a", name: "Контакт", url: "/media_files/images.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [202],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 3,
-        clientUserId: 103,
-        clientName: CLIENTS[2].name,
-        email: CLIENTS[2].email,
-        phone: CLIENTS[2].phone,
-        address: "София, ул. Цар Симеон 143",
-        latitude: 42.704901,
-        longitude: 23.312384,
-        locationSource: "seed",
-        category: "Плочки",
-        description: "Лепене на плочки в малка баня.",
-        status: "в процес",
-        photos: [
-          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
-          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
-        ],
-        beforePhotos: [
-          { id: "seed-3-a", name: "Баня преди ремонт", url: "/media_files/banq3.jpg", created_at: nowIso() },
-          { id: "seed-3-b", name: "Стенни плочки", url: "/media_files/download.jpg", created_at: nowIso() },
-        ],
-        afterPhotos: [],
-        appliedWorkers: [203],
-        assignedWorkerId: 203,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 4,
-        clientUserId: 101,
-        clientName: CLIENTS[0].name,
-        email: CLIENTS[0].email,
-        phone: CLIENTS[0].phone,
-        address: "София, ул. Козяк 12",
-        latitude: 42.661811,
-        longitude: 23.333928,
-        locationSource: "seed",
-        category: "Освежителен ремонт",
-        description: "Освежаване на дневна и коридор, нужни са шпакловка и боя.",
-        status: "нова",
-        moderationStatus: "pending_review",
-        photos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-4-a", name: "Стена", url: "/media_files/sadsadasd.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 5,
-        clientUserId: 102,
-        clientName: CLIENTS[1].name,
-        email: CLIENTS[1].email,
-        phone: CLIENTS[1].phone,
-        address: "София, ул. Фредерик Жолио-Кюри 9",
-        latitude: 42.671482,
-        longitude: 23.350402,
-        locationSource: "seed",
-        category: "Ремонт на бани",
-        description: "Смяна на плочки и душ зона в малка баня.",
-        status: "нова",
-        photos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-5-a", name: "Баня", url: "/media_files/banq.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
-      },
-      {
-        id: 6,
-        clientUserId: 103,
-        clientName: CLIENTS[2].name,
-        email: CLIENTS[2].email,
-        phone: CLIENTS[2].phone,
-        address: "София, бул. Черни връх 100",
-        latitude: 42.658832,
-        longitude: 23.316522,
-        locationSource: "seed",
-        category: "Електро инсталация",
-        description: "Проверка на табло и добавяне на нов кръг за кухня.",
-        status: "нова",
-        photos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
-        beforePhotos: [{ id: "seed-6-a", name: "Табло", url: "/media_files/images.jpg", created_at: nowIso() }],
-        afterPhotos: [],
-        appliedWorkers: [],
-        assignedWorkerId: null,
-        completedAt: null,
-        completedByWorkerId: null,
-        durationDays: null,
-        created_at: nowIso(),
+        code: "BRELE202",
+        type: "worker_invites_worker",
+        referrerUserId: 202,
+        referredUserId: null,
+        status: "created",
+        qualifiedRepairCount: 0,
+        createdAt: "2026-07-10T09:00:00.000Z",
+        rewards: [],
       },
     ],
+    media: [
+      { id: 1, kind: "worker_avatar", ownerUserId: 201, publicUrl: "/media_files/maistor.png", moderationStatus: "approved", createdAt: nowIso() },
+      { id: 2, kind: "worker_gallery", ownerUserId: 202, publicUrl: "/media_files/images.jpg", moderationStatus: "pending", createdAt: nowIso() },
+    ],
+    auditLogs: [
+      {
+        id: 1,
+        adminUserId: 1,
+        action: "dev_seed_loaded",
+        targetType: "mock",
+        targetId: null,
+        reason: "local best-of mock",
+        createdAt: nowIso(),
+      },
+    ],
+    requests: [],
   };
 }
 
@@ -343,8 +343,72 @@ function readDb() {
         writeDb(migrated);
         return migrated;
       }
-      if (Number(db?.mapSeedVersion || 0) < 5) {
-        const migrated = normalizeMockEnforcementState(db);
+      if (Number(db?.mapSeedVersion || 0) < 5 || !Array.isArray(db?.admins) || !Array.isArray(db?.referrals)) {
+        const seeded = seedDb();
+        const migrated = {
+          ...db,
+          mapSeedVersion: 5,
+          nextUserId: Math.max(Number(db.nextUserId || 0), seeded.nextUserId),
+          nextWorkerId: Math.max(Number(db.nextWorkerId || 0), seeded.nextWorkerId),
+          nextReferralId: Math.max(Number(db.nextReferralId || 0), seeded.nextReferralId),
+          nextRewardId: Math.max(Number(db.nextRewardId || 0), seeded.nextRewardId),
+          admins: Array.isArray(db.admins) ? db.admins : seeded.admins,
+          referrals: Array.isArray(db.referrals) ? db.referrals : seeded.referrals,
+          media: Array.isArray(db.media) ? db.media : seeded.media,
+          auditLogs: Array.isArray(db.auditLogs) ? db.auditLogs : seeded.auditLogs,
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 6) {
+        const seeded = seedDb();
+        const migrated = {
+          ...db,
+          mapSeedVersion: 6,
+          nextRequestId: Math.max(Number(db.nextRequestId || 0), seeded.nextRequestId),
+          requests: (Array.isArray(db.requests) ? db.requests : []).filter((request) => request?.locationSource !== "seed"),
+          media: (Array.isArray(db.media) ? db.media : []).filter((media) => media?.kind !== "request_before" || !media?.requestId),
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 7 || !Number(db?.nextMediaId)) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 7,
+          nextMediaId: Math.max(Number(db.nextMediaId || 0), maxMediaId(db) + 1),
+        };
+        ensureRequestMediaRecords(migrated);
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 8) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 8,
+        };
+        ensureRequestMediaRecords(migrated);
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 9) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 9,
+          requests: (Array.isArray(db.requests) ? db.requests : []).map((request) =>
+            decorateMockRequest(request),
+          ),
+        };
+        writeDb(migrated);
+        return migrated;
+      }
+      if (Number(db?.mapSeedVersion || 0) < 10) {
+        const migrated = {
+          ...db,
+          mapSeedVersion: 10,
+          pricingRules: Array.isArray(db.pricingRules) ? db.pricingRules : [],
+          requestEvents: Array.isArray(db.requestEvents) ? db.requestEvents : [],
+        };
         writeDb(migrated);
         return migrated;
       }
@@ -353,61 +417,9 @@ function readDb() {
   } catch {
     // Invalid or outdated local mock data is replaced with a clean seed below.
   }
-  const db = normalizeMockEnforcementState(seedDb());
+  const db = seedDb();
   writeDb(db);
   return db;
-}
-
-function normalizeMockEnforcementState(db) {
-  return {
-    ...db,
-    mapSeedVersion: 5,
-    clients: (db.clients || []).map((client) => ({
-      ...client,
-      accountStatus: client.accountStatus || "active",
-    })),
-    workers: (db.workers || []).map((worker, index) => ({
-      ...worker,
-      accountStatus: worker.accountStatus || "active",
-      moderationStatus: worker.moderationStatus || (index === 1 ? "pending_review" : "approved"),
-      avatarModerationStatus: worker.avatarModerationStatus || worker.moderationStatus || (index === 1 ? "pending_review" : "approved"),
-      gallery: (worker.gallery || []).map((image) => ({
-        ...image,
-        moderationStatus: image.moderationStatus || "approved",
-      })),
-      completedJobs: (worker.completedJobs || []).map((job) => ({
-        ...job,
-        moderationStatus: job.moderationStatus || "approved",
-        beforePhotos: (job.beforePhotos || []).map((image) => ({ ...image, moderationStatus: image.moderationStatus || "approved" })),
-        afterPhotos: (job.afterPhotos || []).map((image) => ({ ...image, moderationStatus: image.moderationStatus || "approved" })),
-      })),
-    })),
-    requests: (db.requests || []).map((request, index) => {
-      const moderationStatus = request.moderationStatus || (index === 0 ? "pending_review" : "approved");
-      const legacyStatus = String(request.status || "").toLowerCase();
-      const status = request.completedAt || legacyStatus.includes("завършен") ? "completed"
-        : legacyStatus.includes("отказ") ? "canceled"
-          : ["assigned", "worker_arrived", "in_progress", "waiting_client_confirmation", "client_confirmed", "disputed"].includes(legacyStatus) ? legacyStatus
-            : request.assignedWorkerId ? "assigned" : "approved";
-      const normalizeImage = (image) => ({
-        ...image,
-        moderationStatus: image.moderationStatus || moderationStatus,
-      });
-      return {
-        ...request,
-        status,
-        statusKey: status,
-        moderationStatus,
-        photos: (request.photos || []).map(normalizeImage),
-        beforePhotos: (request.beforePhotos || []).map(normalizeImage),
-        afterPhotos: (request.afterPhotos || []).map(normalizeImage),
-      };
-    }),
-    reviews: (db.reviews || []).map((review, index) => ({
-      ...review,
-      moderationStatus: review.moderationStatus || (index === 0 ? "pending_review" : "approved"),
-    })),
-  };
 }
 
 function writeDb(db) {
@@ -451,87 +463,13 @@ function currentUser() {
   const role = localStorage.getItem("role") || "client";
   const id = Number(localStorage.getItem("userId")) || (role === "worker" ? 201 : 101);
   const db = readDb();
-  if (role === "admin") return { id: id || 999, role: "admin", name: "Bricky Admin", email: "admin@bricky.dev" };
-  const user = role === "worker" ? db.workers.find((w) => Number(w.userId) === id) : db.clients.find((c) => Number(c.id) === id);
+  const user =
+    role === "worker"
+      ? db.workers.find((w) => Number(w.userId) === id)
+      : ["admin", "super_admin"].includes(role)
+      ? db.admins?.find((a) => Number(a.id) === id)
+      : db.clients.find((c) => Number(c.id) === id);
   return user || { id, userId: id, role, name: role === "worker" ? "Dev Worker" : "Dev Client" };
-}
-
-function findAccount(db, role, id) {
-  if (role === "client") return db.clients.find((client) => Number(client.id) === Number(id)) || null;
-  if (role === "worker") return db.workers.find((worker) => Number(worker.userId) === Number(id)) || null;
-  return role === "admin" ? { id: 999, role: "admin", accountStatus: "active" } : null;
-}
-
-function isActiveAccount(account) {
-  return Boolean(account) && (account.accountStatus || "active") === "active";
-}
-
-function isEligibleWorker(worker) {
-  return isActiveAccount(worker) && (worker.moderationStatus || "pending_review") === "approved";
-}
-
-function isApprovedRequest(request) {
-  return request?.moderationStatus === "approved";
-}
-
-function setRequestStatus(request, statusKey) {
-  request.statusKey = statusKey;
-  request.status = statusKey;
-}
-
-function isCompletedRequest(request) {
-  const status = String(request?.status || "").toLowerCase();
-  return Boolean(request?.completedAt) || status === "completed" || status.includes("завършен");
-}
-
-function isCanceledRequest(request) {
-  const status = String(request?.status || "").toLowerCase();
-  return status === "canceled" || status === "cancelled" || status.includes("отказан");
-}
-
-function isOpenApprovedRequest(request) {
-  return isApprovedRequest(request) && !isCompletedRequest(request) && !isCanceledRequest(request);
-}
-
-function publicRequest(request) {
-  const approvedImages = (images) => (Array.isArray(images) ? images : [])
-    .filter((image) => image.moderationStatus === "approved");
-  return {
-    ...request,
-    photos: approvedImages(request.photos),
-    beforePhotos: approvedImages(request.beforePhotos),
-    afterPhotos: approvedImages(request.afterPhotos),
-  };
-}
-
-function publicCompletedJob(job) {
-  const approvedImages = (images) => (Array.isArray(images) ? images : [])
-    .filter((image) => image.moderationStatus === "approved");
-  return {
-    ...job,
-    beforePhotos: approvedImages(job.beforePhotos),
-    afterPhotos: approvedImages(job.afterPhotos),
-  };
-}
-
-function publicWorker(worker) {
-  const result = publicUser(worker);
-  return {
-    ...result,
-    avatarUrl: worker.avatarModerationStatus === "approved" ? result.avatarUrl : "",
-    completedJobs: (result.completedJobs || []).map(publicCompletedJob),
-  };
-}
-
-function requireActiveMockAccount(db, role, id) {
-  const account = findAccount(db, role, id);
-  if (!isActiveAccount(account)) return null;
-  return account;
-}
-
-function requireEligibleMockWorker(db, id) {
-  const worker = findAccount(db, "worker", id);
-  return isEligibleWorker(worker) ? worker : null;
 }
 
 
@@ -567,15 +505,19 @@ function currentWorker(db = readDb()) {
   return db.workers.find((w) => Number(w.userId) === userId) || null;
 }
 
-function assertActiveDevWorker(db) {
+function activeCurrentWorker(db = readDb()) {
   const worker = currentWorker(db);
-  if (!isActiveAccount(worker)) throw new Error("Спреният акаунт няма достъп до тази операция.");
+  if (!worker || worker.status !== "active") {
+    const error = new Error("Worker account is not active");
+    error.response = { status: 401, data: { message: error.message } };
+    throw error;
+  }
   return worker;
 }
 
 export function saveDevWorkerProfile(data = {}) {
   const db = readDb();
-  const worker = assertActiveDevWorker(db);
+  const worker = activeCurrentWorker(db);
 
   Object.assign(worker, {
     fullName: data.fullName ?? worker.fullName,
@@ -584,57 +526,95 @@ export function saveDevWorkerProfile(data = {}) {
     description: data.description ?? worker.description,
     experience: data.experience ?? worker.experience,
     equipment: data.equipment ?? worker.equipment,
+    skills: Array.isArray(data.skills) ? data.skills : worker.skills,
   });
-  worker.moderationStatus = "pending_review";
-  worker.moderationReason = null;
 
   writeDb(db);
-  return publicUser(worker);
+  return publicUser(worker, db);
+}
+
+export async function updateDevWorkerAppearance(data = {}) {
+  const db = readDb();
+  const worker = activeCurrentWorker(db);
+
+  const key = String(data?.profileBannerKey || "").trim();
+  if (!WORKER_BANNER_CATALOG[key]) {
+    const error = new Error("Unknown banner key");
+    error.response = { status: 400, data: { message: "Unknown banner key" } };
+    throw error;
+  }
+
+  worker.profileBannerKey = key;
+  writeDb(db);
+  return { profileBannerKey: key };
 }
 
 export async function uploadDevWorkerAvatar(file) {
   const db = readDb();
-  const worker = assertActiveDevWorker(db);
+  const worker = activeCurrentWorker(db);
   if (!file) return null;
 
   const url = await fileToDataUrl(file);
-  worker.avatarUrl = url;
-  worker.avatarModerationStatus = "pending_review";
+  db.media = Array.isArray(db.media) ? db.media : [];
+  db.media.push({
+    id: nextMockMediaId(db),
+    kind: "worker_avatar",
+    ownerUserId: worker.userId,
+    workerUserId: worker.userId,
+    publicUrl: url,
+    storageKey: url,
+    fileName: file.name,
+    moderationStatus: "pending",
+    createdAt: nowIso(),
+  });
   writeDb(db);
-  return publicUser(worker);
+  return publicUser(worker, db);
 }
 
 export async function uploadDevWorkerGallery(files = []) {
   const db = readDb();
-  const worker = assertActiveDevWorker(db);
+  const worker = activeCurrentWorker(db);
 
   const clean = Array.from(files).filter((file) => String(file?.type || "").startsWith("image/"));
   const images = await Promise.all(
     clean.map(async (file) => ({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: nextMockMediaId(db),
+      kind: "worker_gallery",
+      ownerUserId: worker.userId,
+      workerUserId: worker.userId,
       userId: worker.userId,
-      name: file.name,
-      url: await fileToDataUrl(file),
-      moderationStatus: "pending_review",
+      fileName: file.name,
+      publicUrl: await fileToDataUrl(file),
+      storageKey: file.name,
+      moderationStatus: "pending",
       created_at: nowIso(),
+      createdAt: nowIso(),
     }))
   );
 
-  worker.gallery = [...(Array.isArray(worker.gallery) ? worker.gallery : []), ...images];
+  db.media = [...(Array.isArray(db.media) ? db.media : []), ...images];
   writeDb(db);
-  return worker.gallery;
+  return workerGallery(db, worker, true);
 }
 
 export function deleteDevWorkerGalleryImage(imageId) {
   const db = readDb();
-  const worker = assertActiveDevWorker(db);
+  const worker = activeCurrentWorker(db);
 
   worker.gallery = (Array.isArray(worker.gallery) ? worker.gallery : []).filter((img) => String(img.id) !== String(imageId));
+  db.media = (Array.isArray(db.media) ? db.media : []).filter(
+    (media) =>
+      !(
+        String(media.id) === String(imageId) &&
+        Number(media.ownerUserId || media.workerUserId) === Number(worker.userId) &&
+        media.kind === "worker_gallery"
+      )
+  );
   writeDb(db);
-  return worker.gallery;
+  return workerGallery(db, worker, true);
 }
 function response(data, status = 200) {
-  return Promise.resolve({ data, status, statusText: "OK", headers: {}, config: {} });
+  return Promise.resolve({ data: decorateMockResponse(data), status, statusText: "OK", headers: {}, config: {} });
 }
 
 function fail(message, status = 400) {
@@ -661,8 +641,230 @@ function normalizePhotos(items = []) {
       id: photo.photo?.id || `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
       name: photo.photo?.name || "Снимка",
       url: photo.url,
+      moderationStatus: photo.photo?.moderationStatus,
       created_at: photo.photo?.created_at || photo.photo?.createdAt || nowIso(),
     }));
+}
+
+function maxMediaId(db) {
+  return Math.max(0, ...(Array.isArray(db?.media) ? db.media : []).map((media) => Number(media.id) || 0));
+}
+
+function nextMockMediaId(db) {
+  db.nextMediaId = Math.max(Number(db.nextMediaId || 0), maxMediaId(db) + 1);
+  return db.nextMediaId++;
+}
+
+function ensureRequestMediaRecords(db) {
+  db.media = Array.isArray(db.media) ? db.media : [];
+  (Array.isArray(db.requests) ? db.requests : []).forEach((req) => {
+    const status = requestStatusKey(req);
+    const beforeModerationStatus = status === "archived" ? "rejected" : status === "pending_admin" ? "pending" : "approved";
+    const addPhotos = (photos, kind, moderationStatus) => normalizePhotos(photos).forEach((photo) => {
+      const exists = db.media.some(
+        (media) => Number(media.requestId) === Number(req.id) && media.kind === kind && media.publicUrl === photo.url,
+      );
+      if (exists) return;
+      db.media.push({
+        id: nextMockMediaId(db),
+        kind,
+        ownerUserId: kind === "request_after" ? req.assignedWorkerUserId : req.clientUserId,
+        workerUserId: kind === "request_after" ? req.assignedWorkerUserId : null,
+        requestId: req.id,
+        publicUrl: photo.url,
+        moderationStatus: photo.moderationStatus || moderationStatus,
+        createdAt: photo.created_at || nowIso(),
+      });
+    });
+
+    addPhotos(req.beforePhotos || req.photos, "request_before", beforeModerationStatus);
+    addPhotos(req.afterPhotos, "request_after", "pending");
+  });
+  return db.media;
+}
+
+function saveMockRequestMedia(db, req, ownerUserId, kind, photos, moderationStatus = "pending") {
+  db.media = Array.isArray(db.media) ? db.media : [];
+  const normalized = normalizePhotos(photos).map((photo) => ({
+    ...photo,
+    moderationStatus,
+  }));
+
+  normalized.forEach((photo) => {
+    const exists = db.media.some(
+      (media) =>
+        Number(media.requestId) === Number(req.id) &&
+        media.kind === kind &&
+        (media.publicUrl || media.url) === photo.url,
+    );
+    if (exists) return;
+    db.media.push({
+      id: nextMockMediaId(db),
+      kind,
+      ownerUserId,
+      workerUserId: kind === "request_after" ? ownerUserId : null,
+      requestId: req.id,
+      publicUrl: photo.url,
+      storageKey: photo.url,
+      moderationStatus,
+      createdAt: photo.created_at || nowIso(),
+    });
+  });
+
+  return normalized;
+}
+
+function requestMediaPhotos(db, requestId, kind, includeUnapproved = false) {
+  return (Array.isArray(db.media) ? db.media : [])
+    .filter((media) => Number(media.requestId) === Number(requestId) && media.kind === kind)
+    .filter((media) => includeUnapproved || media.moderationStatus === "approved")
+    .sort(
+      (a, b) =>
+        Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+          Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+        new Date(a.createdAt || a.created_at || 0) - new Date(b.createdAt || b.created_at || 0),
+    )
+    .map((media) => ({
+      id: media.id,
+      name: media.fileName || media.name || `media-${media.id}`,
+      url: media.publicUrl || media.url,
+      publicUrl: media.publicUrl || media.url,
+      storageKey: media.storageKey,
+      moderationStatus: media.moderationStatus,
+      displayOrder: media.displayOrder ?? null,
+      created_at: media.createdAt || media.created_at || nowIso(),
+    }));
+}
+
+function completedJobsForWorker(db, worker, includeUnapproved = false) {
+  const workerUserId = Number(worker?.userId || worker?.id);
+  const canonical = (Array.isArray(db.requests) ? db.requests : [])
+    .filter(
+      (req) =>
+        Number(req.assignedWorkerUserId) === workerUserId &&
+        requestStatusKey(req) === "completed" &&
+        Boolean(req.archivedAt),
+    )
+    .map((req) => {
+      const beforePhotos = requestMediaPhotos(db, req.id, "request_before", includeUnapproved);
+      const afterPhotos = requestMediaPhotos(db, req.id, "request_after", includeUnapproved);
+      const portfolioPhotos = [...afterPhotos, ...beforePhotos].sort(
+        (a, b) =>
+          Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+          Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER),
+      );
+      return {
+        id: req.id,
+        requestId: req.id,
+        category: req.category,
+        categoryKey: req.categoryKey,
+        address: req.addressVisibility === "rough_area" ? req.address : null,
+        description: req.description,
+        startedAt: req.created_at,
+        completedAt: req.completedAt,
+        durationDays: req.durationDays,
+        beforePhotos,
+        afterPhotos,
+        portfolioPhotos,
+        created_at: req.created_at,
+      };
+    });
+  const canonicalIds = new Set(canonical.map((job) => Number(job.requestId)));
+  const legacy = (Array.isArray(worker?.completedJobs) ? worker.completedJobs : [])
+    .filter((job) => !canonicalIds.has(Number(job.requestId)))
+    .map((job) => ({
+      ...job,
+      beforePhotos: normalizePhotos(job.beforePhotos || job.photos).filter(
+        (photo) => includeUnapproved || !photo.moderationStatus || photo.moderationStatus === "approved",
+      ),
+      afterPhotos: normalizePhotos(job.afterPhotos).filter(
+        (photo) => includeUnapproved || !photo.moderationStatus || photo.moderationStatus === "approved",
+      ),
+    }));
+
+  return sortNewest([...canonical, ...legacy]);
+}
+
+function approvedWorkerAvatarUrl(db, worker) {
+  const workerUserId = Number(worker?.userId || worker?.id);
+  const avatarMedia = (Array.isArray(db?.media) ? db.media : [])
+    .filter((media) => media.kind === "worker_avatar")
+    .filter((media) => Number(media.workerUserId || media.ownerUserId) === workerUserId);
+  const approvedAvatar = avatarMedia
+    .filter((media) => media.moderationStatus === "approved")
+    .sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))[0];
+
+  if (approvedAvatar) return approvedAvatar.publicUrl || approvedAvatar.url || "";
+
+  const legacyUrl = worker?.avatarUrl || "";
+  const legacyUrlIsRejectedOrPendingMedia = avatarMedia.some(
+    (media) => (media.publicUrl || media.url) === legacyUrl && media.moderationStatus !== "approved",
+  );
+
+  return legacyUrlIsRejectedOrPendingMedia ? "" : legacyUrl;
+}
+
+function workerGallery(db, worker, includeUnapproved = false) {
+  const workerUserId = Number(worker?.userId || worker?.id);
+  const mediaPhotos = (Array.isArray(db?.media) ? db.media : [])
+    .filter((media) => media.kind === "worker_gallery")
+    .filter((media) => Number(media.workerUserId || media.ownerUserId) === workerUserId)
+    .filter((media) => includeUnapproved || media.moderationStatus === "approved")
+    .map((media) => ({
+      id: media.id,
+      userId: workerUserId,
+      name: media.fileName || media.name || `media-${media.id}`,
+      url: media.publicUrl || media.url,
+      publicUrl: media.publicUrl || media.url,
+      storageKey: media.storageKey,
+      moderationStatus: media.moderationStatus || "pending",
+      displayOrder: media.displayOrder ?? null,
+      created_at: media.created_at || media.createdAt || nowIso(),
+      createdAt: media.createdAt || media.created_at || nowIso(),
+    }));
+
+  const legacyPhotos = (Array.isArray(worker?.gallery) ? worker.gallery : []).map((photo) => ({
+    ...photo,
+    moderationStatus: photo.moderationStatus || "approved",
+  }));
+
+  return [...mediaPhotos, ...legacyPhotos].sort(
+    (a, b) =>
+      Number(a.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+        Number(b.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+      new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0),
+  );
+}
+
+function applyMockMediaModeration(db, media, moderationStatus) {
+  media.moderationStatus = moderationStatus;
+
+  if (media.kind === "worker_avatar" && moderationStatus === "approved") {
+    const workerUserId = Number(media.workerUserId || media.ownerUserId);
+    (Array.isArray(db.media) ? db.media : []).forEach((item) => {
+      if (
+        Number(item.id) !== Number(media.id) &&
+        item.kind === "worker_avatar" &&
+        Number(item.workerUserId || item.ownerUserId) === workerUserId &&
+        item.moderationStatus === "approved"
+      ) {
+        item.moderationStatus = "rejected";
+      }
+    });
+
+    const worker = db.workers.find((item) => Number(item.userId) === workerUserId);
+    if (worker) worker.avatarUrl = media.publicUrl || media.url || worker.avatarUrl || "";
+  }
+
+  if (media.kind === "worker_avatar" && moderationStatus === "rejected") {
+    const workerUserId = Number(media.workerUserId || media.ownerUserId);
+    const worker = db.workers.find((item) => Number(item.userId) === workerUserId);
+    if (worker && worker.avatarUrl === (media.publicUrl || media.url)) {
+      worker.avatarUrl = approvedWorkerAvatarUrl(db, worker);
+    }
+  }
+
+  return media;
 }
 
 function completionDurationDays(req, completedAt = nowIso()) {
@@ -685,7 +887,6 @@ function ensureWorkerJobHistory(worker, req) {
     startedAt: req.created_at,
     completedAt: req.completedAt,
     durationDays: req.durationDays,
-    moderationStatus: req.moderationStatus,
     beforePhotos: normalizePhotos(req.beforePhotos || req.photos),
     afterPhotos: normalizePhotos(req.afterPhotos),
     created_at: existing?.created_at || nowIso(),
@@ -697,37 +898,38 @@ function ensureWorkerJobHistory(worker, req) {
   return item;
 }
 
-function addRequestPhotosToWorkerGallery(worker, req) {
-  const before = normalizePhotos(req.beforePhotos || req.photos).map((photo) => ({
-    ...photo,
-    id: `before-${req.id}-${photo.id}`,
-    userId: worker.userId,
-    requestId: req.id,
-    phase: "before",
-    label: "Преди ремонт",
-  }));
-  const after = normalizePhotos(req.afterPhotos).map((photo) => ({
-    ...photo,
-    id: `after-${req.id}-${photo.id}`,
-    userId: worker.userId,
-    requestId: req.id,
-    phase: "after",
-    label: "След ремонт",
-  }));
-
-  const incoming = [...before, ...after];
-  if (!incoming.length) return;
-
-  const gallery = Array.isArray(worker.gallery) ? worker.gallery : [];
-  const existingIds = new Set(gallery.map((img) => String(img.id)));
-  worker.gallery = [...incoming.filter((img) => !existingIds.has(String(img.id))), ...gallery];
-}
 function asPath(url) {
   return String(url || "").split("?")[0].replace(/^\/api/, "");
 }
 
-function publicUser(user) {
+function queryParam(url, key) {
+  const [, query = ""] = String(url || "").split("?");
+  return new URLSearchParams(query).get(key);
+}
+
+function repairCategoryOption(value) {
+  const raw = String(value || "").trim();
+  return (
+    REPAIR_CATEGORY_OPTIONS.find(
+      (category) => category.key === raw || category.label === raw || category.shortLabel === raw,
+    ) || getRepairCategoryByLabel(raw)
+  );
+}
+
+function normalizeSkillKey(value) {
+  const option = repairCategoryOption(value);
+  return option?.key || "small_repairs";
+}
+
+function skillLabel(value) {
+  const option = repairCategoryOption(value);
+  return option?.shortLabel || option?.label || value;
+}
+
+function publicUser(user, db = null) {
   if (!user) return null;
+  const skillKeys = (Array.isArray(user.skills) ? user.skills : []).map(normalizeSkillKey);
+  const avatarUrl = user.role === "worker" && db ? approvedWorkerAvatarUrl(db, user) : user.avatarUrl || "";
   return {
     id: user.id || user.userId,
     userId: user.userId || user.id,
@@ -737,16 +939,109 @@ function publicUser(user) {
     email: user.email,
     phone: user.phone,
     address: user.address,
+    status: user.status || "active",
     city: user.city,
-    skills: user.skills || [],
+    skills: skillKeys.map(skillLabel),
+    skillKeys,
     description: user.description,
     experience: user.experience,
     equipment: user.equipment,
-    avatarUrl: user.avatarUrl || "",
-    accountStatus: user.accountStatus || "active",
-    moderationStatus: user.moderationStatus,
-    avatarModerationStatus: user.avatarModerationStatus,
+    avatarUrl,
+    approvalStatus: user.approvalStatus,
+    visibilityStatus: user.visibilityStatus,
+    isBoosted: Boolean(user.isBoosted),
+    boostSource: user.boostSource || null,
+    boostEndsAt: user.boostEndsAt || null,
     completedJobs: user.completedJobs || [],
+    profileBannerKey: WORKER_BANNER_CATALOG[user.profileBannerKey]
+      ? user.profileBannerKey
+      : DEFAULT_WORKER_BANNER_KEY,
+  };
+}
+
+function publicWorker(user, db) {
+  const worker = publicUser(user, db);
+  if (!worker) return null;
+
+  return {
+    ...worker,
+    email: null,
+    phone: null,
+    address: null,
+  };
+}
+
+function mockWorkerCompletion(db, worker) {
+  const approvedGalleryCount = workerGallery(db, worker, false).length;
+  const media = (db.media || []).filter(
+    (item) => Number(item.ownerUserId) === Number(worker.userId),
+  );
+  const pendingModerationItems = Array.from(
+    new Set(
+      media
+        .filter((item) => item.moderationStatus === "pending")
+        .map((item) => item.kind || "media"),
+    ),
+  );
+  const checks = [
+    [Boolean(String(worker.fullName || worker.name || "").trim()), 10, "public_name", "Добави име", "profile:basic"],
+    [Boolean(String(worker.phone || "").trim()), 10, "phone", "Добави телефон за връзка", "onboarding:contact"],
+    [Boolean(String(worker.city || "").trim()), 10, "service_area", "Добави град или район на работа", "onboarding:activity"],
+    [Array.isArray(worker.skills) && worker.skills.length > 0, 15, "skills", "Добави основна категория и специалности", "onboarding:activity"],
+    [Boolean(String(worker.description || "").trim()), 10, "bio", "Напиши кратко професионално представяне", "profile:about"],
+    [Boolean(approvedWorkerAvatarUrl(db, worker)), 10, "avatar", "Добави профилна снимка", "profile:avatar"],
+    [approvedGalleryCount >= 1, 10, "gallery_one", "Качи снимка от реален обект", "profile:gallery"],
+    [approvedGalleryCount >= 3, 15, "gallery_three", "Качи поне 3 одобрени снимки от реални обекти", "profile:gallery"],
+    [Boolean(worker.workType && worker.availabilityStatus), 5, "work_readiness", "Добави работен тип и текуща заетост", "onboarding:activity"],
+    [Boolean(worker.acquisitionSourceSelfReported && worker.onboardingCompletedAt), 5, "onboarding", "Завърши краткия onboarding", "onboarding:acquisition"],
+  ];
+  const score = checks.reduce((total, item) => total + (item[0] ? item[1] : 0), 0);
+  const missingItems = checks
+    .filter((item) => !item[0])
+    .map((item) => ({ key: item[2], label: item[3], points: item[1], target: item[4] }));
+  const onboardingStatus = worker.onboardingCompletedAt
+    ? "completed"
+    : Number(worker.onboardingStep || 1) > 1
+      ? "in_progress"
+      : "not_started";
+
+  return {
+    percentage: score,
+    score,
+    missingItems,
+    pendingModerationItems,
+    nextRecommendedAction: missingItems[0] || null,
+    onboardingStatus,
+  };
+}
+
+function mockWorkerOnboardingState(db, worker) {
+  const completion = mockWorkerCompletion(db, worker);
+  return {
+    currentStep: Math.min(4, Math.max(1, Number(worker.onboardingStep || 1))),
+    onboardingStatus: completion.onboardingStatus,
+    contact: {
+      phone: worker.phone || "",
+      preferredContactMethod: worker.preferredContactMethod || "",
+      contactAccuracyConfirmed: Boolean(worker.contactAccuracyConfirmed),
+    },
+    activity: {
+      primaryCategoryKey: worker.primaryCategoryKey || "",
+      skills: (worker.skills || []).map(normalizeSkillKey),
+      workType: worker.workType || "",
+      experienceRange: worker.experienceRange || "",
+      city: worker.city || "",
+      availabilityStatus: worker.availabilityStatus || "",
+    },
+    acquisition: {
+      source: worker.acquisitionSourceSelfReported || "",
+      detail: worker.acquisitionSourceDetail || "",
+    },
+    readiness: {
+      projectPhotosReadiness: worker.projectPhotosReadiness || "",
+      serviceDescriptionReadiness: worker.serviceDescriptionReadiness || "",
+    },
+    completion,
   };
 }
 
@@ -770,11 +1065,13 @@ export function isDevMockToken() {
 
 export function setDevIdentity(role, id) {
   const db = readDb();
-  const user = role === "admin"
-    ? { id: Number(id) || 999, role: "admin", name: "Bricky Admin", email: "admin@bricky.dev" }
-    : role === "worker" ? db.workers.find((w) => Number(w.userId) === Number(id)) : db.clients.find((c) => Number(c.id) === Number(id));
-  if (!user) return null;
-  if (role !== "admin" && !isActiveAccount(user)) return null;
+  const user =
+    role === "worker"
+      ? db.workers.find((w) => Number(w.userId) === Number(id))
+      : ["admin", "super_admin"].includes(role)
+      ? db.admins?.find((a) => Number(a.id) === Number(id))
+      : db.clients.find((c) => Number(c.id) === Number(id));
+  if (!user || (user.status && user.status !== "active")) return null;
 
   const userId = role === "worker" ? user.userId : user.id;
   localStorage.setItem("token", `local-dev-token-${role}-${userId}`);
@@ -782,313 +1079,1055 @@ export function setDevIdentity(role, id) {
   localStorage.setItem("userId", String(userId));
   localStorage.setItem("userName", user.name || user.fullName || "Dev User");
   window.dispatchEvent(new Event("bricky-dev-identity-changed"));
-  return publicUser(user);
+  return publicUser(user, db);
 }
 
 export function resetDevDb() {
-  writeDb(normalizeMockEnforcementState(seedDb()));
+  writeDb(seedDb());
   window.dispatchEvent(new Event("bricky-dev-identity-changed"));
 }
 
 export function getDevIdentities() {
   const db = readDb();
-  return { clients: db.clients, workers: db.workers, admins: [{ id: 999, role: "admin", name: "Bricky Admin" }] };
+  return { admins: db.admins || ADMINS, clients: db.clients, workers: db.workers };
+}
+
+function makeReferralCode(seed) {
+  const compact = String(seed || "BRICKY").replace(/[^a-z0-9]/gi, "").slice(0, 5).toUpperCase() || "BRICK";
+  return `BR${compact}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+}
+
+function getOrCreateWorkerReferral(db, workerUserId) {
+  const existing = db.referrals.find((referral) => Number(referral.referrerUserId) === Number(workerUserId) && !referral.referredUserId);
+  if (existing) return existing;
+
+  const worker = db.workers.find((w) => Number(w.userId) === Number(workerUserId));
+  const referral = {
+    id: db.nextReferralId++,
+    code: makeReferralCode(worker?.fullName || workerUserId),
+    type: "worker_invites_worker",
+    referrerUserId: Number(workerUserId),
+    referredUserId: null,
+    status: "created",
+    qualifiedRepairCount: 0,
+    createdAt: nowIso(),
+    rewards: [],
+  };
+  db.referrals.push(referral);
+  return referral;
+}
+
+function referralSummary(db, workerUserId) {
+  const ownCode = getOrCreateWorkerReferral(db, workerUserId);
+  const invites = db.referrals.filter((referral) => Number(referral.referrerUserId) === Number(workerUserId));
+  const rewards = invites.flatMap((referral) => referral.rewards || []);
+
+  return {
+    code: ownCode.code,
+    referralUrl: `${window.location.origin}/worker/register?ref=${ownCode.code}`,
+    invites,
+    rewards,
+  };
+}
+
+function addAudit(db, action, targetType, targetId, reason = "dev_mock") {
+  db.auditLogs = Array.isArray(db.auditLogs) ? db.auditLogs : [];
+  db.auditLogs.unshift({
+    id: db.auditLogs.length ? Math.max(...db.auditLogs.map((log) => Number(log.id) || 0)) + 1 : 1,
+    adminUserId: Number(localStorage.getItem("userId") || 1),
+    action,
+    targetType,
+    targetId,
+    reason,
+    createdAt: nowIso(),
+  });
+}
+
+function maybeActivateReferralReward(db, workerUserId) {
+  const referral = db.referrals.find((ref) => Number(ref.referredUserId) === Number(workerUserId));
+  if (!referral || referral.status === "rejected") return;
+
+  const completedForWorker = db.requests.filter((req) => {
+    const status = requestStatusKey(req);
+    return Number(req.assignedWorkerUserId) === Number(workerUserId) && status === "completed" && Boolean(req.archivedAt);
+  });
+  const uniqueClients = new Set(completedForWorker.map((req) => Number(req.clientUserId)));
+  referral.qualifiedRepairCount = Math.min(uniqueClients.size, 2);
+
+  if (referral.qualifiedRepairCount >= 2 && !(referral.rewards || []).some((reward) => reward.status === "active")) {
+    const startsAt = nowIso();
+    const endsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    referral.status = "rewarded";
+    referral.rewards = [
+      ...(referral.rewards || []),
+      {
+        id: db.nextRewardId++,
+        referralId: referral.id,
+        rewardType: "worker_visibility_boost_30d",
+        status: "active",
+        startsAt,
+        endsAt,
+      },
+    ];
+
+    const referrer = db.workers.find((worker) => Number(worker.userId) === Number(referral.referrerUserId));
+    if (referrer) {
+      referrer.isBoosted = true;
+      referrer.boostSource = "referral";
+      referrer.boostEndsAt = endsAt;
+    }
+  } else if (referral.referredUserId) {
+    referral.status = "accepted";
+  }
+}
+
+function findMockWorker(db, workerUserId) {
+  return db.workers.find((worker) => Number(worker.userId) === Number(workerUserId));
+}
+
+function ensureMockWorkerCanTakeJobs(db, workerUserId) {
+  const worker = findMockWorker(db, workerUserId);
+  if (!worker) return fail("Worker account not found", 403);
+  if (worker.status && worker.status !== "active") return fail("Worker account is not active", 403);
+  if (worker.approvalStatus !== "approved") return fail("Worker profile is not approved", 403);
+  if (["hidden", "suspended"].includes(String(worker.visibilityStatus || "").toLowerCase())) {
+    return fail("Worker profile is not visible", 403);
+  }
+  return null;
+}
+
+function requestStatusKey(req) {
+  if (req?.statusKey) return req.statusKey;
+  const label = String(req?.status || "").toLowerCase();
+  return Object.entries(REQUEST_STATUS_LABELS).find(([, value]) => value === label)?.[0] || label || "pending_admin";
+}
+
+function roughRequestAddress(address) {
+  const value = String(address || "").trim();
+  if (!value) return null;
+  return value.split(",")[0]?.trim() || null;
+}
+
+function roughRequestCoordinate(value) {
+  const coordinate = Number(value);
+  if (!Number.isFinite(coordinate)) return null;
+  return Number(coordinate.toFixed(2));
+}
+
+function workerVisibleRequestPhotos(db, request, kind, workerUserId) {
+  const mediaRows = (Array.isArray(db.media) ? db.media : []).filter(
+    (media) => Number(media.requestId) === Number(request.id) && media.kind === kind,
+  );
+  if (mediaRows.length) {
+    return mediaRows
+      .filter(
+        (media) =>
+          media.moderationStatus === "approved" ||
+          (kind === "request_after" && Number(media.ownerUserId) === Number(workerUserId)),
+      )
+      .map((media) => ({
+        id: media.id,
+        name: media.fileName || media.name || `media-${media.id}`,
+        url: media.publicUrl || media.url,
+        publicUrl: media.publicUrl || media.url,
+        storageKey: media.storageKey,
+        moderationStatus: media.moderationStatus,
+        created_at: media.createdAt || media.created_at || nowIso(),
+      }));
+  }
+
+  const fallback = kind === "request_before" ? request.beforePhotos || request.photos : request.afterPhotos;
+  return normalizePhotos(fallback).filter(
+    (photo) => !photo.moderationStatus || photo.moderationStatus === "approved",
+  );
+}
+
+function workerRequestView(request, workerUserId, db) {
+  const isAssigned =
+    Number(request.assignedWorkerUserId) === Number(workerUserId);
+  const beforePhotos = workerVisibleRequestPhotos(db, request, "request_before", workerUserId);
+  const afterPhotos = workerVisibleRequestPhotos(db, request, "request_after", workerUserId);
+
+  return {
+    ...request,
+    photos: beforePhotos,
+    beforePhotos,
+    afterPhotos,
+    clientName: isAssigned ? request.clientName : "Клиент",
+    email: null,
+    phone: null,
+    address: isAssigned ? request.address : roughRequestAddress(request.address),
+    addressText: isAssigned
+      ? request.addressText || request.address
+      : roughRequestAddress(request.addressText || request.address),
+    addressPrecision: isAssigned ? "exact" : "rough",
+    latitude: isAssigned
+      ? request.latitude
+      : roughRequestCoordinate(request.latitude),
+    longitude: isAssigned
+      ? request.longitude
+      : roughRequestCoordinate(request.longitude),
+  };
+}
+
+function setMockRequestStatus(req, statusKey) {
+  req.statusKey = statusKey;
+  delete req.status;
+  decorateMockRequest(req);
+}
+
+function addMockRequestEvent(db, requestId, eventType, metadataJson = {}) {
+  db.requestEvents = Array.isArray(db.requestEvents) ? db.requestEvents : [];
+  db.requestEvents.push({
+    id: db.requestEvents.length
+      ? Math.max(...db.requestEvents.map((event) => Number(event.id) || 0)) + 1
+      : 1,
+    requestId: Number(requestId),
+    actorUserId: Number(localStorage.getItem("userId") || 1),
+    eventType,
+    metadataJson,
+    createdAt: nowIso(),
+  });
+}
+
+function mockAdminCategories(db) {
+  return (db.repairCategories || []).map((category, index) => ({
+    id: category.id || index + 1,
+    categoryKey: category.categoryKey || category.key,
+    label: category.label,
+    description: category.description || null,
+    isActive: category.isActive !== false,
+    sortOrder: Number(category.sortOrder ?? (index + 1) * 10),
+    activities:
+      Array.isArray(category.activities) && category.activities.length
+        ? category.activities
+        : [
+            {
+              id: `${category.categoryKey || category.key}:general`,
+              categoryKey: category.categoryKey || category.key,
+              activityKey: "general",
+              label: category.shortLabel || category.label,
+              unitType: category.unit || null,
+              isActive: true,
+              sortOrder: 10,
+            },
+          ],
+  }));
+}
+
+function mockRequestApplications(req) {
+  if (!Array.isArray(req.applications)) {
+    const legacyIds = Array.from(new Set((req.appliedWorkers || []).map(Number).filter(Boolean)));
+    req.applications = legacyIds.map((workerUserId) => ({
+      id: `${req.id}:${workerUserId}`,
+      workerUserId,
+      status:
+        Number(req.assignedWorkerUserId) === workerUserId
+          ? "assigned"
+          : req.assignedWorkerUserId
+            ? "rejected"
+            : "applied",
+      offerMin: null,
+      offerMax: null,
+      message: null,
+      createdAt: req.created_at || null,
+      updatedAt: null,
+    }));
+  }
+  delete req.appliedWorkers;
+  return req.applications;
+}
+
+function activeMockApplications(req) {
+  return mockRequestApplications(req).filter(
+    (application) => !["withdrawn", "rejected"].includes(application.status),
+  );
+}
+
+function decorateMockRequest(req) {
+  if (
+    !Object.prototype.hasOwnProperty.call(req, "assignedWorkerUserId") &&
+    Object.prototype.hasOwnProperty.call(req, "assignedWorkerId")
+  ) {
+    req.assignedWorkerUserId = req.assignedWorkerId;
+  }
+  delete req.assignedWorkerId;
+  delete req.completedByWorkerId;
+  const statusKey = requestStatusKey(req);
+  delete req.status;
+  const lifecycleStatusKey = REQUEST_LIFECYCLE_STATUS[statusKey] || statusKey;
+  mockRequestApplications(req);
+  req.lifecycleStatusKey = lifecycleStatusKey;
+  req.statusLabel = REQUEST_LIFECYCLE_LABELS[lifecycleStatusKey] || statusKey;
+  req.nextActor = REQUEST_LIFECYCLE_NEXT_ACTOR[lifecycleStatusKey] ?? null;
+  req.allowedActions = [...(REQUEST_LIFECYCLE_ALLOWED_ACTIONS[lifecycleStatusKey] || [])];
+  return req;
+}
+
+function decorateMockResponse(data) {
+  if (Array.isArray(data)) return data.map(decorateMockResponse);
+  if (!data || typeof data !== "object") return data;
+
+  const looksLikeRequest =
+    Object.prototype.hasOwnProperty.call(data, "clientUserId") &&
+    Object.prototype.hasOwnProperty.call(data, "id") &&
+    (Object.prototype.hasOwnProperty.call(data, "category") ||
+      Object.prototype.hasOwnProperty.call(data, "categoryKey")) &&
+    (Object.prototype.hasOwnProperty.call(data, "status") ||
+      Object.prototype.hasOwnProperty.call(data, "statusKey"));
+
+  return looksLikeRequest ? decorateMockRequest(data) : data;
+}
+
+function ensureMockRequestStatus(req, allowedStatuses, message = "Invalid request status") {
+  if (!allowedStatuses.includes(requestStatusKey(req))) return fail(message, 400);
+  return null;
+}
+
+function completeMockWorkerStep(db, req, workerUserId, allowedStatuses, nextStatus, afterPhotos = null) {
+  if (Number(req.assignedWorkerUserId) !== Number(workerUserId)) return fail("Not your job", 403);
+  const statusGuard = ensureMockRequestStatus(req, allowedStatuses, "Invalid request status transition");
+  if (statusGuard) return statusGuard;
+  setMockRequestStatus(req, nextStatus);
+  if (Array.isArray(afterPhotos)) {
+    req.afterPhotos = saveMockRequestMedia(db, req, workerUserId, "request_after", afterPhotos, "pending");
+  }
+  writeDb(db);
+  return response(req);
 }
 
 export async function mockRequest(method, url, data) {
   const db = readDb();
   const path = asPath(url);
+  const scope = queryParam(url, "scope");
   const user = currentUser();
   const role = localStorage.getItem("role") || user.role;
   const userId = role === "worker" ? Number(user.userId || user.id) : Number(user.id);
-
-  if ((role === "client" || role === "worker") && !requireActiveMockAccount(db, role, userId)) {
-    return fail("Акаунтът е спрян от администратор.", 401);
-  }
-
-  if (path.startsWith("/admin")) {
-    if (role !== "admin") return fail("Admin only", 403);
-    const params = new URL(String(url || ""), window.location.origin).searchParams;
-    const wantedStatus = params.get("status") || "pending_review";
-    const query = String(params.get("q") || "").toLowerCase();
-    const page = Math.max(1, Number(params.get("page")) || 1);
-    const limit = Math.max(1, Number(params.get("limit")) || 25);
-    const normalizeStatus = (item, fallback = "approved") => item.moderationStatus || fallback;
-    const pageRows = (rows) => rows
-      .filter((item) => normalizeStatus(item) === wantedStatus)
-      .filter((item) => !query || JSON.stringify(item).toLowerCase().includes(query))
-      .slice((page - 1) * limit, page * limit);
-    const requestRows = db.requests.map((item) => ({ ...item, moderationStatus: normalizeStatus(item, "pending_review") }));
-    const workerRows = db.workers.map((item) => ({ ...item, moderationStatus: normalizeStatus(item, "pending_review") }));
-    const reviewRows = db.reviews.map((item) => ({ ...item, moderationStatus: normalizeStatus(item, "pending_review") }));
-    const requestMediaRows = requestRows.flatMap((requestItem) => (requestItem.photos || []).map((photo, index) => ({
-      ...photo, id: `${requestItem.id}-${index}`, requestId: requestItem.id, source: "request",
-      moderationStatus: photo.moderationStatus || requestItem.moderationStatus,
-    })));
-    const requestAfterMediaRows = requestRows.flatMap((requestItem) => (requestItem.afterPhotos || []).map((photo, index) => ({
-      ...photo, id: `${requestItem.id}-after-${index}`, requestId: requestItem.id, source: "request", kind: "after",
-      moderationStatus: photo.moderationStatus || "pending_review",
-    })));
-    const galleryMediaRows = db.workers.flatMap((worker) => (worker.gallery || []).map((image) => ({
-      ...image,
-      source: "gallery",
-      workerId: worker.id,
-      userId: worker.userId,
-      moderationStatus: image.moderationStatus || "pending_review",
-    })));
-    const avatarMediaRows = db.workers
-      .filter((worker) => worker.avatarUrl)
-      .map((worker) => ({
-        id: worker.id,
-        source: "avatar",
-        workerId: worker.id,
-        userId: worker.userId,
-        url: worker.avatarUrl,
-        name: `${worker.fullName || worker.name || "Worker"} avatar`,
-        moderationStatus: worker.avatarModerationStatus || "pending_review",
-      }));
-    const mediaRows = [...requestMediaRows, ...requestAfterMediaRows, ...galleryMediaRows, ...avatarMediaRows];
-    const userRows = [
-      ...db.clients.map((item) => ({ ...item, accountStatus: item.accountStatus || "active" })),
-      ...db.workers.map((item) => ({ ...item, id: item.userId || item.id, accountStatus: item.accountStatus || "active" })),
-    ];
-    db.adminAuditLogs = Array.isArray(db.adminAuditLogs) ? db.adminAuditLogs : [];
-    const audit = (entityType, entityId, action, reason, oldValue = null, newValue = null) => {
-      db.adminAuditLogs.unshift({
-        id: Date.now() + db.adminAuditLogs.length, adminUserId: 999, entityType, entityId,
-        action, reason: reason || null, oldValue, newValue, ipAddress: "127.0.0.1",
-        created_at: new Date().toISOString(),
-      });
-    };
-
-    if (method === "get" && path === "/admin/dashboard") return response({
-      pendingRequests: requestRows.filter((item) => item.moderationStatus === "pending_review").length,
-      pendingMedia: mediaRows.filter((item) => item.moderationStatus === "pending_review").length,
-      pendingWorkers: workerRows.filter((item) => item.moderationStatus === "pending_review").length,
-      pendingReviews: reviewRows.filter((item) => item.moderationStatus === "pending_review").length,
-      activeRequests: requestRows.filter((item) => item.moderationStatus === "approved" && !item.completedAt).length,
-      completedRequests: requestRows.filter((item) => item.moderationStatus === "approved" && item.completedAt).length,
-      activeUsers: [...db.clients, ...db.workers].filter(isActiveAccount).length,
-      activeWorkers: workerRows.filter(isEligibleWorker).length,
-      recentActions: db.adminAuditLogs.slice(0, 10),
-      systemHealth: { api: "ok", database: "mock" },
-    });
-    if (method === "get" && path === "/admin/requests") return response(pageRows(requestRows));
-    if (method === "get" && path === "/admin/media") return response(pageRows(mediaRows));
-    if (method === "get" && path === "/admin/workers") return response(pageRows(workerRows));
-    if (method === "get" && path === "/admin/reviews") return response(pageRows(reviewRows));
-    if (method === "get" && path === "/admin/users") return response(userRows);
-    if (method === "get" && path === "/admin/audit-logs") {
-      const wantedAction = params.get("action") || "";
-      const rows = db.adminAuditLogs
-        .filter((item) => !wantedAction || item.action === wantedAction)
-        .filter((item) => !query || JSON.stringify(item).toLowerCase().includes(query));
-      return response(rows.slice((page - 1) * limit, page * limit));
-    }
-    const requestDetail = path.match(/^\/admin\/requests\/(\d+)$/);
-    if (method === "get" && requestDetail) {
-      const item = requestRows.find((entry) => Number(entry.id) === Number(requestDetail[1]));
-      return item ? response({ ...item, images: item.photos || [] }) : fail("Item not found", 404);
-    }
-    const mediaDetail = path.match(/^\/admin\/media\/(request|gallery|avatar)\/(.+)$/);
-    if (method === "get" && mediaDetail) {
-      const item = mediaRows.find((entry) => String(entry.id) === String(mediaDetail[2]) && entry.source === mediaDetail[1]);
-      return item ? response(item) : fail("Media not found", 404);
-    }
-    const workerDetail = path.match(/^\/admin\/workers\/(\d+)$/);
-    if (method === "get" && workerDetail) {
-      const item = workerRows.find((entry) => Number(entry.id) === Number(workerDetail[1]));
-      return item ? response(item) : fail("Worker not found", 404);
-    }
-    const reviewDetail = path.match(/^\/admin\/reviews\/(\d+)$/);
-    if (method === "get" && reviewDetail) {
-      const item = reviewRows.find((entry) => Number(entry.id) === Number(reviewDetail[1]));
-      return item ? response(item) : fail("Review not found", 404);
-    }
-    const userAction = path.match(/^\/admin\/users\/(\d+)\/(activate|suspend)$/);
-    if (method === "post" && userAction) {
-      const id = Number(userAction[1]);
-      const item = db.clients.find((entry) => Number(entry.id) === id) || db.workers.find((entry) => Number(entry.userId || entry.id) === id);
-      if (!item) return fail("User not found", 404);
-      const oldValue = { accountStatus: item.accountStatus || "active" };
-      item.accountStatus = userAction[2] === "suspend" ? "suspended" : "active";
-      audit("user", id, userAction[2], data?.reason, oldValue, { accountStatus: item.accountStatus });
-      writeDb(db); return response(item, 201);
-    }
-    const requestEdit = path.match(/^\/admin\/requests\/(\d+)$/);
-    if (method === "put" && requestEdit) {
-      const item = db.requests.find((entry) => Number(entry.id) === Number(requestEdit[1]));
-      if (!item) return fail("Item not found", 404);
-      const oldValue = { category: item.category, categoryKey: item.categoryKey, description: item.description, address: item.address };
-      ["category", "categoryKey", "description", "address"].forEach((field) => {
-        if (Object.prototype.hasOwnProperty.call(data || {}, field)) item[field] = data[field];
-      });
-      audit("request", item.id, "edited", data?.reason, oldValue, { category: item.category, categoryKey: item.categoryKey, description: item.description, address: item.address });
-      writeDb(db); return response(item);
-    }
-    if (method === "delete" && requestEdit) {
-      const index = db.requests.findIndex((entry) => Number(entry.id) === Number(requestEdit[1]));
-      if (index < 0) return fail("Item not found", 404);
-      const deleted = db.requests[index];
-      db.requests.splice(index, 1);
-      audit("request", deleted.id, "deleted", data?.reason, deleted, null);
-      writeDb(db); return response({ ok: true, id: Number(requestEdit[1]), reason: data?.reason || null });
-    }
-    const actionMatch = path.match(/^\/admin\/(requests|reviews)\/(\d+)\/(approved|rejected|hidden)$/);
-    if (method === "post" && actionMatch) {
-      const collection = actionMatch[1] === "requests" ? db.requests : db.reviews;
-      const item = collection.find((entry) => Number(entry.id) === Number(actionMatch[2]));
-      if (!item) return fail("Item not found", 404);
-      const oldValue = { moderationStatus: item.moderationStatus || "pending_review", moderationReason: item.moderationReason || null };
-      item.moderationStatus = actionMatch[3]; item.moderationReason = data?.reason || null;
-      audit(actionMatch[1] === "requests" ? "request" : "review", item.id, actionMatch[3], data?.reason, oldValue, { moderationStatus: item.moderationStatus, moderationReason: item.moderationReason });
-      writeDb(db); return response(item, 201);
-    }
-    const mediaAction = path.match(/^\/admin\/media\/(\d+)-(\d+)\/(approved|rejected|hidden)$/);
-    if (method === "post" && mediaAction) {
-      const requestItem = db.requests.find((entry) => Number(entry.id) === Number(mediaAction[1]));
-      const photo = requestItem?.photos?.[Number(mediaAction[2])];
-      if (!photo) return fail("Media not found", 404);
-      const oldValue = { moderationStatus: photo.moderationStatus || "pending_review" };
-      photo.moderationStatus = mediaAction[3]; photo.moderationReason = data?.reason || null;
-      [requestItem.beforePhotos, requestItem.afterPhotos].forEach((collection) => {
-        const linked = collection?.find((image) => String(image.id) === String(photo.id));
-        if (linked) {
-          linked.moderationStatus = mediaAction[3];
-          linked.moderationReason = data?.reason || null;
-        }
-      });
-      audit("request_media", Number(mediaAction[1]), mediaAction[3], data?.reason, oldValue, { moderationStatus: photo.moderationStatus });
-      writeDb(db); return response(photo, 201);
-    }
-    const afterMediaAction = path.match(/^\/admin\/media\/(\d+)-after-(\d+)\/(approved|rejected|hidden)$/);
-    if (method === "post" && afterMediaAction) {
-      const requestItem = db.requests.find((entry) => Number(entry.id) === Number(afterMediaAction[1]));
-      const photo = requestItem?.afterPhotos?.[Number(afterMediaAction[2])];
-      if (!photo) return fail("Media not found", 404);
-      const oldValue = { moderationStatus: photo.moderationStatus || "pending_review" };
-      photo.moderationStatus = afterMediaAction[3];
-      photo.moderationReason = data?.reason || null;
-      audit("request_media", Number(afterMediaAction[1]), afterMediaAction[3], data?.reason, oldValue, { moderationStatus: photo.moderationStatus });
-      writeDb(db); return response(photo, 201);
-    }
-    const galleryAction = path.match(/^\/admin\/media\/gallery\/(.+)\/(approved|rejected|hidden)$/);
-    if (method === "post" && galleryAction) {
-      const worker = db.workers.find((entry) => entry.gallery?.some((image) => String(image.id) === String(galleryAction[1])));
-      const image = worker?.gallery?.find((entry) => String(entry.id) === String(galleryAction[1]));
-      if (!image) return fail("Media not found", 404);
-      const oldValue = { moderationStatus: image.moderationStatus || "pending_review" };
-      image.moderationStatus = galleryAction[2];
-      image.moderationReason = data?.reason || null;
-      audit("gallery_media", image.id, galleryAction[2], data?.reason, oldValue, { moderationStatus: image.moderationStatus });
-      writeDb(db); return response(image, 201);
-    }
-    const workerAction = path.match(/^\/admin\/workers\/(\d+)\/(profile|avatar)\/(approved|rejected|hidden)$/);
-    if (method === "post" && workerAction) {
-      const item = db.workers.find((entry) => Number(entry.id) === Number(workerAction[1]));
-      if (!item) return fail("Worker not found", 404);
-      const statusField = workerAction[2] === "avatar" ? "avatarModerationStatus" : "moderationStatus";
-      const reasonField = workerAction[2] === "avatar" ? "avatarModerationReason" : "moderationReason";
-      const oldValue = { moderationStatus: item[statusField] || "pending_review" };
-      item[statusField] = workerAction[3]; item[reasonField] = data?.reason || null;
-      audit(`worker_${workerAction[2]}`, item.id, workerAction[3], data?.reason, oldValue, { moderationStatus: item[statusField] });
-      writeDb(db); return response(item, 201);
-    }
+  const requiresActiveSession =
+    path.startsWith("/workers/me") ||
+    path.startsWith("/requests") ||
+    path.startsWith("/admin/");
+  if (
+    requiresActiveSession &&
+    user?.status &&
+    user.status !== "active" &&
+    path !== "/auth/register"
+  ) {
+    return fail("Account is not active", 401);
   }
 
   if (method === "post" && path === "/auth/dev-login") {
-    const loginRole = data?.role === "admin" ? "admin" : data?.role === "worker" ? "worker" : "client";
-    const first = loginRole === "admin" ? { id: 999, role: "admin", name: "Bricky Admin" } : loginRole === "worker" ? db.workers[0] : db.clients[0];
-    if (loginRole !== "admin" && !isActiveAccount(first)) return fail("Акаунтът е спрян от администратор.", 401);
+    const loginRole = ["worker", "admin", "super_admin"].includes(data?.role) ? data.role : "client";
+    const first =
+      loginRole === "worker"
+        ? db.workers[0]
+        : ["admin", "super_admin"].includes(loginRole)
+        ? db.admins[0]
+        : db.clients[0];
     setDevIdentity(loginRole, loginRole === "worker" ? first.userId : first.id);
-    return response({ token: localStorage.getItem("token"), user: publicUser(first) });
+    return response({ token: localStorage.getItem("token"), user: publicUser(first, db) });
   }
 
-  if (method === "get" && path === "/client/me") return role === "client" ? response(publicUser(user)) : fail("Client only", 403);
+  if (method === "post" && path === "/auth/register") {
+    const registerRole = data?.role === "worker" ? "worker" : "client";
+    const email = String(data?.email || "").trim().toLowerCase();
+    if (!email) return fail("Email is required", 400);
+    if ([...db.clients, ...db.workers, ...(db.admins || [])].some((item) => String(item.email || "").toLowerCase() === email)) {
+      return fail("Email already exists", 409);
+    }
+
+    const newUserId = db.nextUserId++;
+    if (registerRole === "worker") {
+      const worker = {
+        id: db.nextWorkerId++,
+        userId: newUserId,
+        role: "worker",
+        fullName: data?.fullName || data?.name || "Нов майстор",
+        name: data?.fullName || data?.name || "Нов майстор",
+        email,
+        phone: data?.phone || "",
+        city: data?.city || "",
+        skills: Array.isArray(data?.skills) ? data.skills.map(normalizeSkillKey) : [],
+        description: data?.description || "",
+        experience: data?.experience || "",
+        equipment: data?.equipment || "",
+        avatarUrl: "",
+        approvalStatus: "pending",
+        visibilityStatus: "hidden",
+        gallery: [],
+        completedJobs: [],
+        created_at: nowIso(),
+      };
+      db.workers.push(worker);
+
+      const code = String(data?.referralCode || "").trim().toUpperCase();
+      const referral = db.referrals.find((item) => item.code === code && !item.referredUserId && item.status !== "rejected");
+      if (referral) {
+        referral.referredUserId = newUserId;
+        referral.status = "accepted";
+        referral.acceptedAt = nowIso();
+      }
+
+      writeDb(db);
+      return response({ token: `local-dev-token-worker-${newUserId}`, user: publicUser(worker, db) }, 201);
+    }
+
+    const client = {
+      id: newUserId,
+      role: "client",
+      name: data?.name || data?.fullName || "Нов клиент",
+      email,
+      phone: data?.phone || "",
+      address: data?.address || "",
+      status: "active",
+      created_at: nowIso(),
+    };
+    db.clients.push(client);
+    writeDb(db);
+    return response({ token: `local-dev-token-client-${newUserId}`, user: publicUser(client) }, 201);
+  }
+
+  if (method === "get" && path === "/client/me") return response(publicUser(user, db));
+  if (method === "get" && path === "/account/me") {
+    return response({
+      userId,
+      role,
+      status: user.status || "active",
+      email: user.email || "",
+      profile: {
+        name: user.name || user.fullName || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        city: user.city || null,
+      },
+      subscription: role === "worker" ? { planKey: user.planKey || "free", status: "active", startsAt: null, endsAt: null } : null,
+      notifications: { unreadCount: 0, items: [] },
+    });
+  }
+  if (method === "put" && path === "/account/profile") {
+    user.name = data?.name ?? user.name;
+    if (role === "worker") user.fullName = data?.name ?? user.fullName;
+    user.email = data?.email ?? user.email;
+    user.phone = data?.phone ?? user.phone;
+    user.address = data?.address ?? user.address;
+    writeDb(db);
+    return mockRequest("get", "/account/me");
+  }
+  if (method === "get" && path === "/account/export") {
+    return response({
+      exportedAt: nowIso(),
+      account: (await mockRequest("get", "/account/me")).data,
+      requests: db.requests.filter(
+        (item) =>
+          Number(item.clientUserId) === userId ||
+          Number(item.assignedWorkerUserId) === userId,
+      ),
+      applications:
+        role === "worker"
+          ? db.requests.flatMap((item) =>
+              (item.applications || []).filter(
+                (entry) => Number(entry.workerUserId) === userId,
+              ),
+            )
+          : [],
+      reviews: (db.reviews || []).filter(
+        (item) =>
+          Number(item.clientUserId) === userId ||
+          Number(item.workerUserId) === userId,
+      ),
+      media: (db.media || []).filter(
+        (item) => Number(item.ownerUserId) === userId,
+      ),
+      notifications: [],
+    });
+  }
+  if (method === "post" && path === "/account/deactivate") {
+    const active = db.requests.some(
+      (item) =>
+        (Number(item.clientUserId) === userId ||
+          Number(item.assignedWorkerUserId) === userId) &&
+        !["completed", "canceled", "archived"].includes(requestStatusKey(item)),
+    );
+    if (active) return fail("Имате активна поръчка", 400);
+    if (String(data?.currentPassword || "").length < 8)
+      return fail("Текущата парола е грешна", 403);
+    user.status = "deleted";
+    if (role === "worker") user.visibilityStatus = "private";
+    writeDb(db);
+    return response({ deactivated: true, message: "Профилът е деактивиран" });
+  }
+  if (method === "post" && path === "/auth/password-reset/request") {
+    return response({ message: "Ако имейлът е регистриран, ще получите защитен линк за смяна на паролата." });
+  }
+  if (method === "post" && path === "/auth/password-reset/confirm") {
+    return response({ ok: true, message: "Паролата е сменена успешно." });
+  }
+  if (method === "post" && /^\/notifications\/\d+\/read$/.test(path)) return response({ ok: true });
   if (method === "get" && path === "/repair-categories") return response(db.repairCategories || REPAIR_CATEGORY_OPTIONS);
-  if (method === "get" && path === "/workers/me") return role === "worker" ? response(publicUser(db.workers.find((w) => Number(w.userId) === userId))) : fail("Worker only", 403);
-  if (method === "get" && path === "/workers") return response(db.workers.filter(isEligibleWorker).map(publicWorker));
+  if (method === "get" && path === "/referrals/me") {
+    if (role !== "worker") return fail("Worker only", 403);
+    const summary = referralSummary(db, userId);
+    writeDb(db);
+    return response(summary);
+  }
+  if (method === "post" && path === "/referrals/me/code") {
+    if (role !== "worker") return fail("Worker only", 403);
+    const summary = referralSummary(db, userId);
+    writeDb(db);
+    return response(summary, 201);
+  }
+  if (method === "post" && path === "/referrals/validate") {
+    const code = String(data?.code || data?.referralCode || "").trim().toUpperCase();
+    const referral = db.referrals.find((item) => item.code === code && item.status !== "rejected");
+    return response({ valid: Boolean(referral), code, referral });
+  }
+  const referralValidateMatch = path.match(/^\/referrals\/validate\/([^/]+)$/);
+  if (method === "get" && referralValidateMatch) {
+    const code = decodeURIComponent(referralValidateMatch[1]).toUpperCase();
+    const referral = db.referrals.find((item) => item.code === code && item.status !== "rejected");
+    return response({ valid: Boolean(referral), code, referral });
+  }
+
+  if (path.startsWith("/admin/")) {
+    if (!["admin", "super_admin"].includes(role)) return fail("Admin only", 403);
+
+    if (method === "get" && path === "/admin/users") {
+      return response([
+        ...(db.clients || []).map(publicUser),
+        ...(db.workers || []).map((worker) => publicUser(worker, db)),
+        ...(db.admins || []).map(publicUser),
+      ]);
+    }
+    if (method === "get" && path === "/admin/workers") {
+      let workers = (db.workers || []).map((worker) => {
+        const completion = mockWorkerCompletion(db, worker);
+        return {
+          ...publicWorker(worker, db),
+          workerUserId: worker.userId,
+          publicName: worker.fullName || worker.name,
+          approvalStatus: worker.approvalStatus || "pending",
+          visibilityStatus: worker.visibilityStatus || "private",
+          userStatus: worker.status || "active",
+          hasPhone: Boolean(String(worker.phone || "").trim()),
+          completionPercent: completion.percentage,
+          missingItems: completion.missingItems,
+          onboardingStatus: completion.onboardingStatus,
+        };
+      });
+      if (queryParam(url, "incomplete") === "true") {
+        workers = workers.filter((worker) => worker.completionPercent < 100);
+      }
+      if (queryParam(url, "missingPhone") === "true") {
+        workers = workers.filter((worker) => !worker.hasPhone);
+      }
+      if (queryParam(url, "onboardingIncomplete") === "true") {
+        workers = workers.filter((worker) => worker.onboardingStatus !== "completed");
+      }
+      const sort = queryParam(url, "sort");
+      workers.sort((left, right) =>
+        sort === "completion_asc"
+          ? left.completionPercent - right.completionPercent
+          : sort === "completion_desc"
+            ? right.completionPercent - left.completionPercent
+            : Number(right.workerUserId) - Number(left.workerUserId),
+      );
+      return response(workers);
+    }
+    const adminWorkerDetailMatch = path.match(/^\/admin\/workers\/(\d+)$/);
+    if (method === "get" && adminWorkerDetailMatch) {
+      const worker = (db.workers || []).find(
+        (item) => Number(item.userId) === Number(adminWorkerDetailMatch[1]),
+      );
+      if (!worker) return fail("Worker not found", 404);
+      const completion = mockWorkerCompletion(db, worker);
+      return response({
+        workerUserId: worker.userId,
+        publicName: worker.fullName || worker.name,
+        email: worker.email || null,
+        phonePrivate: worker.phone || null,
+        city: worker.city || null,
+        defaultAddress: worker.address || null,
+        bio: worker.description || null,
+        experience: worker.experience || null,
+        equipment: worker.equipment || null,
+        skills: (worker.skills || []).map(normalizeSkillKey),
+        primaryCategoryKey: worker.primaryCategoryKey || null,
+        preferredContactMethod: worker.preferredContactMethod || null,
+        contactAccuracyConfirmed: Boolean(worker.contactAccuracyConfirmed),
+        workType: worker.workType || null,
+        experienceRange: worker.experienceRange || null,
+        availabilityStatus: worker.availabilityStatus || null,
+        acquisitionSourceSelfReported: worker.acquisitionSourceSelfReported || null,
+        acquisitionSourceDetail: worker.acquisitionSourceDetail || null,
+        projectPhotosReadiness: worker.projectPhotosReadiness || null,
+        serviceDescriptionReadiness: worker.serviceDescriptionReadiness || null,
+        onboardingStep: Number(worker.onboardingStep || 1),
+        onboardingCompletedAt: worker.onboardingCompletedAt || null,
+        onboardingStatus: completion.onboardingStatus,
+        approvalStatus: worker.approvalStatus || "pending",
+        visibilityStatus: worker.visibilityStatus || "private",
+        accountStatus: worker.status || "active",
+        completionPercent: completion.percentage,
+        missingItems: completion.missingItems,
+        pendingModerationItems: completion.pendingModerationItems,
+        createdAt: worker.createdAt || null,
+      });
+    }
+    if (method === "get" && path === "/admin/requests") {
+      const requests = db.requests || [];
+      const filtered =
+        scope === "moderation"
+          ? requests.filter((request) => ["draft", "pending_admin"].includes(requestStatusKey(request)) && !request.archivedAt)
+          : scope === "active"
+          ? requests.filter((request) => !request.archivedAt && !["draft", "pending_admin", "completed", "canceled", "archived"].includes(requestStatusKey(request)))
+          : scope === "completed"
+          ? requests.filter((request) => requestStatusKey(request) === "completed" && request.archivedAt)
+          : requests;
+      return response(sortNewest(filtered));
+    }
+    const requestTimelineMatch = path.match(/^\/admin\/requests\/(\d+)\/timeline$/);
+    if (method === "get" && requestTimelineMatch) {
+      const requestId = Number(requestTimelineMatch[1]);
+      const request = db.requests.find((item) => Number(item.id) === requestId);
+      if (!request) return fail("Request not found", 404);
+      const events = (db.requestEvents || []).filter(
+        (event) => Number(event.requestId) === requestId,
+      );
+      if (!events.some((event) => event.eventType === "request.created")) {
+        events.unshift({
+          id: `created:${requestId}`,
+          requestId,
+          actorUserId: request.clientUserId || null,
+          eventType: "request.created",
+          metadataJson: { status: "pending_admin" },
+          createdAt: request.created_at || request.createdAt || nowIso(),
+        });
+      }
+      return response({ request: decorateMockRequest(request), events });
+    }
+    if (method === "get" && path === "/admin/media") return response(db.media || []);
+    if (method === "get" && path === "/admin/referrals") return response(db.referrals || []);
+    if (method === "get" && path === "/admin/audit") return response(db.auditLogs || []);
+    if (method === "get" && path === "/admin/categories") {
+      return response(mockAdminCategories(db));
+    }
+    if (method === "get" && path === "/admin/pricing") {
+      return response(db.pricingRules || []);
+    }
+
+    const userStatusMatch = path.match(/^\/admin\/users\/(\d+)\/status$/);
+    if (method === "post" && userStatusMatch) {
+      const targetId = Number(userStatusMatch[1]);
+      const target = [...(db.clients || []), ...(db.workers || []), ...(db.admins || [])].find((item) => Number(item.id) === targetId || Number(item.userId) === targetId);
+      if (!target) return fail("User not found", 404);
+      target.status = data?.status || "active";
+      addAudit(db, "user_status_changed", "user", targetId, data?.reason || target.status);
+      writeDb(db);
+      return response(publicUser(target, db));
+    }
+
+    const workerApprovalMatch = path.match(/^\/admin\/workers\/(\d+)\/approval$/);
+    if (method === "post" && workerApprovalMatch) {
+      const targetId = Number(workerApprovalMatch[1]);
+      const worker = db.workers.find((item) => Number(item.userId) === targetId || Number(item.id) === targetId);
+      if (!worker) return fail("Worker not found", 404);
+      worker.approvalStatus = data?.approvalStatus || data?.status || "approved";
+      worker.visibilityStatus = worker.approvalStatus === "approved"
+        ? (worker.visibilityStatus === "hidden" ? "private" : worker.visibilityStatus || "private")
+        : worker.approvalStatus === "suspended" ? "hidden" : "private";
+      if (worker.approvalStatus === "approved") worker.status = "active";
+      addAudit(db, "worker_approval_changed", "worker", worker.userId, worker.approvalStatus);
+      writeDb(db);
+      return response(publicUser(worker, db));
+    }
+
+    const workerWallMatch = path.match(/^\/admin\/workers\/(\d+)\/wall-visibility$/);
+    if (method === "post" && workerWallMatch) {
+      const targetId = Number(workerWallMatch[1]);
+      const worker = db.workers.find((item) => Number(item.userId) === targetId || Number(item.id) === targetId);
+      if (!worker) return fail("Worker not found", 404);
+      if (data?.listed && worker.approvalStatus !== "approved") return fail("Approve the worker first", 400);
+      worker.visibilityStatus = data?.listed ? "public" : "private";
+      addAudit(db, "worker_wall_visibility_changed", "worker", worker.userId, worker.visibilityStatus);
+      writeDb(db);
+      return response(publicUser(worker, db));
+    }
+
+    const requestStatusMatch = path.match(/^\/admin\/requests\/(\d+)\/status$/);
+    if (method === "post" && requestStatusMatch) {
+      const request = db.requests.find((item) => Number(item.id) === Number(requestStatusMatch[1]));
+      if (!request) return fail("Request not found", 404);
+      const nextStatus = data?.status || requestStatusKey(request);
+      if (nextStatus === "published") {
+        const unresolvedPhotos = (Array.isArray(db.media) ? db.media : []).filter(
+          (media) =>
+            Number(media.requestId) === Number(request.id) &&
+            media.kind === "request_before" &&
+            !["approved", "rejected"].includes(String(media.moderationStatus || "").toLowerCase()),
+        );
+        if (unresolvedPhotos.length) return fail("Review every request photo before publishing the request", 400);
+      }
+      setMockRequestStatus(request, nextStatus);
+      addMockRequestEvent(db, request.id, "admin.status_changed", {
+        status: nextStatus,
+        reason: data?.reason || null,
+      });
+      addAudit(db, "request_status_changed", "request", request.id, request.statusLabel || request.statusKey);
+      writeDb(db);
+      return response(request);
+    }
+
+    const categoryMatch = path.match(/^\/admin\/categories\/([^/]+)$/);
+    if (method === "post" && categoryMatch) {
+      if (role !== "super_admin") return fail("Super admin only", 403);
+      const categoryKey = decodeURIComponent(categoryMatch[1]);
+      let category = (db.repairCategories || []).find(
+        (item) => (item.categoryKey || item.key) === categoryKey,
+      );
+      if (!category) {
+        if (!String(data?.label || "").trim()) return fail("Category label is required", 400);
+        category = { key: categoryKey, categoryKey, label: String(data.label).trim() };
+        db.repairCategories.push(category);
+      }
+      if (data?.label !== undefined) category.label = String(data.label).trim();
+      if (data?.description !== undefined) category.description = data.description || null;
+      if (data?.isActive !== undefined) category.isActive = Boolean(data.isActive);
+      if (data?.sortOrder !== undefined) category.sortOrder = Number(data.sortOrder);
+      addAudit(db, "catalog.category_changed", "repair_category", categoryKey, data?.reason);
+      writeDb(db);
+      return response(category);
+    }
+
+    const activityMatch = path.match(
+      /^\/admin\/categories\/([^/]+)\/activities\/([^/]+)$/,
+    );
+    if (method === "post" && activityMatch) {
+      if (role !== "super_admin") return fail("Super admin only", 403);
+      const categoryKey = decodeURIComponent(activityMatch[1]);
+      const activityKey = decodeURIComponent(activityMatch[2]);
+      const category = (db.repairCategories || []).find(
+        (item) => (item.categoryKey || item.key) === categoryKey,
+      );
+      if (!category) return fail("Repair category not found", 404);
+      category.activities = Array.isArray(category.activities)
+        ? category.activities
+        : mockAdminCategories({ repairCategories: [category] })[0].activities;
+      let activity = category.activities.find((item) => item.activityKey === activityKey);
+      if (!activity) {
+        if (!String(data?.label || "").trim()) return fail("Activity label is required", 400);
+        activity = { categoryKey, activityKey, label: String(data.label).trim() };
+        category.activities.push(activity);
+      }
+      if (data?.label !== undefined) activity.label = String(data.label).trim();
+      if (data?.unitType !== undefined) activity.unitType = data.unitType || null;
+      if (data?.isActive !== undefined) activity.isActive = Boolean(data.isActive);
+      if (data?.sortOrder !== undefined) activity.sortOrder = Number(data.sortOrder);
+      addAudit(db, "catalog.activity_changed", "repair_activity", `${categoryKey}:${activityKey}`, data?.reason);
+      writeDb(db);
+      return response(activity);
+    }
+
+    if (method === "post" && path === "/admin/pricing") {
+      const categoryKey = String(data?.categoryKey || "");
+      const activityKey = String(data?.activityKey || "");
+      const version = String(data?.version || "").trim();
+      if (!categoryKey || !activityKey || !version) return fail("Missing pricing fields", 400);
+      const laborMin = Number(data?.laborMin);
+      const laborMax = Number(data?.laborMax);
+      if (!Number.isFinite(laborMin) || !Number.isFinite(laborMax) || laborMin > laborMax) {
+        return fail("Invalid labor range", 400);
+      }
+      db.pricingRules = Array.isArray(db.pricingRules) ? db.pricingRules : [];
+      if (
+        db.pricingRules.some(
+          (rule) =>
+            rule.categoryKey === categoryKey &&
+            rule.activityKey === activityKey &&
+            rule.version === version,
+        )
+      ) {
+        return fail("Pricing version already exists for this activity", 400);
+      }
+      const isActive = data?.isActive !== false;
+      if (isActive) {
+        db.pricingRules.forEach((rule) => {
+          if (rule.categoryKey === categoryKey && rule.activityKey === activityKey) {
+            rule.isActive = false;
+          }
+        });
+      }
+      const rule = {
+        id: db.pricingRules.length
+          ? Math.max(...db.pricingRules.map((item) => Number(item.id) || 0)) + 1
+          : 1,
+        version,
+        categoryKey,
+        activityKey,
+        laborMin: laborMin.toFixed(2),
+        laborMax: laborMax.toFixed(2),
+        materialMin:
+          data?.materialMin === "" || data?.materialMin == null
+            ? null
+            : Number(data.materialMin).toFixed(2),
+        materialMax:
+          data?.materialMax === "" || data?.materialMax == null
+            ? null
+            : Number(data.materialMax).toFixed(2),
+        currency: String(data?.currency || "EUR").toUpperCase(),
+        validFrom: data?.validFrom || null,
+        validTo: data?.validTo || null,
+        isActive,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      db.pricingRules.push(rule);
+      addAudit(db, "pricing.rule_created", "pricing_rule", rule.id, data?.reason);
+      writeDb(db);
+      return response(rule, 201);
+    }
+
+    const pricingStatusMatch = path.match(/^\/admin\/pricing\/(\d+)\/status$/);
+    if (method === "post" && pricingStatusMatch) {
+      const rule = (db.pricingRules || []).find(
+        (item) => Number(item.id) === Number(pricingStatusMatch[1]),
+      );
+      if (!rule) return fail("Pricing rule not found", 404);
+      if (data?.isActive) {
+        db.pricingRules.forEach((item) => {
+          if (
+            item.categoryKey === rule.categoryKey &&
+            item.activityKey === rule.activityKey
+          ) {
+            item.isActive = false;
+          }
+        });
+      }
+      rule.isActive = Boolean(data?.isActive);
+      rule.updatedAt = nowIso();
+      addAudit(db, "pricing.rule_status_changed", "pricing_rule", rule.id, data?.reason);
+      writeDb(db);
+      return response(rule);
+    }
+
+    const mediaModerationMatch = path.match(/^\/admin\/media\/(\d+)\/moderation$/);
+    if (method === "post" && mediaModerationMatch) {
+      const media = db.media.find((item) => Number(item.id) === Number(mediaModerationMatch[1]));
+      if (!media) return fail("Media not found", 404);
+      applyMockMediaModeration(db, media, data?.moderationStatus || "approved");
+      addAudit(db, "media_moderation_changed", "media", media.id, media.moderationStatus);
+      writeDb(db);
+      return response(media);
+    }
+
+    const referralRejectMatch = path.match(/^\/admin\/referrals\/(\d+)\/reject$/);
+    if (method === "post" && referralRejectMatch) {
+      const referral = db.referrals.find((item) => Number(item.id) === Number(referralRejectMatch[1]));
+      if (!referral) return fail("Referral not found", 404);
+      referral.status = "rejected";
+      referral.rejectionReason = data?.reason || "admin_review";
+      addAudit(db, "referral_rejected", "referral", referral.id, referral.rejectionReason);
+      writeDb(db);
+      return response(referral);
+    }
+
+    const referralRewardActionMatch = path.match(/^\/admin\/referrals\/(\d+)\/(revoke-reward|restore-reward)$/);
+    if (method === "post" && referralRewardActionMatch) {
+      const referral = db.referrals.find((item) => Number(item.id) === Number(referralRewardActionMatch[1]));
+      if (!referral) return fail("Referral not found", 404);
+      const nextStatus = referralRewardActionMatch[2] === "revoke-reward" ? "revoked" : "active";
+      referral.rewards = (referral.rewards || []).map((reward) => ({ ...reward, status: nextStatus }));
+      addAudit(db, `referral_reward_${nextStatus}`, "referral", referral.id, data?.reason || "admin_review");
+      writeDb(db);
+      return response(referral);
+    }
+  }
+
+  if (method === "get" && path === "/catalog") {
+    return response({
+      categories: mockAdminCategories(db).filter((category) => category.isActive !== false),
+      pricingRules: (db.pricingRules || []).filter((rule) => rule.isActive),
+    });
+  }
+
+  if (method === "put" && path === "/workers/me/appearance") {
+    try {
+      return response(await updateDevWorkerAppearance(data));
+    } catch (error) {
+      return fail(error?.response?.data?.message || error?.message || "Appearance update failed", error?.response?.status || 400);
+    }
+  }
+
+  if (method === "get" && path === "/workers/me/onboarding") {
+    const worker = currentWorker(db);
+    return worker
+      ? response(mockWorkerOnboardingState(db, worker))
+      : fail("Worker not found", 404);
+  }
+
+  const onboardingStepMatch = path.match(
+    /^\/workers\/me\/onboarding\/(contact|activity|acquisition|readiness)$/,
+  );
+  if (method === "put" && onboardingStepMatch) {
+    const worker = currentWorker(db);
+    if (!worker) return fail("Worker not found", 404);
+    const stepKey = onboardingStepMatch[1];
+    if (stepKey === "contact") {
+      worker.phone = String(data?.phone || "").trim();
+      worker.preferredContactMethod = data?.preferredContactMethod || null;
+      worker.contactAccuracyConfirmed = Boolean(data?.contactAccuracyConfirmed);
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 2);
+    }
+    if (stepKey === "activity") {
+      worker.primaryCategoryKey = data?.primaryCategoryKey || null;
+      worker.skills = Array.isArray(data?.skills) ? data.skills : worker.skills;
+      worker.workType = data?.workType || null;
+      worker.experienceRange = data?.experienceRange || null;
+      worker.city = String(data?.city || "").trim();
+      worker.availabilityStatus = data?.availabilityStatus || null;
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 3);
+    }
+    if (stepKey === "acquisition") {
+      worker.acquisitionSourceSelfReported = data?.acquisitionSourceSelfReported || null;
+      worker.acquisitionSourceDetail = data?.acquisitionSourceDetail || null;
+      worker.onboardingStep = Math.max(Number(worker.onboardingStep || 1), 4);
+    }
+    if (stepKey === "readiness") {
+      worker.projectPhotosReadiness = data?.projectPhotosReadiness || null;
+      worker.serviceDescriptionReadiness = data?.serviceDescriptionReadiness || null;
+      worker.onboardingStep = 4;
+      worker.onboardingCompletedAt = worker.onboardingCompletedAt || nowIso();
+    }
+    writeDb(db);
+    return response(mockWorkerOnboardingState(db, worker));
+  }
+
+  if (method === "get" && path === "/workers/me") return response(publicUser(db.workers.find((w) => Number(w.userId) === userId), db));
+  if (method === "get" && path === "/workers") {
+    return response(
+      db.workers
+        .filter(
+          (worker) =>
+            worker.status === "active" &&
+            worker.approvalStatus === "approved" &&
+            worker.visibilityStatus === "public",
+        )
+        .map((worker) => publicWorker(worker, db)),
+    );
+  }
 
   const workerById = path.match(/^\/workers\/(\d+)$/);
   if (method === "get" && workerById) {
     const id = Number(workerById[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return isEligibleWorker(worker) ? response(publicWorker(worker)) : fail("Worker not found", 404);
+    return worker &&
+      worker.status === "active" &&
+      worker.approvalStatus === "approved" &&
+      worker.visibilityStatus === "public"
+      ? response(publicWorker(worker, db))
+      : fail("Worker not found", 404);
   }
 
   if (method === "get" && /^\/workers\/\d+\/gallery$/.test(path)) {
     const id = Number(path.match(/^\/workers\/(\d+)\/gallery$/)?.[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return isEligibleWorker(worker)
-      ? response((Array.isArray(worker.gallery) ? worker.gallery : []).filter((image) => image.moderationStatus === "approved"))
-      : fail("Worker not found", 404);
+    return response(worker ? workerGallery(db, worker, false) : []);
   }
   if (method === "get" && path === "/workers/me/gallery") {
-    if (role !== "worker") return fail("Worker only", 403);
     const worker = currentWorker(db);
-    return response(Array.isArray(worker?.gallery) ? worker.gallery : []);
+    return response(worker ? workerGallery(db, worker, true) : []);
+  }
+
+  if (method === "post" && path === "/workers/me/gallery/reorder") {
+    const ids = Array.isArray(data?.mediaIds) ? data.mediaIds.map(Number) : [];
+    ids.forEach((id, displayOrder) => {
+      const media = (Array.isArray(db.media) ? db.media : []).find(
+        (item) => Number(item.id) === id,
+      );
+      if (media) media.displayOrder = displayOrder;
+    });
+    writeDb(db);
+    return response({ ok: true, mediaIds: ids });
   }
 
   if (method === "get" && path === "/workers/me/history") {
-    if (role !== "worker") return fail("Worker only", 403);
     const worker = currentWorker(db);
-    const jobs = Array.isArray(worker?.completedJobs) ? worker.completedJobs : [];
-    return response(sortNewest(jobs.filter((job) => job.moderationStatus === "approved").map(publicCompletedJob)));
+    return response(worker ? completedJobsForWorker(db, worker, true) : []);
   }
 
   const workerHistory = path.match(/^\/workers\/(\d+)\/history$/);
   if (method === "get" && workerHistory) {
     const id = Number(workerHistory[1]);
     const worker = db.workers.find((w) => Number(w.userId) === id || Number(w.id) === id);
-    return isEligibleWorker(worker)
-      ? response(sortNewest(Array.isArray(worker.completedJobs) ? worker.completedJobs.map(publicCompletedJob) : []))
-      : fail("Worker not found", 404);
+    return response(worker ? completedJobsForWorker(db, worker, false) : []);
   }
 
   
   const galleryDeleteMatch = path.match(/^\/workers\/me\/gallery\/(.+)\/delete$/);
   if (method === "post" && galleryDeleteMatch) {
-    if (role !== "worker") return fail("Worker only", 403);
     return response(deleteDevWorkerGalleryImage(galleryDeleteMatch[1]));
   }
-  if (method === "post" && path === "/requests/draft") return role === "client" ? response(draftRequest(data)) : fail("Client only", 403);
+  if (method === "post" && path === "/requests/draft") return response(draftRequest(data));
 
   if (method === "get" && path === "/requests/client") {
-    if (role !== "client") return fail("Client only", 403);
-    return response(sortNewest(db.requests.filter((r) => Number(r.clientUserId) === userId)));
+    const items = db.requests.filter((r) => {
+      if (Number(r.clientUserId) !== userId) return false;
+      return scope === "history" ? Boolean(r.archivedAt) : !r.archivedAt;
+    });
+    return response(sortNewest(items));
   }
 
   if (method === "get" && path === "/requests/map") {
     if (role !== "worker") return fail("Worker only", 403);
-    return response(sortNewest(db.requests.filter(isOpenApprovedRequest).map(publicRequest)));
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+    const items = sortNewest(
+      db.requests.filter((request) => {
+        const assigned = Number(request.assignedWorkerUserId || 0);
+        const status = requestStatusKey(request);
+        if (request.archivedAt) return false;
+        if (["draft", "pending_admin", "canceled", "archived", "completed"].includes(status)) return false;
+        if (!assigned) return ["published", "applied"].includes(status);
+        return assigned === userId;
+      }),
+    );
+    return response(items.map((request) => workerRequestView(request, userId, db)));
   }
 
   if (method === "get" && path === "/requests/worker") {
-    if (role !== "worker") return fail("Worker only", 403);
-    const items = db.requests.filter((r) => {
-      const assigned = Number(r.assignedWorkerId || 0);
-      const closed = ["завършена", "отказана"].includes(String(r.status || "").toLowerCase());
-      return isOpenApprovedRequest(r) && (!assigned || assigned === userId);
-    });
-    return response(sortNewest(items.map(publicRequest)));
-  }
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
 
-  if (method === "get" && path === "/requests/worker/completed") {
-    if (role !== "worker") return fail("Worker only", 403);
-    return response(sortNewest(db.requests.filter((r) =>
-      Number(r.assignedWorkerId) === userId && isApprovedRequest(r) && isCompletedRequest(r)
-    ).map(publicRequest)));
+    if (scope === "history") {
+      return response(
+        sortNewest(
+          db.requests.filter((r) => Number(r.assignedWorkerUserId) === userId && requestStatusKey(r) === "completed" && Boolean(r.archivedAt)),
+        ).map((request) => workerRequestView(request, userId, db)),
+      );
+    }
+
+    const items = db.requests.filter((r) => {
+      const assigned = Number(r.assignedWorkerUserId || 0);
+      const status = requestStatusKey(r);
+      if (r.archivedAt) return false;
+      if (["draft", "pending_admin", "canceled", "archived", "completed"].includes(status)) return false;
+      if (!assigned) return ["published", "applied"].includes(status);
+      return assigned === userId;
+    });
+    return response(
+      sortNewest(items).map((request) => workerRequestView(request, userId, db)),
+    );
   }
 
   if (method === "post" && path === "/requests") {
     if (role !== "client") return fail("Client only", 400);
     const client = db.clients.find((c) => Number(c.id) === userId) || user;
+    const beforePhotos = normalizePhotos(data.photos);
     const req = {
       id: db.nextRequestId++,
       clientUserId: userId,
       clientName: data.clientName || client.name,
-      email: data.email || client.email,
-      phone: data.phone || client.phone,
+      email: null,
+      phone: null,
       address: data.address || client.address || "",
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
@@ -1100,49 +2139,91 @@ export async function mockRequest(method, url, data) {
       estimateMax: Number.isFinite(Number(data.estimateMax)) ? Number(data.estimateMax) : null,
       estimateCurrency: data.estimateCurrency || null,
       pricingSnapshot: data.pricingSnapshot || null,
-      status: "approved",
-      statusKey: "approved",
-      photos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
-      beforePhotos: normalizePhotos(data.photos).map((photo) => ({ ...photo, moderationStatus: "pending_review" })),
+      statusKey: "pending_admin",
+      photos: beforePhotos,
+      beforePhotos,
       afterPhotos: [],
-      appliedWorkers: [],
-      assignedWorkerId: null,
+      applications: [],
+      assignedWorkerUserId: null,
       completedAt: null,
-      completedByWorkerId: null,
+      clientConfirmedAt: null,
+      archivedAt: null,
+      archiveReason: null,
+      archiveSource: null,
+      archivedByUserId: null,
       durationDays: null,
-      moderationStatus: "pending_review",
-      moderationReason: null,
       created_at: nowIso(),
     };
     db.requests.push(req);
+    beforePhotos.forEach((photo) => {
+      db.media.push({
+        id: nextMockMediaId(db),
+        kind: "request_before",
+        ownerUserId: userId,
+        requestId: req.id,
+        publicUrl: photo.url,
+        moderationStatus: "pending",
+        createdAt: photo.created_at || nowIso(),
+      });
+    });
     writeDb(db);
     return response(req, 201);
-  }
-
-  const resubmitMatch = path.match(/^\/requests\/(\d+)\/resubmit$/);
-  if (method === "put" && resubmitMatch) {
-    if (role !== "client") return fail("Client only", 400);
-    const req = db.requests.find((item) => Number(item.id) === Number(resubmitMatch[1]));
-    if (!req) return fail("Request not found", 404);
-    if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
-    if (!["rejected", "hidden"].includes(req.moderationStatus)) return fail("Request cannot be resubmitted", 400);
-    if (Object.prototype.hasOwnProperty.call(data || {}, "description")) req.description = data.description;
-    if (Object.prototype.hasOwnProperty.call(data || {}, "address")) req.address = data.address;
-    req.moderationStatus = "pending_review";
-    req.moderationReason = null;
-    writeDb(db);
-    return response(req);
   }
 
   const applyMatch = path.match(/^\/requests\/(\d+)\/apply$/);
   if (method === "post" && applyMatch) {
     if (role !== "worker") return fail("Worker only", 400);
-    if (!requireEligibleMockWorker(db, userId)) return fail("Worker is not available", 403);
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+
     const req = db.requests.find((r) => Number(r.id) === Number(applyMatch[1]));
     if (!req) return fail("Request not found", 404);
-    if (!isOpenApprovedRequest(req)) return fail("Request is not approved or is closed", 403);
-    if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
-    req.appliedWorkers = Array.from(new Set([...(req.appliedWorkers || []), userId]));
+    if (req.assignedWorkerUserId) return fail("Request already has assigned worker", 400);
+    const statusGuard = ensureMockRequestStatus(req, ["published", "applied"], "Request is not open for applications");
+    if (statusGuard) return statusGuard;
+    const applications = mockRequestApplications(req);
+    const existing = applications.find(
+      (application) => Number(application.workerUserId) === userId,
+    );
+    if (existing) {
+      existing.status = "applied";
+      existing.updatedAt = nowIso();
+    } else {
+      applications.push({
+        id: `${req.id}:${userId}`,
+        workerUserId: userId,
+        status: "applied",
+        offerMin: null,
+        offerMax: null,
+        message: null,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+    }
+    setMockRequestStatus(req, "applied");
+    writeDb(db);
+    return response(req);
+  }
+
+  const withdrawMatch = path.match(/^\/requests\/(\d+)\/withdraw$/);
+  if (method === "post" && withdrawMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const guard = ensureMockWorkerCanTakeJobs(db, userId);
+    if (guard) return guard;
+
+    const req = db.requests.find((r) => Number(r.id) === Number(withdrawMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (["completed", "canceled", "archived"].includes(requestStatusKey(req)) || req.archivedAt) return fail("Request is closed", 400);
+    if (Number(req.assignedWorkerUserId) === userId) return fail("Cannot withdraw after the client selected you", 400);
+
+    const application = mockRequestApplications(req).find(
+      (item) => Number(item.workerUserId) === userId,
+    );
+    if (!application) return fail("Application not found", 404);
+    application.status = "withdrawn";
+    application.updatedAt = nowIso();
+    if (!req.assignedWorkerUserId && activeMockApplications(req).length === 0) setMockRequestStatus(req, "published");
+    else if (!req.assignedWorkerUserId) setMockRequestStatus(req, "applied");
     writeDb(db);
     return response(req);
   }
@@ -1155,57 +2236,115 @@ export async function mockRequest(method, url, data) {
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
     const workerUserId = Number(data?.workerUserId);
     if (!workerUserId) return fail("Missing workerUserId", 400);
-    if (!isOpenApprovedRequest(req)) return fail("Request is not approved or is closed", 403);
-    if (req.assignedWorkerId) return fail("Request already has assigned worker", 400);
-    if (!requireEligibleMockWorker(db, workerUserId)) return fail("Worker is not available", 403);
-    if (!(req.appliedWorkers || []).map(Number).includes(workerUserId)) return fail("This worker has not applied to this request", 400);
-    req.assignedWorkerId = workerUserId;
-    setRequestStatus(req, "assigned");
-    req.workerArrivedAt = null;
-    req.workStartedAt = null;
-    req.workReadyAt = null;
-    req.clientConfirmedAt = null;
-    req.disputedAt = null;
-    req.disputeReason = null;
+    const guard = ensureMockWorkerCanTakeJobs(db, workerUserId);
+    if (guard) return guard;
+    const statusGuard = ensureMockRequestStatus(req, ["published", "applied"], "Request is not assignable");
+    if (statusGuard) return statusGuard;
+    const selectedApplication = activeMockApplications(req).find(
+      (application) => Number(application.workerUserId) === workerUserId,
+    );
+    if (!selectedApplication) return fail("This worker has not applied to this request", 400);
+    mockRequestApplications(req).forEach((application) => {
+      application.status =
+        Number(application.workerUserId) === workerUserId ? "assigned" : "rejected";
+      application.updatedAt = nowIso();
+    });
+    req.assignedWorkerUserId = workerUserId;
+    setMockRequestStatus(req, "worker_selected");
     writeDb(db);
     return response(req);
   }
 
-  const lifecycleMatch = path.match(/^\/requests\/(\d+)\/(arrive|start|ready|confirm|dispute)$/);
-  if (method === "post" && lifecycleMatch) {
-    const req = db.requests.find((r) => Number(r.id) === Number(lifecycleMatch[1]));
+  const unassignMatch = path.match(/^\/requests\/(\d+)\/unassign$/);
+  if (method === "post" && unassignMatch) {
+    if (role !== "client") return fail("Client only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(unassignMatch[1]));
     if (!req) return fail("Request not found", 404);
-    if (!isApprovedRequest(req)) return fail("Request is not approved", 403);
-    const action = lifecycleMatch[2];
-    const workerActions = { arrive: ["assigned", "worker_arrived"], start: ["worker_arrived", "in_progress"], ready: ["in_progress", "waiting_client_confirmation"] };
-    if (workerActions[action]) {
-      if (role !== "worker" || !requireEligibleMockWorker(db, userId)) return fail("Worker only", 403);
-      if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
-      const [expected, next] = workerActions[action];
-      if (req.status !== expected) return fail(`Invalid transition from ${req.status}`, 400);
-      if (action === "ready") {
-        const photos = normalizePhotos(data?.afterPhotos).map((photo) => ({ ...photo, moderationStatus: "pending_review" }));
-        if (photos.length) req.afterPhotos = [...(req.afterPhotos || []), ...photos];
-        if (!(req.afterPhotos || []).length) return fail("At least one completion photo is required", 400);
-        req.workReadyAt = nowIso();
-      }
-      if (action === "arrive") req.workerArrivedAt = nowIso();
-      if (action === "start") req.workStartedAt = nowIso();
-      setRequestStatus(req, next);
-    } else {
-      if (role !== "client" || Number(req.clientUserId) !== userId) return fail("Not your request", 403);
-      if (req.status !== "waiting_client_confirmation") return fail(`Invalid transition from ${req.status}`, 400);
-      if (action === "confirm") {
-        setRequestStatus(req, "client_confirmed");
-        req.clientConfirmedAt = nowIso();
-      } else {
-        const reason = String(data?.reason || "").trim();
-        if (reason.length < 5) return fail("Dispute reason is required", 400);
-        setRequestStatus(req, "disputed");
-        req.disputedAt = nowIso();
-        req.disputeReason = reason;
-      }
+    if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+    if (!req.assignedWorkerUserId) return fail("No assigned worker", 400);
+    if (["in_progress", "work_finished", "ready_for_client_confirmation", "completed"].includes(requestStatusKey(req))) {
+      return fail("Cannot unassign after the worker started work", 400);
     }
+    const assignedWorkerUserId = Number(req.assignedWorkerUserId);
+    req.assignedWorkerUserId = null;
+    const application = mockRequestApplications(req).find(
+      (item) => Number(item.workerUserId) === assignedWorkerUserId,
+    );
+    if (application) {
+      application.status = "applied";
+      application.updatedAt = nowIso();
+    }
+    setMockRequestStatus(req, activeMockApplications(req).length ? "applied" : "published");
+    writeDb(db);
+    return response(req);
+  }
+
+  const workerConfirmMatch = path.match(/^\/requests\/(\d+)\/worker-confirm$/);
+  if (method === "post" && workerConfirmMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(workerConfirmMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_selected", "assigned"], "worker_confirmed");
+  }
+
+  const onSiteMatch = path.match(/^\/requests\/(\d+)\/on-site$/);
+  if (method === "post" && onSiteMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(onSiteMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_confirmed"], "worker_on_site");
+  }
+
+  const inspectMatch = path.match(/^\/requests\/(\d+)\/inspect$/);
+  if (method === "post" && inspectMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(inspectMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["worker_on_site"], "inspected");
+  }
+
+  const startMatch = path.match(/^\/requests\/(\d+)\/start$/);
+  if (method === "post" && startMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(startMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["inspected"], "in_progress");
+  }
+
+  const finishMatch = path.match(/^\/requests\/(\d+)\/finish$/);
+  if (method === "post" && finishMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(finishMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["in_progress"], "work_finished", data?.afterPhotos || []);
+  }
+
+  const readyMatch = path.match(/^\/requests\/(\d+)\/ready$/);
+  if (method === "post" && readyMatch) {
+    if (role !== "worker") return fail("Worker only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(readyMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    return completeMockWorkerStep(db, req, userId, ["work_finished"], "ready_for_client_confirmation");
+  }
+
+  const clientConfirmMatch = path.match(/^\/requests\/(\d+)\/client-confirm$/);
+  if (method === "post" && clientConfirmMatch) {
+    if (role !== "client") return fail("Client only", 400);
+    const req = db.requests.find((r) => Number(r.id) === Number(clientConfirmMatch[1]));
+    if (!req) return fail("Request not found", 404);
+    if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
+    if (["client_confirmed", "reviewed", "completed"].includes(requestStatusKey(req)) && req.archivedAt) return response(req);
+    const statusGuard = ensureMockRequestStatus(req, ["ready_for_client_confirmation"], "Request is not ready for confirmation");
+    if (statusGuard) return statusGuard;
+    const completedAt = nowIso();
+    setMockRequestStatus(req, "client_confirmed");
+    req.clientConfirmedAt = req.clientConfirmedAt || completedAt;
+    req.completedAt = req.completedAt || completedAt;
+    req.archivedAt = req.archivedAt || completedAt;
+    req.archiveReason = req.archiveReason || "completed";
+    req.archiveSource = req.archiveSource || "system";
+    req.archivedByUserId = req.archivedByUserId || userId;
+    req.durationDays = completionDurationDays(req, req.completedAt);
     writeDb(db);
     return response(req);
   }
@@ -1213,23 +2352,27 @@ export async function mockRequest(method, url, data) {
   const completeMatch = path.match(/^\/requests\/(\d+)\/complete$/);
   if (method === "post" && completeMatch) {
     if (role !== "worker") return fail("Worker only", 400);
-    if (!requireEligibleMockWorker(db, userId)) return fail("Worker is not available", 403);
     const req = db.requests.find((r) => Number(r.id) === Number(completeMatch[1]));
     if (!req) return fail("Request not found", 404);
-    if (!isApprovedRequest(req)) return fail("Request is not approved", 403);
-    if (Number(req.assignedWorkerId) !== userId) return fail("Not your job", 403);
-    if (req.status !== "client_confirmed") return fail(`Invalid transition from ${req.status}`, 400);
+    if (Number(req.assignedWorkerUserId) !== userId) return fail("Not your job", 403);
+    if (requestStatusKey(req) === "completed" && req.archivedAt) return response(req);
+    const statusGuard = ensureMockRequestStatus(req, ["reviewed"], "Request must be reviewed before closing");
+    if (statusGuard) return statusGuard;
 
     const completedAt = nowIso();
-    setRequestStatus(req, "completed");
+    setMockRequestStatus(req, "completed");
     req.completedAt = completedAt;
-    req.completedByWorkerId = userId;
+    req.archiveReason = "closed_by_worker";
+    req.archiveSource = "worker";
+    req.archivedByUserId = userId;
+    if (Array.isArray(data?.afterPhotos) && data.afterPhotos.length) {
+      req.afterPhotos = saveMockRequestMedia(db, req, userId, "request_after", data.afterPhotos, "pending");
+    }
     req.durationDays = completionDurationDays(req, completedAt);
 
     const worker = db.workers.find((w) => Number(w.userId) === userId);
     if (worker) {
       ensureWorkerJobHistory(worker, req);
-      addRequestPhotosToWorkerGallery(worker, req);
     }
 
     writeDb(db);
@@ -1237,15 +2380,13 @@ export async function mockRequest(method, url, data) {
   }
 
   if (method === "get" && path === "/reviews/client") {
-    if (role !== "client") return fail("Client only", 403);
     return response(db.reviews.filter((r) => Number(r.clientUserId) === userId));
   }
 
   const workerReviews = path.match(/^\/reviews\/worker\/(\d+)$/);
   if (method === "get" && workerReviews) {
     const wid = Number(workerReviews[1]);
-    if (!requireEligibleMockWorker(db, wid)) return fail("Worker not found", 404);
-    const items = db.reviews.filter((r) => Number(r.workerUserId) === wid && r.moderationStatus === "approved");
+    const items = db.reviews.filter((r) => Number(r.workerUserId) === wid);
     const average = items.length ? items.reduce((sum, r) => sum + Number(r.rating || 0), 0) / items.length : 0;
     return response({ total: items.length, average, items });
   }
@@ -1256,21 +2397,21 @@ export async function mockRequest(method, url, data) {
     const req = db.requests.find((r) => Number(r.id) === requestId);
     if (!req) return fail("Request not found", 404);
     if (Number(req.clientUserId) !== userId) return fail("Not your request", 403);
-    if (!isApprovedRequest(req) || !isCompletedRequest(req)) return fail("Request is not approved and completed", 400);
-    if (!requireEligibleMockWorker(db, Number(req.assignedWorkerId))) return fail("Worker is not available", 403);
+    if (!["client_confirmed", "completed"].includes(requestStatusKey(req)) || !req.archivedAt) return fail("Request must be completed before review", 400);
     const exists = db.reviews.find((r) => Number(r.requestId) === requestId);
     if (exists) return fail("Already reviewed", 400);
     const review = {
       id: db.nextReviewId++,
       requestId,
       clientUserId: userId,
-      workerUserId: Number(req.assignedWorkerId),
+      workerUserId: Number(req.assignedWorkerUserId),
       rating: Number(data?.rating) || 5,
       comment: data?.comment || "",
-      moderationStatus: "pending_review",
       created_at: nowIso(),
     };
     db.reviews.push(review);
+    setMockRequestStatus(req, "reviewed");
+    maybeActivateReferralReward(db, review.workerUserId);
     writeDb(db);
     return response(review, 201);
   }

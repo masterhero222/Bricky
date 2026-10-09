@@ -4,6 +4,8 @@ dist/
 uploads/
 coverage/
 *.log
+__pycache__/
+*.pyc
 .DS_Store
 # Nest / build junk
 backend/backend@*
@@ -12,3 +14,12 @@ backend/nest
 # Accidental terminal capture files
 frontend/path
 Bricky__backup_*/frontend/path
+
+# Local Codex/worktree artifacts
+.codex-remote-attachments/
+.worktrees/
+/backups/
+frontend/.env.real
+
+# Local secrets/notes
+Брики админ акаунт.txt

@@ -4,7 +4,7 @@ import {
   Get,
   Param,
   Post,
-  Put,
+  Query,
   Req,
   UseGuards,
   BadRequestException,
@@ -16,15 +16,55 @@ import { RequestsService } from './requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestDraftDto } from './dto/request-draft.dto';
+import {
+  deleteStoredMedia,
+  storeUploadedImage,
+  StoredMedia,
+} from '../common/media-storage';
 
-const requestImageUpload = FilesInterceptor('images', 10, {
-  limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    const ok = allowed.has(String(file.mimetype || '').toLowerCase());
-    cb(ok ? null : new BadRequestException('Invalid image type'), ok);
-  },
-});
+const REQUEST_MEDIA_MIME_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+
+function requestMediaUploadOptions() {
+  return {
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (req: any, file: any, callback: any) => {
+      const allowed = Boolean(
+        REQUEST_MEDIA_MIME_EXTENSIONS[String(file.mimetype || '').toLowerCase()],
+      );
+      callback(allowed ? null : new Error('Invalid image type'), allowed);
+    },
+  };
+}
+
+async function storeRequestPhotos(
+  requestId: number,
+  kind: 'before' | 'after',
+  files: any[],
+) {
+  const stored: StoredMedia[] = [];
+  try {
+    for (const file of Array.isArray(files) ? files : []) {
+      if (!file?.buffer) continue;
+      stored.push(
+        await storeUploadedImage(
+          file.buffer,
+          ['requests', String(requestId), kind],
+          `/uploads/requests/${requestId}/${kind}`,
+          `request_${requestId}_${kind}`,
+          { createThumbnail: false },
+        ),
+      );
+    }
+    return stored;
+  } catch (error) {
+    await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
+    throw error;
+  }
+}
 
 @Controller('requests')
 export class RequestsController {
@@ -45,71 +85,97 @@ export class RequestsController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/images/before')
-  @UseInterceptors(requestImageUpload)
-  async uploadBefore(@Req() req: any, @Param('id') id: string, @UploadedFiles() files: any[]) {
-    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
-    return this.requests.addUploadedFiles(
-      Number(id),
-      Number(req.user.id),
-      req.user.role,
-      'before',
-      files,
-    );
+  @Post(':id/media/before')
+  @UseInterceptors(
+    FilesInterceptor('images', 20, requestMediaUploadOptions()),
+  )
+  async uploadBeforeMedia(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFiles() files: any[],
+  ) {
+    if (req.user?.role !== 'client') {
+      throw new BadRequestException('Client only');
+    }
+
+    const requestId = Number(id);
+    if (!requestId || !files?.length) throw new BadRequestException('No images');
+    const stored = await storeRequestPhotos(requestId, 'before', files);
+    const photos = stored.map((photo) => ({
+      url: photo.url,
+      storageKey: photo.storageKey,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
+    }));
+
+    try {
+      return await this.requests.addBeforeMedia(
+        requestId,
+        Number(req.user.id),
+        photos,
+      );
+    } catch (error) {
+      await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
+      throw error;
+    }
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/images/after')
-  @UseInterceptors(requestImageUpload)
-  async uploadAfter(@Req() req: any, @Param('id') id: string, @UploadedFiles() files: any[]) {
-    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.addUploadedFiles(
-      Number(id),
-      Number(req.user.id),
-      req.user.role,
-      'after',
-      files,
-    );
-  }
+  @Post(':id/media/after')
+  @UseInterceptors(
+    FilesInterceptor('images', 20, requestMediaUploadOptions()),
+  )
+  async uploadAfterMedia(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFiles() files: any[],
+  ) {
+    if (req.user?.role !== 'worker') {
+      throw new BadRequestException('Worker only');
+    }
 
-  @UseGuards(JwtAuthGuard)
-  @Post(':id/images/:imageId/delete')
-  async deleteImage(@Req() req: any, @Param('id') id: string, @Param('imageId') imageId: string) {
-    return this.requests.deleteUploadedImage(
-      Number(id),
-      Number(imageId),
-      Number(req.user.id),
-      req.user.role,
-    );
+    const requestId = Number(id);
+    if (!requestId || !files?.length) throw new BadRequestException('No images');
+    const stored = await storeRequestPhotos(requestId, 'after', files);
+    const photos = stored.map((photo) => ({
+      url: photo.url,
+      storageKey: photo.storageKey,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
+    }));
+
+    try {
+      return await this.requests.addAfterMedia(
+        requestId,
+        Number(req.user.id),
+        photos,
+      );
+    } catch (error) {
+      await deleteStoredMedia(...stored.map((photo) => photo.storageKey));
+      throw error;
+    }
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('client')
-  async myRequests(@Req() req: any) {
+  async myRequests(@Req() req: any, @Query('scope') scope?: string) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
+    if (scope === 'history') return this.requests.getHistoryByClientUserId(Number(req.user.id));
     return this.requests.getByClientUserId(Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('map')
   async mapRequests(@Req() req: any) {
-    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     return this.requests.getMapRequests(req.user);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('worker')
-  async workerFeed(@Req() req: any) {
+  async workerFeed(@Req() req: any, @Query('scope') scope?: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    if (scope === 'history') return this.requests.getCompletedForWorker(Number(req.user.id));
     return this.requests.getForWorkersFeed(Number(req.user.id));
-  }
-
-  // ? worker ������� (���������)
-  @UseGuards(JwtAuthGuard)
-  @Get('worker/completed')
-  async workerCompleted(@Req() req: any) {
-    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.getCompletedForWorker(Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -117,6 +183,13 @@ export class RequestsController {
   async apply(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     return this.requests.applyToRequest(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/withdraw')
+  async withdraw(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.withdrawApplication(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -137,54 +210,59 @@ export class RequestsController {
     return this.requests.unassignWorker(Number(id), Number(req.user.id));
   }
 
-  // ? worker ������� ������
   @UseGuards(JwtAuthGuard)
-  @Post(':id/complete')
-  async complete(@Req() req: any, @Param('id') id: string) {
+  @Post(':id/worker-confirm')
+  async workerConfirm(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.completeRequest(Number(id), Number(req.user.id));
+    return this.requests.workerConfirm(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/arrive')
-  async arrive(@Req() req: any, @Param('id') id: string) {
+  @Post(':id/on-site')
+  async onSite(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.markWorkerArrived(Number(id), Number(req.user.id));
+    return this.requests.markWorkerOnSite(Number(id), Number(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/inspect')
+  async inspect(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.markInspected(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/start')
-  async start(@Req() req: any, @Param('id') id: string) {
+  async startWork(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
     return this.requests.startWork(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/ready')
-  async ready(@Req() req: any, @Param('id') id: string) {
+  @Post(':id/finish')
+  async finishWork(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
-    return this.requests.markWorkReady(Number(id), Number(req.user.id));
+    return this.requests.finishWork(Number(id), Number(req.user.id), body?.afterPhotos || []);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/confirm')
-  async confirm(@Req() req: any, @Param('id') id: string) {
-    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
-    return this.requests.confirmWork(Number(id), Number(req.user.id));
+  @Post(':id/ready')
+  async readyForClient(@Req() req: any, @Param('id') id: string) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.readyForClientConfirmation(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post(':id/dispute')
-  async dispute(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+  @Post(':id/client-confirm')
+  async clientConfirm(@Req() req: any, @Param('id') id: string) {
     if (req.user?.role !== 'client') throw new BadRequestException('Client only');
-    return this.requests.disputeWork(Number(id), Number(req.user.id), body?.reason);
+    return this.requests.clientConfirmWork(Number(id), Number(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
-  @Put(':id/resubmit')
-  async resubmit(@Req() req: any, @Param('id') id: string, @Body() body: any) {
-    if (req.user?.role !== 'client') throw new BadRequestException('Client only');
-    return this.requests.resubmitRequest(Number(id), Number(req.user.id), body || {});
+  @Post(':id/complete')
+  async complete(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    if (req.user?.role !== 'worker') throw new BadRequestException('Worker only');
+    return this.requests.completeRequest(Number(id), Number(req.user.id), body?.afterPhotos || []);
   }
-
 }

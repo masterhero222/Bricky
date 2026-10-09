@@ -1,46 +1,80 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { RequestEntity } from './entities/request.entity';
 import {
-  CLOSED_REQUEST_STATUSES,
-  LEGACY_STATUS_BY_KEY,
-  normalizeRequestStatus,
-  REQUEST_STATUSES,
-  RequestStatus,
+  REQUEST_LIFECYCLE_ACTIONS,
+  REQUEST_LIFECYCLE_COMPAT_STATUS,
+  REQUEST_LIFECYCLE_LABELS,
+  REQUEST_LIFECYCLE_NEXT_ACTOR,
+  REQUEST_LIFECYCLE_STATES,
+  REQUEST_LIFECYCLE_TERMINAL_STATES,
+  REQUEST_LIFECYCLE_TRANSITIONS,
+  RequestLifecycleAction,
+  RequestLifecycleState,
 } from './request-lifecycle';
 
-const ALLOWED_TRANSITIONS: Record<RequestStatus, ReadonlySet<RequestStatus>> = {
-  approved: new Set([REQUEST_STATUSES.ASSIGNED]),
-  assigned: new Set([REQUEST_STATUSES.OPEN, REQUEST_STATUSES.WORKER_ARRIVED]),
-  worker_arrived: new Set([REQUEST_STATUSES.IN_PROGRESS]),
-  in_progress: new Set([REQUEST_STATUSES.WAITING_CLIENT_CONFIRMATION]),
-  waiting_client_confirmation: new Set([REQUEST_STATUSES.CLIENT_CONFIRMED, REQUEST_STATUSES.DISPUTED]),
-  client_confirmed: new Set([REQUEST_STATUSES.COMPLETED]),
-  completed: new Set(),
-  disputed: new Set(),
-  canceled: new Set(),
+export type RequestLifecycleSnapshot = {
+  status?: string | null;
+  statusKey?: string | null;
 };
 
 @Injectable()
 export class RequestLifecycleService {
-  current(request: Pick<RequestEntity, 'statusKey' | 'status'>): RequestStatus {
-    return normalizeRequestStatus(request.statusKey, request.status);
+  normalize(input: string | RequestLifecycleSnapshot | null | undefined): RequestLifecycleState {
+    const raw =
+      typeof input === 'string'
+        ? input
+        : input?.statusKey || input?.status || REQUEST_LIFECYCLE_STATES.PENDING_REVIEW;
+    const key = String(raw || '').trim().toLowerCase();
+    return REQUEST_LIFECYCLE_COMPAT_STATUS[key] || REQUEST_LIFECYCLE_STATES.PENDING_REVIEW;
   }
 
-  transition(request: RequestEntity, next: RequestStatus) {
-    const current = this.current(request);
-    if (!ALLOWED_TRANSITIONS[current].has(next)) {
-      throw new BadRequestException(`Invalid request transition from ${current} to ${next}`);
-    }
-    request.statusKey = next;
-    request.status = LEGACY_STATUS_BY_KEY[next];
+  label(input: string | RequestLifecycleSnapshot | null | undefined) {
+    return REQUEST_LIFECYCLE_LABELS[this.normalize(input)];
   }
 
-  assertCurrent(request: RequestEntity, expected: RequestStatus) {
-    const current = this.current(request);
-    if (current !== expected) throw new BadRequestException(`Invalid request transition from ${current} (expected ${expected})`);
+  nextActor(input: string | RequestLifecycleSnapshot | null | undefined) {
+    return REQUEST_LIFECYCLE_NEXT_ACTOR[this.normalize(input)];
   }
 
-  isClosed(request: RequestEntity) {
-    return CLOSED_REQUEST_STATUSES.has(this.current(request));
+  allowedActions(input: string | RequestLifecycleSnapshot | null | undefined): RequestLifecycleAction[] {
+    const state = this.normalize(input);
+    return Object.keys(REQUEST_LIFECYCLE_TRANSITIONS[state]) as RequestLifecycleAction[];
+  }
+
+  can(input: string | RequestLifecycleSnapshot | null | undefined, action: RequestLifecycleAction) {
+    const state = this.normalize(input);
+    return Boolean(REQUEST_LIFECYCLE_TRANSITIONS[state][action]);
+  }
+
+  transition(input: string | RequestLifecycleSnapshot | null | undefined, action: RequestLifecycleAction) {
+    const state = this.normalize(input);
+    const next = REQUEST_LIFECYCLE_TRANSITIONS[state][action];
+    if (!next) throw new BadRequestException(`Invalid request transition: ${state} -> ${action}`);
+    return next;
+  }
+
+  assertTransition(input: string | RequestLifecycleSnapshot | null | undefined, action: RequestLifecycleAction) {
+    return this.transition(input, action);
+  }
+
+  isTerminal(input: string | RequestLifecycleSnapshot | null | undefined) {
+    return REQUEST_LIFECYCLE_TERMINAL_STATES.has(this.normalize(input));
+  }
+
+  isVisibleToWorkers(input: string | RequestLifecycleSnapshot | null | undefined) {
+    return this.normalize(input) === REQUEST_LIFECYCLE_STATES.APPROVED;
+  }
+
+  actionForCompatibilityEndpoint(endpoint: string): RequestLifecycleAction | null {
+    const map: Record<string, RequestLifecycleAction> = {
+      'worker-confirm': REQUEST_LIFECYCLE_ACTIONS.MARK_ARRIVED,
+      'on-site': REQUEST_LIFECYCLE_ACTIONS.MARK_ARRIVED,
+      inspect: REQUEST_LIFECYCLE_ACTIONS.START_WORK,
+      start: REQUEST_LIFECYCLE_ACTIONS.START_WORK,
+      finish: REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
+      ready: REQUEST_LIFECYCLE_ACTIONS.MARK_READY,
+      'client-confirm': REQUEST_LIFECYCLE_ACTIONS.CONFIRM_COMPLETION,
+      complete: REQUEST_LIFECYCLE_ACTIONS.CLOSE,
+    };
+    return map[endpoint] || null;
   }
 }
