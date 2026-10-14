@@ -7,12 +7,14 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { accessSync, constants, existsSync, mkdirSync } from 'fs';
+import helmet from 'helmet';
 import { getCorsOrigins, validateRuntimeConfig } from './config/runtime-config';
 import { getUploadsRoot } from './common/storage-paths';
 
 async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.use(helmet());
   app.set('trust proxy', 1);
 
   const uploadsDir = getUploadsRoot();
