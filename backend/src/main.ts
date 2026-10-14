@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
 import { accessSync, constants, existsSync, mkdirSync } from 'fs';
 import { getCorsOrigins, validateRuntimeConfig } from './config/runtime-config';
 import { getUploadsRoot } from './common/storage-paths';
@@ -13,6 +14,7 @@ import { getUploadsRoot } from './common/storage-paths';
 async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.use(helmet());
   app.useBodyParser('json', { limit: '1mb' });
   app.set('trust proxy', 1);
 

@@ -35,3 +35,17 @@ real webhook secret.
 The public 30-day period starts only after production acceptance. Record its
 UTC start and end timestamps in the immutable release report; no payment or
 credit checks are enabled automatically at the end.
+
+## HTTP security headers
+
+The API sets baseline security headers via `helmet` (see `backend/src/main.ts`).
+The edge NGINX server must still enforce HSTS for the whole domain, including
+the static frontend, and hide the server version:
+
+```nginx
+server_tokens off;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+```
+
+Apply with `nginx -t && systemctl reload nginx`, then verify with
+`curl -sI https://bricky.bg/ | grep -i strict-transport-security`.
