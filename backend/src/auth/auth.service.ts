@@ -1,4 +1,8 @@
-﻿import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -173,7 +177,7 @@ export class AuthService {
   }
   async login(dto: LoginUserDto) {
     const user = await this.users.findByEmail(dto.email);
-    if (!user) throw new BadRequestException('Грешен имейл или парола');
+    if (!user) throw new UnauthorizedException('Грешен имейл или парола');
     if (user.status !== 'active') {
       throw new BadRequestException('Акаунтът е временно спрян');
     }
@@ -186,7 +190,7 @@ export class AuthService {
       dto.password,
       user.passwordHash || user.password,
     );
-    if (!valid) throw new BadRequestException('Грешни данни');
+    if (!valid) throw new UnauthorizedException('Грешни данни');
 
     const token = await this.jwt.signAsync({
       id: user.id,
